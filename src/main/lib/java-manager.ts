@@ -4,7 +4,6 @@ import fs from "fs/promises";
 import { createWriteStream } from "fs";
 import { spawn } from "child_process";
 import https from "https";
-import os from "os";
 
 const RUNTIMES_DIR = path.join(app.getPath("userData"), "runtimes");
 
@@ -59,7 +58,8 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         file.close();
         fs.unlink(tempPath).catch(() => {});
-        return downloadFile(response.headers.location, destPath, onProgress).then(resolve).catch(reject);
+        downloadFile(response.headers.location, destPath, onProgress).then(resolve).catch(reject);
+        return;
       }
       
       const totalBytes = parseInt(response.headers['content-length'] || "0", 10);

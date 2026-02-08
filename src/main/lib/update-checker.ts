@@ -1,4 +1,4 @@
-import { app, shell } from 'electron';
+import { app } from 'electron';
 import https from 'https';
 
 // TODO: Update these values when you upload the project to GitHub!

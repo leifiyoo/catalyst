@@ -96,7 +96,7 @@ try {
     getBanlist: (id: string) => ipcRenderer.invoke("getBanlist", id),
     saveBanlist: (id: string, players: string[]) =>
       ipcRenderer.invoke("saveBanlist", id, players),
-    updateServerSettings: (id: string, settings: { ramMB?: number }) =>
+    updateServerSettings: (id: string, settings: { ramMB?: number; javaPath?: string }) =>
       ipcRenderer.invoke("updateServerSettings", id, settings),
     openServerFolder: (id: string) =>
       ipcRenderer.invoke("openServerFolder", id),

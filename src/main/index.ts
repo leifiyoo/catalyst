@@ -244,7 +244,7 @@ app.whenReady().then(() => {
     return saveBanlist(server.serverPath, players);
   });
 
-  ipcMain.handle("updateServerSettings", async (_event, id: string, settings: { ramMB?: number }) => {
+  ipcMain.handle("updateServerSettings", async (_event, id: string, settings: { ramMB?: number; javaPath?: string }) => {
     return updateServerSettings(id, settings);
   });
 

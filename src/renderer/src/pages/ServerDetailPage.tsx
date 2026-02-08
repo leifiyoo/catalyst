@@ -54,6 +54,7 @@ import {
     X,
     Info,
     CheckCircle2,
+    Check,
     Users,
     Gauge,
     MemoryStick,
@@ -70,7 +71,6 @@ import {
     Globe,
     Heart,
     Clock,
-    Calendar,
     Box,
     ScrollText,
     Anvil,
@@ -737,7 +737,7 @@ export function ServerDetailPage() {
     }
 
     const renderAnsiText = (text: string) => {
-        const segments: JSX.Element[] = []
+        const segments: React.ReactNode[] = []
         const regex = /\x1b\[([0-9;]*)m/g
         let lastIndex = 0
         let color: string | null = null
@@ -1415,7 +1415,7 @@ export function ServerDetailPage() {
                                         <Button
                                             size="sm"
                                             className="bg-cyan-400 text-black hover:bg-cyan-300"
-                                            onClick={handleSearchModrinth}
+                                            onClick={() => handleSearchModrinth()}
                                             disabled={modrinthLoading}
                                         >
                                             {modrinthLoading ? <Spinner className="mr-2" /> : <Search className="h-4 w-4 mr-2" />}

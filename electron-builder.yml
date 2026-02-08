@@ -12,12 +12,24 @@ files:
 asarUnpack:
   - resources/**
 win:
+  target: nsis
   executableName: catalyst
+  forceCodeSigning: false
+  verifyUpdateCodeSignature: false
+  sign: null
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  include: build/installer.nsh
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  
+  # Wenn du eigene Bilder hast, entkommentiere diese Zeilen und lege die Bilder ab:
+  # installerIcon: build/icon.ico
+  # installerHeader: build/installerHeader.bmp
+  # installerSidebar: build/installerSidebar.bmp
+  
+  # Verhindert Skalierungsunschärfe
+  deleteAppDataOnUninstall: false
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

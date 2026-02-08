@@ -197,7 +197,7 @@ export type GetWhitelistFn = (id: string) => Promise<string[]>;
 export type SaveWhitelistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
 export type GetBanlistFn = (id: string) => Promise<string[]>;
 export type SaveBanlistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
-export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number }) => Promise<{ success: boolean; error?: string }>;
+export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string }) => Promise<{ success: boolean; error?: string }>;
 export type OpenServerFolderFn = (id: string) => Promise<void>;
 export type OnServerStatsFn = (handler: (stats: ServerStats) => void) => () => void;
 export type AcceptEulaFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
