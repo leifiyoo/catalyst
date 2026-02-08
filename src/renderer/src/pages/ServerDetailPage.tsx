@@ -618,6 +618,13 @@ export function ServerDetailPage() {
         }
     }, [modrinthContext, modrinthQuery, modrinthPage, modrinthSort, server])
 
+    // Automatically load Modrinth results when tab is opened/context is available
+    useEffect(() => {
+        if (modrinthContext && modrinthResults.length === 0 && !modrinthLoading && modrinthQuery === "") {
+            handleSearchModrinth(0)
+        }
+    }, [modrinthContext])
+
     const handleInstallModrinth = async (hit: ModrinthSearchHit) => {
         if (!id || !modrinthContext || !server) return
         setModrinthInstalling((prev) => ({ ...prev, [hit.projectId]: true }))
