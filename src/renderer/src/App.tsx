@@ -14,11 +14,12 @@ import Ballpit from './Ballpit';
 const BlurInText = ({ text = "Blur In Effect" }: { text?: string }) => {
     return (
         <h2
-            className="text-4xl md:text-6xl font-bold text-center text-foreground select-none"
+            className="text-4xl md:text-6xl text-center text-foreground select-none"
             style={{
                 userSelect: "none",
                 WebkitUserSelect: "none",
                 fontFamily: "Outfit, system-ui, -apple-system, 'Segoe UI', sans-serif",
+                fontWeight: 300,
             }}
         >
             {text.split('').map((char, i) => (

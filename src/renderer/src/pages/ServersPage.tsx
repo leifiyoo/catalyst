@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -69,6 +69,9 @@ export function ServersPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [creationProgress, setCreationProgress] = useState<ServerCreationProgress | null>(null)
     const [creationError, setCreationError] = useState<string | null>(null)
+    
+    // Ref to track creation status without dependency cycle in useEffect
+    const isCreatingRef = useRef(false)
 
     // Form state
     const [newServerName, setNewServerName] = useState("")
@@ -95,7 +98,9 @@ export function ServersPage() {
     // Subscribe to creation progress
     useEffect(() => {
         const unsubscribe = window.context.onServerCreationProgress((progress) => {
-            setCreationProgress(progress)
+            if (isCreatingRef.current) {
+                setCreationProgress(progress)
+            }
         })
         return unsubscribe
     }, [])
@@ -119,6 +124,7 @@ export function ServersPage() {
         if (effectiveRamMB < 512) return
 
         setIsCreating(true)
+        isCreatingRef.current = true
         setCreationProgress(null)
         setCreationError(null)
 
@@ -135,6 +141,7 @@ export function ServersPage() {
             setRamOption("4096")
             setCustomRamMB("")
             setIsCreating(false)
+            isCreatingRef.current = false
             setShowCreateForm(false)
             setCreationProgress(null)
             setSuccessMessage(`Server "${result.server.name}" was created.`)
@@ -142,6 +149,7 @@ export function ServersPage() {
         } else {
             setCreationError(result.error || "Unknown error occurred")
             setIsCreating(false)
+            isCreatingRef.current = false
             setCreationProgress(null)
         }
     }
@@ -277,7 +285,7 @@ export function ServersPage() {
                             <Input
                                 value={newServerName}
                                 onChange={(e) =>
-                                    setNewServerName(e.target.value)
+                                    setNewServerName(e.target.value.replace(/[^a-zA-Z0-9 ]/g, ""))
                                 }
                                 placeholder="My Minecraft Server"
                                 disabled={isCreating}
@@ -370,9 +378,16 @@ export function ServersPage() {
 
                         {isCreating && creationProgress && (
                             <div className="flex flex-col gap-2">
-                                <div className="flex items-center gap-3">
-                                    <Spinner className="text-cyan-300" />
-                                    <span className="text-sm text-white/70">{creationProgress.message}</span>
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <Spinner className="text-cyan-300" />
+                                        <span className="text-sm text-white/70">{creationProgress.message}</span>
+                                    </div>
+                                    {creationProgress.bytesTotal && creationProgress.bytesTotal > 0 && typeof creationProgress.bytesDownloaded === 'number' && (
+                                        <span className="text-xs text-white/50 font-mono">
+                                            {(creationProgress.bytesDownloaded / 1024 / 1024).toFixed(1)} / {(creationProgress.bytesTotal / 1024 / 1024).toFixed(1)} MB
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                                     {creationProgress.bytesTotal === 0 && creationProgress.stage === "downloading" ? (

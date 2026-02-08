@@ -300,7 +300,7 @@ function startStatsPolling(
       if (canUseInServerStats(serverId, framework)) {
         internalPollUntil.set(serverId, Date.now() + 6000);
         child.stdin.write("tps\n");
-        child.stdin.write("memory\n");
+        // child.stdin.write("memory\n");
       }
     }
 
