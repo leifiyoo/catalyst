@@ -20,17 +20,23 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO_NAME: ${{ github.repository }}
         run: |
-          # 1. JSON Payload erstellen
+          # 1. Create JSON payload with comprehensive project context
           jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg body "$ISSUE_BODY" \
+            --arg repo "$REPO_NAME" \
             '{
               model: "openrouter/pony-alpha",
               messages: [
                 {
+                  role: "system",
+                  content: "You are an expert software engineering agent specializing in issue triage and debugging. You have deep knowledge of Electron, React, Vite, TypeScript, and modern web development. Your role is to analyze GitHub issues with precision and professionalism."
+                },
+                {
                   role: "user", 
-                  content: ("Analysiere dieses GitHub Ticket: Titel: " + $title + ". Inhalt: " + $body + ". Ist es ein Bug? Antworte mit [BUG] oder gib Hilfe bei User-Fehlern.")
+                  content: ("# Issue Triage Request\n\n## Project Context\n**Repository:** " + $repo + "\n**Project:** Catalyst - A modern Minecraft server manager\n\n### Technology Stack:\n- **Framework:** Electron (desktop application)\n- **Frontend:** React 19 with TypeScript\n- **Build Tools:** Vite, Electron-Vite\n- **UI Components:** shadcn/ui with Tailwind CSS\n- **3D Graphics:** Three.js with React Three Fiber\n- **Testing:** Vitest with React Testing Library\n\n### Project Structure:\n- `src/main/` - Electron main process code\n- `src/renderer/` - React frontend code\n- `src/preload/` - Electron preload scripts\n- `src/shared/` - Shared utilities and types\n\n### Build Commands:\n- `npm run dev` - Development mode\n- `npm run build` - Production build\n- `npm run typecheck` - TypeScript validation\n- `npm test` - Run tests\n\n## Issue Details\n**Title:** " + $title + "\n\n**Description:**\n" + $body + "\n\n## Your Task\nAnalyze this issue deeply and determine:\n\n1. **Is this a bug in the codebase or a user error?**\n   - Consider the project architecture, dependencies, and common pitfalls\n   - Check if error messages indicate missing dependencies, configuration issues, or code defects\n   - Evaluate if the issue is related to Electron-specific challenges, React rendering, build process, or TypeScript errors\n\n2. **Provide a detailed analysis:**\n\n### If it is a BUG:\n- Start your response with **[BUG CONFIRMED]**\n- Explain what the bug is and why it occurs\n- Identify the likely location in the codebase (which component/module)\n- Suggest specific fixes with code examples if possible\n- Provide steps to reproduce if not already clear\n- Mention any related dependencies or configuration that might need attention\n\n### If it is USER ERROR:\n- Start your response with **[USER ERROR]**\n- Explain clearly why this is not a bug\n- Identify what the user did wrong or misunderstood\n- Provide step-by-step instructions to resolve the issue\n- Suggest best practices to avoid similar issues\n- Reference relevant documentation if applicable\n\n### If UNCLEAR/NEED MORE INFO:\n- Start your response with **[NEEDS MORE INFO]**\n- List specific questions or information needed\n- Explain why additional details are necessary\n- Provide guidance on how to gather the requested information (e.g., console logs, error traces)\n\nBe thorough, professional, and actionable in your response. Your analysis should be precise enough that a developer can immediately understand and act on your assessment.")
                 }
               ],
               reasoning: {
@@ -38,32 +44,60 @@ jobs:
               }
             }' > payload.json
 
-          # 2. Anfrage an OpenRouter
+          # 2. Send request to OpenRouter
           RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $OPENROUTER_API_KEY" \
             -d @payload.json)
 
-          # 3. Antwort sicher extrahieren (Fehler korrigiert)
-          # Wir prüfen erst, ob die Antwort gültig ist
+          # 3. Extract response safely
           if echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null 2>&1; then
             COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+            
+            # Check if this is a bug and set flag for labeling
+            if echo "$COMMENT" | grep -qE '\*\*\[BUG CONFIRMED\]\*\*|\[BUG CONFIRMED\]'; then
+              echo "is_bug=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "is_bug=false" >> "$GITHUB_OUTPUT"
+            fi
           else
-            # Falls ein Fehler von OpenRouter kommt, zeigen wir ihn an
-            COMMENT="**Diagnose-Info:** Die KI hat keine gültige Antwort gesendet. 
-            Antwort von OpenRouter: \`$RESPONSE\`"
+            # If OpenRouter returns an error, show it
+            ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // "Unknown error"')
+            COMMENT=$(cat <<EOF
+          **⚠️ AI Triage Error**
+
+          The AI assistant encountered an issue while analyzing this ticket.
+
+          **Error Details:** \`$ERROR_MSG\`
+
+          **Raw Response:** 
+          \`\`\`json
+          $RESPONSE
+          \`\`\`
+
+          Please review this issue manually or try again later.
+          EOF
+            )
+            echo "is_bug=false" >> "$GITHUB_OUTPUT"
           fi
           
-          # 4. Export für GitHub
+          # 4. Export for GitHub
           {
             echo "comment<<EOF"
             echo "$COMMENT"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Post Comment
+      - name: Post AI Analysis Comment
         if: steps.ai_request.outputs.comment != ''
         run: |
           gh issue comment ${{ github.event.issue.number }} --body "${{ steps.ai_request.outputs.comment }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Label as Bug
+        if: steps.ai_request.outputs.is_bug == 'true'
+        run: |
+          gh issue edit ${{ github.event.issue.number }} --add-label "bug"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
