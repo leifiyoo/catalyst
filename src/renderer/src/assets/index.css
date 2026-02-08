@@ -1,0 +1,435 @@
+/* change theme by modifying the following import */
+@import "./theme.css";
+
+/* import external font/styles here */
+@font-face {
+  font-family: "Outfit";
+  src: url("./Outfit-VariableFont_wght.ttf") format("truetype");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Google Sans Code";
+  src: url("./GoogleSansCode-VariableFont_wght.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-800 rounded-full hover:bg-zinc-700;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .select-text,
+  .select-text * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
+  }
+
+
+  html {
+    border-radius: 12px;
+  }
+
+  body {
+    @apply flex items-center justify-center min-h-dvh text-foreground bg-background;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    border-radius: 12px;
+  }
+}
+
+body {
+  font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  margin: 0;
+  padding: 0;
+}
+
+.font-mono {
+  font-family: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+:root {
+  --card-bg: rgba(15, 21, 37, 0.82);
+  --card-border: rgba(34, 211, 238, 0.08);
+  --card-glow: 0 18px 40px rgba(0, 0, 0, 0.3);
+  --accent: #22d3ee;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --text-muted: rgba(237, 242, 247, 0.62);
+  --text-dim: rgba(237, 242, 247, 0.35);
+}
+
+#root {
+  border-radius: 12px;
+  overflow: hidden;
+  width: 100%;
+  height: 100vh;
+}
+
+.titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  z-index: 10000;
+  background: transparent;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.titlebar-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.titlebar-button {
+  width: 36px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--muted));
+  transition: background 180ms ease, transform 180ms ease, opacity 180ms ease;
+}
+
+.titlebar-button:hover {
+  background: hsl(var(--accent));
+  transform: translateY(-1px);
+}
+
+.titlebar-button:active {
+  transform: translateY(0);
+  opacity: 0.85;
+}
+
+.titlebar-button-close:hover {
+  background: hsl(var(--destructive));
+}
+
+.titlebar-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
+}
+
+.dashboard {
+  position: relative;
+  z-index: 9999;
+  height: 100%;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.07), transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(56, 189, 248, 0.05), transparent 40%),
+    #0a0f1e;
+  color: #edf2f7;
+}
+
+.dashboard-sidebar {
+  padding: 72px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  border-right: 1px solid rgba(34, 211, 238, 0.06);
+  background: rgba(8, 12, 24, 0.7);
+}
+
+.brand-mark {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item {
+  height: 38px;
+  border-radius: 12px;
+  padding: 0 14px;
+  text-align: left;
+  color: var(--text-muted);
+  background: transparent;
+  transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.nav-item:hover {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+  transform: translateX(2px);
+}
+
+.nav-item-active {
+  background: rgba(14, 165, 168, 0.18);
+  color: #0f172a;
+  border: 1px solid rgba(14, 165, 168, 0.35);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+}
+
+.status-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(14, 165, 168, 0.16);
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-main {
+  padding: 72px 48px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.dashboard-title {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.action-chip {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #f8fafc;
+  font-weight: 600;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.action-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(124, 255, 178, 0.28);
+}
+
+.action-chip.ghost {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.stat-card {
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-glow);
+}
+
+.stat-card p {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.stat-card h2 {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+
+.stat-card span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.panel {
+  padding: 22px;
+  border-radius: 22px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-glow);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.link-button {
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.server-row {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.server-name {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.server-row span {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.server-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tag.online {
+  background: rgba(14, 165, 168, 0.18);
+  color: var(--accent);
+}
+
+.tag.idle {
+  background: rgba(15, 23, 42, 0.12);
+  color: #0f172a;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.action-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  text-align: left;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.action-card:hover {
+  transform: translateY(-2px);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.action-card h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.action-card p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.disable-text-selection{
+   -moz-user-select:none; /* firefox */
+   -webkit-user-select: none; /* Safari */
+   -ms-user-select: none; /* IE*/
+   user-select: none; /* Standard syntax */
+}
+
+
+

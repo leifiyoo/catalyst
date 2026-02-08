@@ -1,0 +1,43 @@
+@layer base {
+  :root {
+    /* Modern Greyscale / Anthracite Theme - Lighter adjustments */
+    --background: 240 5% 10%;        /* #18191c — visible dark grey */
+    --foreground: 0 0% 95%;          /* #f2f2f2 — crisp white */
+    --card: 240 4% 14%;              /* #222326 — lighter grey card */
+    --card-foreground: 0 0% 95%;
+    --popover: 240 4% 14%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 92%;             /* #ebebeb — off-white accent */
+    --primary-foreground: 240 5% 4%; /* dark text on primary */
+    --secondary: 240 4% 16%;         /* #28282b — lighter grey */
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 12%;             /* #1e1e20 */
+    --muted-foreground: 240 5% 60%;  /* #999999 */
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 72% 51%;        /* #ef4444 */
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%;            /* #28282b */
+    --input: 240 4% 16%;
+    --ring: 0 0% 80%;                /* grey focus ring */
+    --radius: 0.75rem;
+    --chart-1: 0 0% 80%;
+    --chart-2: 0 0% 60%;
+    --chart-3: 0 0% 40%;
+    --chart-4: 0 0% 30%;
+    --chart-5: 0 0% 20%;
+    --sidebar-background: 240 5% 6%;    /* #101012 */
+    --sidebar-foreground: 240 5% 80%;
+    --sidebar-primary: 0 0% 92%;
+    --sidebar-primary-foreground: 240 5% 4%;
+    --sidebar-accent: 240 4% 16%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 4% 12%;
+    --sidebar-ring: 0 0% 80%;
+  }
+
+  .dark {
+    --background: 240 5% 4%;
+    --foreground: 0 0% 95%;
+  }
+}

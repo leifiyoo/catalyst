@@ -1,0 +1,35 @@
+name: catalyst helper
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Ask AI for catalyst
+        id: ai_request
+        run: |
+          # Hier senden wir das Ticket an OpenRouter
+          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.OPENROUTER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "openrouter/pony-alpha",
+              "messages": [
+                {"role": "system", "content": "Du bist ein Support-Assistent. Analysiere das Ticket: Ist es ein Bug in der Software oder ein Problem am Gerät des Nutzers? Wenn Gerät/User-Fehler: Gib eine Hilfestellung. Wenn Software-Fehler: Antworte mit [BUG]. Mache die Nachricht auf englisch."},
+                {"role": "user", "content": "${{ github.event.issue.title }}\n\n${{ github.event.issue.body }}"}
+              ]
+            }')
+          
+          # Extrahiere die Antwort der KI (vereinfacht)
+          COMMENT=$(echo $RESPONSE | jq -r '.choices[0].message.content')
+          echo "comment=$COMMENT" >> $GITHUB_OUTPUT
+
+      - name: Post Comment
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "${{ steps.ai_request.outputs.comment }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
