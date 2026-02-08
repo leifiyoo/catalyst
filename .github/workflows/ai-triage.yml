@@ -17,51 +17,42 @@ jobs:
       - name: Ask AI for Triage
         id: ai_request
         env:
-          OPENROUTER_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # 1. JSON Payload erstellen
+          # Wir bauen das JSON exakt nach deinem Modell-Beispiel
           jq -n \
-            --arg sys "Du bist ein Support-Assistent. Analysiere das Ticket. Wenn Hardware: Hilfestellung. Wenn Software: Antworte [BUG]." \
-            --arg user "Title: $ISSUE_TITLE\n\nBody: $ISSUE_BODY" \
+            --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" \
             '{
               model: "openrouter/pony-alpha",
               messages: [
-                {role: "system", content: $sys},
-                {role: "user", content: $user}
-              ]
+                {
+                  role: "user", 
+                  content: ("Analysiere dieses GitHub Ticket: Titel: " + $title + ". Inhalt: " + $body + ". Ist es ein Bug? Antworte mit [BUG] oder gib Hilfe bei User-Fehlern.")
+                }
+              ],
+              reasoning: {
+                enabled: true
+              }
             }' > payload.json
 
-          # 2. Anfrage mit -i (zeigt Header) und Fehlerausgabe
-          # Wir nutzen hier eine temporäre Datei für die Antwort
-          curl -s -i https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_KEY" \
+          # Die Anfrage exakt wie in deinem Curl-Beispiel
+          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
             -H "Content-Type: application/json" \
-            -H "HTTP-Referer: https://github.com/leifiyoo" \
-            -H "X-Title: GitHub AI Bot" \
-            -d @payload.json > full_response.txt
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -d @payload.json)
 
-          # 3. Antwort sauber trennen (Header entfernen für jq)
-          # Wir suchen den Anfang des JSON-Bodys ({)
-          RESPONSE_JSON=$(sed -n '/{/,$p' full_response.txt)
+          # Antwort extrahieren
+          COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Diagnose: " + ($RESPONSE | @json)')
           
-          CONTENT=$(echo "$RESPONSE_JSON" | jq -r '.choices[0].message.content // empty')
-          
-          if [ -z "$CONTENT" ]; then
-            # Falls leer, posten wir den Inhalt der Textdatei zur Diagnose
-            DIAGNOSE=$(cat full_response.txt | head -n 20)
+          # Sicherer Export für GitHub
+          {
             echo "comment<<EOF"
-            echo "**Verbindungs-Diagnose:**"
-            echo "\`\`\`text"
-            echo "$DIAGNOSE"
-            echo "\`\`\`"
+            echo "$COMMENT"
             echo "EOF"
-          else
-            echo "comment<<EOF"
-            echo "$CONTENT"
-            echo "EOF"
-          fi >> "$GITHUB_OUTPUT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Post Comment
         if: steps.ai_request.outputs.comment != ''
