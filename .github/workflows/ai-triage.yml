@@ -12,23 +12,33 @@ jobs:
     steps:
       - name: Ask AI for Triage
         id: ai_request
+        env:
+          OPENROUTER_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Anfrage an OpenRouter
-          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer ${{ secrets.OPENROUTER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"google/gemma-2-9b-it:free\",
-              \"messages\": [
-                {\"role\": \"system\", \"content\": \"Du bist ein Support-Assistent. Analysiere das Ticket: Ist es ein Bug in der Software oder ein Problem am Gerät des Nutzers? Wenn Gerät/User-Fehler: Gib eine Hilfestellung. Wenn Software-Fehler: Antworte mit [BUG].\"},
-                {\"role\": \"user\", \"content\": \"Title: ${{ github.event.issue.title }}\n\nBody: ${{ github.event.issue.body }}\"}
+          # Wir bauen das JSON sicher in eine temporäre Datei
+          jq -n \
+            --arg sys "Du bist ein Support-Assistent. Analysiere das Ticket: Ist es ein Bug in der Software oder ein Problem am Gerät des Nutzers? Wenn Gerät/User-Fehler: Gib eine Hilfestellung. Wenn Software-Fehler: Antworte mit [BUG]." \
+            --arg user "Title: $ISSUE_TITLE\n\nBody: $ISSUE_BODY" \
+            '{
+              model: "google/gemma-2-9b-it:free",
+              messages: [
+                {role: "system", content: $sys},
+                {role: "user", content: $user}
               ]
-            }")
+            }' > payload.json
+
+          # Anfrage senden
+          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_KEY" \
+            -H "Content-Type: application/json" \
+            -d @payload.json)
           
-          # Extrahiere die Antwort sicher mit jq
-          COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Fehler: Keine Antwort erhalten"')
+          # Antwort extrahieren
+          COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Entschuldigung, ich konnte das Ticket gerade nicht analysieren."')
           
-          # Sicherer Export für mehrzeilige Texte
+          # Sicherer Export für GitHub
           {
             echo "comment<<EOF"
             echo "$COMMENT"
