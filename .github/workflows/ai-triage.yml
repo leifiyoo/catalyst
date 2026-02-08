@@ -21,7 +21,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Wir bauen das JSON exakt nach deinem Modell-Beispiel
+          # 1. JSON Payload erstellen
           jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg body "$ISSUE_BODY" \
@@ -38,16 +38,23 @@ jobs:
               }
             }' > payload.json
 
-          # Die Anfrage exakt wie in deinem Curl-Beispiel
+          # 2. Anfrage an OpenRouter
           RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $OPENROUTER_API_KEY" \
             -d @payload.json)
 
-          # Antwort extrahieren
-          COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Diagnose: " + ($RESPONSE | @json)')
+          # 3. Antwort sicher extrahieren (Fehler korrigiert)
+          # Wir prüfen erst, ob die Antwort gültig ist
+          if echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null 2>&1; then
+            COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          else
+            # Falls ein Fehler von OpenRouter kommt, zeigen wir ihn an
+            COMMENT="**Diagnose-Info:** Die KI hat keine gültige Antwort gesendet. 
+            Antwort von OpenRouter: \`$RESPONSE\`"
+          fi
           
-          # Sicherer Export für GitHub
+          # 4. Export für GitHub
           {
             echo "comment<<EOF"
             echo "$COMMENT"
