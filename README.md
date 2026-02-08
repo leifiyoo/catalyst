@@ -16,7 +16,7 @@ This project is built using Electron, Vite, and React with Shadcn UI.
 ### Installation
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
 
 ### Development Server
