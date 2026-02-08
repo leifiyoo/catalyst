@@ -23,43 +23,45 @@ jobs:
         run: |
           # 1. JSON Payload erstellen
           jq -n \
-            --arg sys "Du bist ein Support-Assistent. Analysiere das Ticket: Ist es ein Bug in der Software oder ein Problem am Gerät des Nutzers? Wenn Gerät/User-Fehler: Gib eine Hilfestellung. Wenn Software-Fehler: Antworte mit [BUG]." \
+            --arg sys "Du bist ein Support-Assistent. Analysiere das Ticket. Wenn Hardware: Hilfestellung. Wenn Software: Antworte [BUG]." \
             --arg user "Title: $ISSUE_TITLE\n\nBody: $ISSUE_BODY" \
             '{
-              model: "google/gemma-2-9b-it:free",
+              model: "openrouter/pony-alpha",
               messages: [
                 {role: "system", content: $sys},
                 {role: "user", content: $user}
               ]
             }' > payload.json
 
-          # 2. Anfrage an OpenRouter mit zusätzlichen Headern
-          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+          # 2. Anfrage mit -i (zeigt Header) und Fehlerausgabe
+          # Wir nutzen hier eine temporäre Datei für die Antwort
+          curl -s -i https://openrouter.ai/api/v1/chat/completions \
             -H "Authorization: Bearer $OPENROUTER_KEY" \
             -H "Content-Type: application/json" \
-            -H "HTTP-Referer: https://github.com/${{ github.repository }}" \
-            -H "X-Title: GitHub AI Triage Bot" \
-            -d @payload.json)
+            -H "HTTP-Referer: https://github.com/leifiyoo" \
+            -H "X-Title: GitHub AI Bot" \
+            -d @payload.json > full_response.txt
+
+          # 3. Antwort sauber trennen (Header entfernen für jq)
+          # Wir suchen den Anfang des JSON-Bodys ({)
+          RESPONSE_JSON=$(sed -n '/{/,$p' full_response.txt)
           
-          # 3. Antwort oder Fehler extrahieren (Diagnose-Modus)
-          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+          CONTENT=$(echo "$RESPONSE_JSON" | jq -r '.choices[0].message.content // empty')
           
           if [ -z "$CONTENT" ]; then
-            # Wenn kein Content da ist, zeige die ganze Antwort zur Fehlersuche
-            COMMENT="**Diagnose-Info (Keine KI-Antwort erhalten):**
-            \`\`\`json
-            $RESPONSE
-            \`\`\`"
-          else
-            COMMENT="$CONTENT"
-          fi
-          
-          # 4. Sicherer Export für mehrzeilige Texte
-          {
+            # Falls leer, posten wir den Inhalt der Textdatei zur Diagnose
+            DIAGNOSE=$(cat full_response.txt | head -n 20)
             echo "comment<<EOF"
-            echo "$COMMENT"
+            echo "**Verbindungs-Diagnose:**"
+            echo "\`\`\`text"
+            echo "$DIAGNOSE"
+            echo "\`\`\`"
             echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          else
+            echo "comment<<EOF"
+            echo "$CONTENT"
+            echo "EOF"
+          fi >> "$GITHUB_OUTPUT"
 
       - name: Post Comment
         if: steps.ai_request.outputs.comment != ''
