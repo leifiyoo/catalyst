@@ -9,10 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: read # Erlaubt das Auschecken des Repos
+      contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4 # Das ist der fehlende Baustein!
+        uses: actions/checkout@v4
 
       - name: Ask AI for Triage
         id: ai_request
@@ -21,6 +21,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
+          # 1. JSON Payload erstellen
           jq -n \
             --arg sys "Du bist ein Support-Assistent. Analysiere das Ticket: Ist es ein Bug in der Software oder ein Problem am Gerät des Nutzers? Wenn Gerät/User-Fehler: Gib eine Hilfestellung. Wenn Software-Fehler: Antworte mit [BUG]." \
             --arg user "Title: $ISSUE_TITLE\n\nBody: $ISSUE_BODY" \
@@ -32,13 +33,28 @@ jobs:
               ]
             }' > payload.json
 
+          # 2. Anfrage an OpenRouter mit zusätzlichen Headern
           RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
             -H "Authorization: Bearer $OPENROUTER_KEY" \
             -H "Content-Type: application/json" \
+            -H "HTTP-Referer: https://github.com/${{ github.repository }}" \
+            -H "X-Title: GitHub AI Triage Bot" \
             -d @payload.json)
           
-          COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Entschuldigung, ich konnte das Ticket gerade nicht analysieren."')
+          # 3. Antwort oder Fehler extrahieren (Diagnose-Modus)
+          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
           
+          if [ -z "$CONTENT" ]; then
+            # Wenn kein Content da ist, zeige die ganze Antwort zur Fehlersuche
+            COMMENT="**Diagnose-Info (Keine KI-Antwort erhalten):**
+            \`\`\`json
+            $RESPONSE
+            \`\`\`"
+          else
+            COMMENT="$CONTENT"
+          fi
+          
+          # 4. Sicherer Export für mehrzeilige Texte
           {
             echo "comment<<EOF"
             echo "$COMMENT"
