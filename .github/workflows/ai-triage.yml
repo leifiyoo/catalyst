@@ -9,7 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      contents: read # Erlaubt das Auschecken des Repos
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4 # Das ist der fehlende Baustein!
+
       - name: Ask AI for Triage
         id: ai_request
         env:
@@ -17,7 +21,6 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Wir bauen das JSON sicher in eine temporäre Datei
           jq -n \
             --arg sys "Du bist ein Support-Assistent. Analysiere das Ticket: Ist es ein Bug in der Software oder ein Problem am Gerät des Nutzers? Wenn Gerät/User-Fehler: Gib eine Hilfestellung. Wenn Software-Fehler: Antworte mit [BUG]." \
             --arg user "Title: $ISSUE_TITLE\n\nBody: $ISSUE_BODY" \
@@ -29,16 +32,13 @@ jobs:
               ]
             }' > payload.json
 
-          # Anfrage senden
           RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
             -H "Authorization: Bearer $OPENROUTER_KEY" \
             -H "Content-Type: application/json" \
             -d @payload.json)
           
-          # Antwort extrahieren
           COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Entschuldigung, ich konnte das Ticket gerade nicht analysieren."')
           
-          # Sicherer Export für GitHub
           {
             echo "comment<<EOF"
             echo "$COMMENT"
