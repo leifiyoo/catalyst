@@ -55,7 +55,7 @@ jobs:
             COMMENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
             
             # Check if this is a bug and set flag for labeling
-            if echo "$COMMENT" | grep -q "^\[BUG CONFIRMED\]"; then
+            if echo "$COMMENT" | grep -q "\[BUG CONFIRMED\]"; then
               echo "is_bug=true" >> "$GITHUB_OUTPUT"
             else
               echo "is_bug=false" >> "$GITHUB_OUTPUT"
