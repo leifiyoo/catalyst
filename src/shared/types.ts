@@ -26,6 +26,8 @@ export type ServerRecord = {
   jarFile?: string;
   javaPath?: string;
   backupConfig?: BackupConfig;
+  useNgrok?: boolean;
+  ngrokUrl?: string;
 };
 
 export type BackupConfig = {
@@ -213,7 +215,7 @@ export type GetWhitelistFn = (id: string) => Promise<string[]>;
 export type SaveWhitelistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
 export type GetBanlistFn = (id: string) => Promise<string[]>;
 export type SaveBanlistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
-export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: BackupConfig }) => Promise<{ success: boolean; error?: string }>;
+export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: BackupConfig; useNgrok?: boolean; ngrokUrl?: string }) => Promise<{ success: boolean; error?: string }>;
 export type CreateBackupFn = (serverId: string, name?: string) => Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }>;
 export type GetBackupsFn = (serverId: string) => Promise<BackupEntry[]>;
 export type DeleteBackupFn = (serverId: string, filename: string) => Promise<{ success: boolean; error?: string }>;
@@ -251,3 +253,38 @@ export type UpdateCheckResult = {
 };
 
 export type CheckForUpdatesFn = () => Promise<UpdateCheckResult>;
+
+// ---- Ngrok Types ----
+
+export type NgrokStatus = {
+  installed: boolean;
+  installing: boolean;
+  tunnelActive: boolean;
+  publicUrl?: string;
+  error?: string;
+};
+
+export type NgrokTunnelInfo = {
+  serverId: string;
+  publicUrl: string;
+  port: number;
+  protocol: string;
+};
+
+export type InstallNgrokResult = {
+  success: boolean;
+  error?: string;
+};
+
+export type StartNgrokResult = {
+  success: boolean;
+  publicUrl?: string;
+  error?: string;
+};
+
+export type InstallNgrokFn = () => Promise<InstallNgrokResult>;
+export type StartNgrokFn = (serverId: string, port: number) => Promise<StartNgrokResult>;
+export type StopNgrokFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
+export type GetNgrokStatusFn = (serverId: string) => Promise<NgrokStatus>;
+export type OnNgrokUrlChangedFn = (handler: (info: NgrokTunnelInfo) => void) => () => void;
+export type GetLocalIpFn = () => Promise<string>;

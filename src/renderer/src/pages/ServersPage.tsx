@@ -326,7 +326,7 @@ export function ServersPage() {
                             </div>
                             <div className="grid gap-2">
                                 <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/70">
-                                    Framework
+                                    Platform
                                 </label>
                                 <Select value={framework} onValueChange={setFramework} disabled={isCreating}>
                                     <SelectTrigger className="border-white/10 bg-white/5">
@@ -378,35 +378,16 @@ export function ServersPage() {
 
                         {isCreating && creationProgress && (
                             <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3">
-                                        <Spinner className="text-cyan-300" />
-                                        <span className="text-sm text-white/70">{creationProgress.message}</span>
-                                    </div>
-                                    {creationProgress.bytesTotal && creationProgress.bytesTotal > 0 && typeof creationProgress.bytesDownloaded === 'number' && (
-                                        <span className="text-xs text-white/50 font-mono">
-                                            {(creationProgress.bytesDownloaded / 1024 / 1024).toFixed(1)} / {(creationProgress.bytesTotal / 1024 / 1024).toFixed(1)} MB
-                                        </span>
-                                    )}
+                                <div className="flex items-center gap-3">
+                                    <Spinner className="text-cyan-300" />
+                                    <span className="text-sm text-white/70">{creationProgress.message}</span>
                                 </div>
                                 <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                                    {creationProgress.bytesTotal === 0 && creationProgress.stage === "downloading" ? (
-                                        <div className="h-full bg-cyan-400/60 rounded-full animate-pulse w-full" />
-                                    ) : (
-                                        <div
-                                            className="h-full bg-cyan-400 rounded-full transition-all duration-300"
-                                            style={{ width: `${creationProgress.percent}%` }}
-                                        />
-                                    )}
+                                    <div
+                                        className="h-full bg-cyan-400 rounded-full transition-all duration-300"
+                                        style={{ width: `${Math.min(creationProgress.percent, 100)}%` }}
+                                    />
                                 </div>
-                                {creationProgress.bytesDownloaded !== undefined &&
-                                    creationProgress.bytesTotal !== undefined &&
-                                    creationProgress.bytesTotal > 0 && (
-                                        <span className="text-xs text-white/70">
-                                            {(creationProgress.bytesDownloaded / 1024 / 1024).toFixed(1)} MB /{" "}
-                                            {(creationProgress.bytesTotal / 1024 / 1024).toFixed(1)} MB
-                                        </span>
-                                    )}
                             </div>
                         )}
 

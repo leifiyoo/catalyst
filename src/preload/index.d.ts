@@ -51,6 +51,12 @@ import {
   OnBackupProgressFn,
   OnBackupCompletedFn,
   LogToMainFn,
+  InstallNgrokFn,
+  StartNgrokFn,
+  StopNgrokFn,
+  GetNgrokStatusFn,
+  OnNgrokUrlChangedFn,
+  GetLocalIpFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -110,6 +116,20 @@ declare global {
       onBackupProgress: OnBackupProgressFn;
       onBackupCompleted: OnBackupCompletedFn;
       logToMain: LogToMainFn;
+      installNgrok: InstallNgrokFn;
+      startNgrok: StartNgrokFn;
+      stopNgrok: StopNgrokFn;
+      getNgrokStatus: GetNgrokStatusFn;
+      getLocalIp: GetLocalIpFn;
+      onNgrokUrlChanged: OnNgrokUrlChangedFn;
+      onNgrokInstallProgress: (handler: (data: { percent: number }) => void) => () => void;
+      configureNgrokAuthtoken: (authtoken: string) => Promise<{ success: boolean; error?: string }>;
+      isNgrokAuthtokenConfigured: () => Promise<boolean>;
+      validateNgrokAuthtoken: (authtoken: string) => Promise<{ valid: boolean; error?: string }>;
+      getNgrokAuthtokenCensored: () => Promise<string | null>;
+      isNgrokEnabled: () => Promise<boolean>;
+      setNgrokEnabled: (enabled: boolean) => Promise<void>;
+      removeNgrokAuthtoken: () => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

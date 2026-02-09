@@ -16,6 +16,16 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Empty,
     EmptyContent,
     EmptyDescription,
@@ -29,6 +39,7 @@ import type { ServerRecord } from "@shared/types"
 export function DashboardPage() {
     const navigate = useNavigate()
     const [servers, setServers] = useState<ServerRecord[]>([])
+    const [deleteTarget, setDeleteTarget] = useState<ServerRecord | null>(null)
 
     useEffect(() => {
         window.context.getServers().then(setServers)
@@ -47,6 +58,14 @@ export function DashboardPage() {
         })
         return unsubscribe
     }, [])
+
+    const handleDeleteServer = async (server: ServerRecord) => {
+        const result = await window.context.deleteServer(server.id)
+        if (result.success) {
+            setServers((prev) => prev.filter((s) => s.id !== server.id))
+        }
+        setDeleteTarget(null)
+    }
 
     const formatRam = (ramMB: number) => {
         if (ramMB >= 1024 && ramMB % 1024 === 0) {
@@ -215,6 +234,15 @@ export function DashboardPage() {
                                             >
                                                 Open folder
                                             </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                className="text-red-400 focus:text-red-400"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setDeleteTarget(server)
+                                                }}
+                                            >
+                                                Delete server
+                                            </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
@@ -223,6 +251,26 @@ export function DashboardPage() {
                     </CardContent>
                 </Card>
             )}
+
+            <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Server</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete "{deleteTarget?.name}"? This will permanently remove the server and all its files. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-red-500 hover:bg-red-600"
+                            onClick={() => deleteTarget && handleDeleteServer(deleteTarget)}
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </section>
     )
 }

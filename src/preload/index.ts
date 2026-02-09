@@ -24,6 +24,7 @@ import {
   ModrinthProjectDetails,
   BackupEntry,
   LogToMainFn,
+  NgrokTunnelInfo,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -177,6 +178,40 @@ try {
 
     openExternal: (url: string) => ipcRenderer.invoke("openExternal", url),
     checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
+
+    // Ngrok
+    installNgrok: () => ipcRenderer.invoke("installNgrok"),
+    startNgrok: (serverId: string, port: number) =>
+      ipcRenderer.invoke("startNgrok", serverId, port),
+    stopNgrok: (serverId: string) =>
+      ipcRenderer.invoke("stopNgrok", serverId),
+    getNgrokStatus: (serverId: string) =>
+      ipcRenderer.invoke("getNgrokStatus", serverId),
+    getLocalIp: () => ipcRenderer.invoke("getLocalIp"),
+    onNgrokUrlChanged: (handler: (info: NgrokTunnelInfo) => void) => {
+      const listener = (_event: unknown, info: NgrokTunnelInfo) => handler(info);
+      ipcRenderer.on("ngrokUrlChanged", listener);
+      return () => ipcRenderer.removeListener("ngrokUrlChanged", listener);
+    },
+    onNgrokInstallProgress: (handler: (data: { percent: number }) => void) => {
+      const listener = (_event: unknown, data: { percent: number }) => handler(data);
+      ipcRenderer.on("ngrokInstallProgress", listener);
+      return () => ipcRenderer.removeListener("ngrokInstallProgress", listener);
+    },
+    configureNgrokAuthtoken: (authtoken: string) =>
+      ipcRenderer.invoke("configureNgrokAuthtoken", authtoken),
+    isNgrokAuthtokenConfigured: () =>
+      ipcRenderer.invoke("isNgrokAuthtokenConfigured"),
+    validateNgrokAuthtoken: (authtoken: string) =>
+      ipcRenderer.invoke("validateNgrokAuthtoken", authtoken),
+    getNgrokAuthtokenCensored: () =>
+      ipcRenderer.invoke("getNgrokAuthtokenCensored"),
+    isNgrokEnabled: () =>
+      ipcRenderer.invoke("isNgrokEnabled"),
+    setNgrokEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke("setNgrokEnabled", enabled),
+    removeNgrokAuthtoken: () =>
+      ipcRenderer.invoke("removeNgrokAuthtoken"),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

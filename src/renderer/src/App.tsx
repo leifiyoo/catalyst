@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { ServersPage } from "@/pages/ServersPage";
 import { ServerDetailPage } from "@/pages/ServerDetailPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { UpdateNotifier } from "@/components/UpdateNotifier";
 import { ErrorPage } from "@/components/ErrorPage";
 
@@ -57,6 +58,7 @@ const router = createHashRouter([
             { index: true, element: <DashboardPage />, errorElement: <ErrorPage /> },
             { path: "servers", element: <ServersPage />, errorElement: <ErrorPage /> },
             { path: "servers/:id", element: <ServerDetailPage />, errorElement: <ErrorPage /> },
+            { path: "settings", element: <SettingsPage />, errorElement: <ErrorPage /> },
         ],
     },
 ]);

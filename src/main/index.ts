@@ -46,6 +46,21 @@ import {
   isBackupInProgress
 } from "@/lib";
 import {
+  installNgrok,
+  startNgrokTunnel,
+  stopNgrokTunnel,
+  getNgrokStatus,
+  stopAllTunnels,
+  getLocalIp,
+  configureNgrokAuthtoken,
+  isAuthtokenConfigured,
+  validateNgrokAuthtoken,
+  getNgrokAuthtokenCensored,
+  isNgrokEnabled,
+  setNgrokEnabled,
+  removeNgrokAuthtoken
+} from "@/lib/ngrok-manager";
+import {
   GetVersionsFn,
   WindowControlAction,
   CreateServerParams,
@@ -257,7 +272,7 @@ app.whenReady().then(() => {
     return saveBanlist(server.serverPath, players);
   });
 
-  ipcMain.handle("updateServerSettings", async (_event, id: string, settings: { ramMB?: number; javaPath?: string }) => {
+  ipcMain.handle("updateServerSettings", async (_event, id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: any; useNgrok?: boolean; ngrokUrl?: string }) => {
     return updateServerSettings(id, settings);
   });
 
@@ -377,21 +392,90 @@ app.whenReady().then(() => {
     return restoreBackup(serverId, filename);
   });
 
+  // Ngrok IPC handlers
+  ipcMain.handle("installNgrok", async () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) {
+      return { success: false, error: "No window available" };
+    }
+    return installNgrok(mainWindow, (percent) => {
+      mainWindow.webContents.send("ngrokInstallProgress", { percent });
+    });
+  });
+
+  ipcMain.handle("startNgrok", async (_event, serverId: string, port: number) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) {
+      return { success: false, error: "No window available" };
+    }
+    const result = await startNgrokTunnel(mainWindow, serverId, port);
+    if (result.success && result.publicUrl) {
+      mainWindow.webContents.send("ngrokUrlChanged", {
+        serverId,
+        publicUrl: result.publicUrl,
+        port,
+        protocol: "tcp"
+      });
+    }
+    return result;
+  });
+
+  ipcMain.handle("stopNgrok", async (_event, serverId: string) => {
+    return stopNgrokTunnel(serverId);
+  });
+
+  ipcMain.handle("getNgrokStatus", async (_event, serverId: string) => {
+    return getNgrokStatus(serverId);
+  });
+
+  ipcMain.handle("getLocalIp", () => {
+    return getLocalIp();
+  });
+
+  ipcMain.handle("configureNgrokAuthtoken", async (_event, authtoken: string) => {
+    return configureNgrokAuthtoken(authtoken);
+  });
+
+  ipcMain.handle("isNgrokAuthtokenConfigured", async () => {
+    return isAuthtokenConfigured();
+  });
+
+  ipcMain.handle("validateNgrokAuthtoken", async (_event, authtoken: string) => {
+    return validateNgrokAuthtoken(authtoken);
+  });
+
+  ipcMain.handle("getNgrokAuthtokenCensored", async () => {
+    return getNgrokAuthtokenCensored();
+  });
+
+  ipcMain.handle("isNgrokEnabled", async () => {
+    return isNgrokEnabled();
+  });
+
+  ipcMain.handle("setNgrokEnabled", async (_event, enabled: boolean) => {
+    return setNgrokEnabled(enabled);
+  });
+
+  ipcMain.handle("removeNgrokAuthtoken", async () => {
+    return removeNgrokAuthtoken();
+  });
+
 });
 
 // Graceful shutdown: stop all running MC servers before quitting
 let isQuitting = false;
 app.on("before-quit", async (e) => {
   if (!isQuitting) {
-    isQuitting = true;
-    e.preventDefault();
-    try {
-      await stopAllServers();
-    } catch {
-      // Ignore errors during shutdown
-    }
-    app.exit();
+  isQuitting = true;
+  e.preventDefault();
+  try {
+    await stopAllServers();
+    await stopAllTunnels();
+  } catch {
+    // Ignore errors during shutdown
   }
+  app.exit();
+}
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

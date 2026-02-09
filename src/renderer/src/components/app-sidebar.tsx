@@ -2,6 +2,7 @@ import { NavLink, useLocation } from "react-router-dom"
 import {
     MonitorDot,
     Server,
+    Settings,
 } from "lucide-react"
 import {
     Sidebar,
@@ -20,6 +21,7 @@ import {
 const navItems = [
     { title: "Dashboard", icon: MonitorDot, path: "/" },
     { title: "Servers", icon: Server, path: "/servers" },
+    { title: "Settings", icon: Settings, path: "/settings" },
 ]
 
 export function AppSidebar() {

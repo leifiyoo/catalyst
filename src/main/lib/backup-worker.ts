@@ -32,25 +32,6 @@ function sendMessage(message: WorkerMessage): void {
   }
 }
 
-// Helper to calculate directory size recursively
-function calculateDirSize(dirPath: string): number {
-  let size = 0;
-  const files = fs.readdirSync(dirPath);
-  
-  for (const file of files) {
-    const filePath = path.join(dirPath, file);
-    const stat = fs.statSync(filePath);
-    
-    if (stat.isDirectory()) {
-      size += calculateDirSize(filePath);
-    } else {
-      size += stat.size;
-    }
-  }
-  
-  return size;
-}
-
 // Helper to get all files to backup (excluding backup directory)
 function getFilesToBackup(dirPath: string, excludeDir: string): { path: string; size: number }[] {
   const files: { path: string; size: number }[] = [];
@@ -78,7 +59,7 @@ function getFilesToBackup(dirPath: string, excludeDir: string): { path: string; 
 }
 
 async function runBackup(): Promise<void> {
-  const { serverPath, backupsDir, zipPath, filename, name, type, excludeDir } = workerData as WorkerData;
+  const { serverPath, backupsDir: _backupsDir, zipPath, filename, name, type, excludeDir } = workerData as WorkerData;
   
   try {
     sendMessage({ 
@@ -139,7 +120,7 @@ async function runBackup(): Promise<void> {
     });
     
     // Track individual files
-    archive.on('entry', (entry) => {
+    archive.on('entry', (_entry) => {
       archivedFiles++;
     });
 

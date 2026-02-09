@@ -80,6 +80,8 @@ import {
     Droplet,
     Wind,
     Zap,
+    Copy,
+    Link,
 } from "lucide-react"
 import type {
     ServerRecord,
@@ -92,6 +94,7 @@ import type {
     ModrinthProjectType,
     ModrinthProjectDetails,
     BackupEntry,
+    NgrokStatus,
 } from "@shared/types"
 
 export function ServerDetailPage() {
@@ -152,6 +155,17 @@ export function ServerDetailPage() {
 
     // EULA dialog state
     const [eulaDialogOpen, setEulaDialogOpen] = useState(false)
+
+    // Ngrok dialog state
+    const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false)
+    const [ngrokInstalling, setNgrokInstalling] = useState(false)
+    const [ngrokInstallProgress, setNgrokInstallProgress] = useState(0)
+    const [ngrokStatus, setNgrokStatus] = useState<NgrokStatus | null>(null)
+    const [ngrokAuthtoken, setNgrokAuthtoken] = useState("")
+    const [ngrokAuthtokenError, setNgrokAuthtokenError] = useState<string | null>(null)
+    const [localIp, setLocalIp] = useState("localhost")
+    const [ipCopied, setIpCopied] = useState(false)
+    const [ngrokUrlCopied, setNgrokUrlCopied] = useState(false)
 
     // Delete dialog
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -265,6 +279,12 @@ export function ServerDetailPage() {
                     setAutoBackupEnabled(s.backupConfig.enabled)
                     setBackupInterval(s.backupConfig.intervalHours.toString())
                 }
+                
+                // Load server properties to get the port
+                window.context.getServerProperties(id).then((props) => {
+                    setProperties(props)
+                    setPropsLoaded(true)
+                })
             }
         })
     }, [id])
@@ -378,6 +398,40 @@ export function ServerDetailPage() {
         consoleEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [consoleLines])
 
+    // Get local IP on mount
+    useEffect(() => {
+        window.context.getLocalIp().then(setLocalIp).catch(() => setLocalIp("localhost"))
+    }, [])
+
+    // Ngrok URL change subscriber
+    useEffect(() => {
+        if (!id) return
+        const unsubscribe = window.context.onNgrokUrlChanged((info) => {
+            if (info.serverId === id) {
+                setServer((prev) => prev ? { ...prev, ngrokUrl: info.publicUrl } : prev)
+                setNgrokStatus((prev) => prev ? { ...prev, tunnelActive: true, publicUrl: info.publicUrl } : prev)
+                // Persist ngrok URL to server record
+                window.context.updateServerSettings(id, { ngrokUrl: info.publicUrl })
+            }
+        })
+        return unsubscribe
+    }, [id])
+
+    // Ngrok install progress subscriber
+    useEffect(() => {
+        const unsubscribe = window.context.onNgrokInstallProgress((data) => {
+            setNgrokInstallProgress(data.percent)
+        })
+        return unsubscribe
+    }, [])
+
+    // Get ngrok status when server changes
+    useEffect(() => {
+        if (id) {
+            window.context.getNgrokStatus(id).then(setNgrokStatus)
+        }
+    }, [id])
+
     const handleStart = async () => {
         if (!id || !server) return
         // Check if EULA needs to be accepted (new servers or servers where it hasn't been accepted)
@@ -386,16 +440,24 @@ export function ServerDetailPage() {
             setEulaDialogOpen(true)
             return
         }
-        await doStartServer()
+        // Auto-start ngrok if enabled for this server
+        await doStartServer(server.useNgrok === true)
     }
 
-    const doStartServer = async () => {
+    const doStartServer = async (withNgrok = false) => {
         if (!id) return
         setStarting(true)
         setError(null)
         const result = await window.context.startServer(id)
         if (!result.success) {
             setError(result.error || "Failed to start server")
+        } else if (withNgrok) {
+            // Start ngrok tunnel after server starts
+            const port = properties.find(p => p.key === "server-port")?.value || "25565"
+            const ngrokResult = await window.context.startNgrok(id, parseInt(port, 10))
+            if (!ngrokResult.success) {
+                setError(ngrokResult.error || "Failed to start ngrok tunnel")
+            }
         }
         setStarting(false)
     }
@@ -406,9 +468,107 @@ export function ServerDetailPage() {
         const result = await window.context.acceptEula(id)
         if (result.success) {
             setServer((prev) => prev ? { ...prev, eulaAccepted: true } : prev)
-            await doStartServer()
+            
+            // Check if ngrok is enabled globally and if we have a saved token
+            const ngrokEnabled = await window.context.isNgrokEnabled()
+            const hasToken = await window.context.isNgrokAuthtokenConfigured()
+            
+            if (ngrokEnabled && hasToken) {
+                // We have a saved token, use it directly and start server with ngrok
+                await doStartServer(true)
+            } else if (ngrokEnabled) {
+                // Ngrok enabled but no token, show dialog to enter it
+                setNgrokDialogOpen(true)
+            } else {
+                // Ngrok not enabled, just start server
+                await doStartServer(false)
+            }
         } else {
             setError(result.error || "Failed to accept EULA")
+        }
+    }
+
+    const handleEnableNgrok = async () => {
+        if (!id) return
+        
+        // Validate authtoken
+        if (!ngrokAuthtoken.trim()) {
+            setNgrokAuthtokenError("Authtoken is required")
+            return
+        }
+        
+        setNgrokAuthtokenError(null)
+        setNgrokInstallProgress(-2) // Indicate validating phase
+        
+        // Validate the authtoken first
+        const validationResult = await window.context.validateNgrokAuthtoken(ngrokAuthtoken.trim())
+        if (!validationResult.valid) {
+            setNgrokAuthtokenError(validationResult.error || "Invalid authtoken")
+            setNgrokInstallProgress(0)
+            return
+        }
+        
+        setNgrokDialogOpen(false)
+        setNgrokInstalling(true)
+        setNgrokInstallProgress(0)
+        
+        // Install ngrok
+        const installResult = await window.context.installNgrok()
+        if (!installResult.success) {
+            setError(installResult.error || "Failed to install ngrok")
+            setNgrokInstalling(false)
+            // Start server without ngrok
+            await doStartServer(false)
+            return
+        }
+        
+        // Configure authtoken
+        setNgrokInstallProgress(-1) // Indicate configuring phase
+        const authResult = await window.context.configureNgrokAuthtoken(ngrokAuthtoken.trim())
+        if (!authResult.success) {
+            setError(authResult.error || "Failed to configure ngrok authtoken")
+            setNgrokInstalling(false)
+            // Start server without ngrok
+            await doStartServer(false)
+            return
+        }
+        
+        setNgrokInstalling(false)
+        
+        // Update server settings to use ngrok
+        await window.context.updateServerSettings(id, {
+            ramMB: server?.ramMB,
+            javaPath: server?.javaPath,
+            backupConfig: server?.backupConfig,
+            useNgrok: true
+        })
+        
+        // Update local state
+        setServer((prev) => prev ? { ...prev, useNgrok: true } : prev)
+        
+        // Start server with ngrok
+        await doStartServer(true)
+    }
+
+    const handleSkipNgrok = async () => {
+        setNgrokDialogOpen(false)
+        await doStartServer(false)
+    }
+
+    const handleCopyIP = async () => {
+        const port = properties.find(p => p.key === "server-port")?.value || "25565"
+        const address = `${localIp}:${port}`
+        await navigator.clipboard.writeText(address)
+        setIpCopied(true)
+        setTimeout(() => setIpCopied(false), 2000)
+    }
+
+    const handleCopyNgrokUrl = async () => {
+        const url = server?.ngrokUrl || ngrokStatus?.publicUrl
+        if (url) {
+            await navigator.clipboard.writeText(url)
+            setNgrokUrlCopied(true)
+            setTimeout(() => setNgrokUrlCopied(false), 2000)
         }
     }
 
@@ -1014,6 +1174,64 @@ export function ServerDetailPage() {
                     >
                         {server.status}
                     </Badge>
+                    {/* IP Address with Copy Button */}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                                    <Globe className="h-4 w-4 text-cyan-400" />
+                                    <span className="text-sm font-mono">
+                                        {localIp}:{properties.find(p => p.key === "server-port")?.value || "25565"}
+                                    </span>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-white/10"
+                                        onClick={handleCopyIP}
+                                    >
+                                        {ipCopied ? (
+                                            <Check className="h-3 w-3 text-green-400" />
+                                        ) : (
+                                            <Copy className="h-3 w-3" />
+                                        )}
+                                    </Button>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Local IP Address - Click to copy</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    {/* Ngrok URL if active */}
+                    {(server.ngrokUrl || ngrokStatus?.publicUrl) && (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                        <Link className="h-4 w-4 text-purple-400" />
+                                        <span className="text-sm font-mono text-purple-300 truncate max-w-[200px]">
+                                            {server.ngrokUrl || ngrokStatus?.publicUrl}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 hover:bg-purple-500/20"
+                                            onClick={handleCopyNgrokUrl}
+                                        >
+                                            {ngrokUrlCopied ? (
+                                                <Check className="h-3 w-3 text-green-400" />
+                                            ) : (
+                                                <Copy className="h-3 w-3" />
+                                            )}
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Ngrok Public URL - Share with friends!</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <Button
@@ -2244,7 +2462,7 @@ export function ServerDetailPage() {
                                 <CardContent className="flex flex-col gap-4">
                                     <div className="grid gap-2 text-sm">
                                         <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
-                                            <span className="text-white/50">Framework</span>
+                                            <span className="text-white/50">Platform</span>
                                             <span className="font-medium flex items-center gap-2">
                                                 {server.framework}
                                                 <Badge variant="outline" className="text-[10px] py-0 h-5 bg-black/20">{server.version}</Badge>
@@ -2773,6 +2991,109 @@ export function ServerDetailPage() {
                             Accept & Start
                         </AlertDialogAction>
                     </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Ngrok Dialog */}
+            <AlertDialog open={ngrokDialogOpen} onOpenChange={setNgrokDialogOpen}>
+                <AlertDialogContent className="border-white/10 bg-[#121218] max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Globe className="h-5 w-5 text-purple-400" />
+                            Enable External Access?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-white/60">
+                            Would you like to use ngrok to allow players from outside your network to join this server?
+                            This will automatically download and install ngrok, then create a public tunnel to your server.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-3 py-4">
+                        <label className="text-sm font-medium text-white/80">
+                            Ngrok Authtoken <span className="text-red-400">*</span>
+                        </label>
+                        <Input
+                            type="password"
+                            placeholder="Enter your ngrok authtoken"
+                            value={ngrokAuthtoken}
+                            onChange={(e) => {
+                                setNgrokAuthtoken(e.target.value)
+                                setNgrokAuthtokenError(null)
+                            }}
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                        />
+                        {ngrokAuthtokenError && (
+                            <p className="text-sm text-red-400">{ngrokAuthtokenError}</p>
+                        )}
+                        <p className="text-xs text-white/40">
+                            Get your free authtoken at{" "}
+                            <a
+                                href="https://dashboard.ngrok.com/get-started/your-authtoken"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-purple-400 hover:underline"
+                                onClick={(e) => {
+                                    e.preventDefault()
+                                    window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
+                                }}
+                            >
+                                dashboard.ngrok.com
+                            </a>
+                        </p>
+                    </div>
+                    <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+                        <AlertDialogCancel
+                            className="border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                            onClick={handleSkipNgrok}
+                        >
+                            No, local only
+                        </AlertDialogCancel>
+                        <Button
+                            className="bg-purple-500 text-white hover:bg-purple-400"
+                            onClick={(e) => {
+                                e.preventDefault()
+                                handleEnableNgrok()
+                            }}
+                            disabled={ngrokInstallProgress === -2}
+                        >
+                            {ngrokInstallProgress === -2 ? (
+                                <span className="flex items-center gap-2">
+                                    <Spinner className="h-4 w-4" />
+                                    Validating...
+                                </span>
+                            ) : (
+                                "Yes, enable ngrok"
+                            )}
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Ngrok Installing Dialog */}
+            <AlertDialog open={ngrokInstalling}>
+                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <Spinner className="h-5 w-5" />
+                            {ngrokInstallProgress < 0 ? "Configuring ngrok..." : "Installing ngrok..."}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-white/60">
+                            <div className="mt-4">
+                                {ngrokInstallProgress < 0 ? (
+                                    <p className="text-center text-sm">Setting up your authtoken...</p>
+                                ) : (
+                                    <>
+                                        <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                                            <div
+                                                className="h-full bg-purple-500 rounded-full transition-all duration-300"
+                                                style={{ width: `${ngrokInstallProgress}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-center mt-2 text-sm">{ngrokInstallProgress}%</p>
+                                    </>
+                                )}
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
                 </AlertDialogContent>
             </AlertDialog>
 

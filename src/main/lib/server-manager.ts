@@ -312,23 +312,30 @@ export async function createServer(
     const destFilename = downloadInfo.jarFile === "server.jar" ? "server.jar" : downloadInfo.jarFile;
     const jarPath = path.join(finalDir, destFilename);
     await downloadFile(downloadInfo.url, jarPath, (downloaded, total) => {
+      const downloadedMB = (downloaded / 1024 / 1024).toFixed(1);
+      
       if (total > 0) {
         const downloadPercent = (downloaded / total) * 100;
         // Map server jar download to 20% - 90% range
         const overallPercent = 20 + downloadPercent * 0.7;
+        const totalMB = (total / 1024 / 1024).toFixed(1);
         sendProgress({
           stage: "downloading",
-          message: `Downloading ${params.framework} ${params.version}... ${Math.round(downloadPercent)}%`,
+          message: `Downloading ${params.framework} ${params.version}... ${Math.round(downloadPercent)}% (${downloadedMB} / ${totalMB} MB)`,
           percent: Math.round(overallPercent),
           bytesDownloaded: downloaded,
           bytesTotal: total,
         });
       } else {
-        // Indeterminate
+        // No content-length header - estimate progress based on typical server jar size (~50MB)
+        // Map server jar download to 20% - 90% range based on estimated 50MB
+        const estimatedTotal = 50 * 1024 * 1024; // 50MB estimate
+        const estimatedPercent = Math.min((downloaded / estimatedTotal) * 100, 99);
+        const overallPercent = 20 + estimatedPercent * 0.7;
         sendProgress({
           stage: "downloading",
-          message: `Downloading ${params.framework} ${params.version}...`,
-          percent: 20,
+          message: `Downloading ${params.framework} ${params.version}... ${downloadedMB} MB`,
+          percent: Math.round(overallPercent),
           bytesDownloaded: downloaded,
           bytesTotal: 0,
         });
@@ -534,7 +541,7 @@ export async function saveBanlist(
 
 export async function updateServerSettings(
   id: string,
-  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig'] }
+  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig']; useNgrok?: boolean; ngrokUrl?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const servers = await loadServerList();
@@ -556,6 +563,14 @@ export async function updateServerSettings(
 
     if (settings.backupConfig !== undefined) {
       server.backupConfig = settings.backupConfig;
+    }
+
+    if (settings.useNgrok !== undefined) {
+      server.useNgrok = settings.useNgrok;
+    }
+
+    if (settings.ngrokUrl !== undefined) {
+      server.ngrokUrl = settings.ngrokUrl;
     }
 
     await saveServerList(servers);
