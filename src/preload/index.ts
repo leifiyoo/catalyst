@@ -22,6 +22,8 @@ import {
   ModrinthSearchResult,
   ModrinthInstallEntry,
   ModrinthProjectDetails,
+  BackupEntry,
+  LogToMainFn,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -96,7 +98,7 @@ try {
     getBanlist: (id: string) => ipcRenderer.invoke("getBanlist", id),
     saveBanlist: (id: string, players: string[]) =>
       ipcRenderer.invoke("saveBanlist", id, players),
-    updateServerSettings: (id: string, settings: { ramMB?: number; javaPath?: string }) =>
+    updateServerSettings: (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: any }) =>
       ipcRenderer.invoke("updateServerSettings", id, settings),
     openServerFolder: (id: string) =>
       ipcRenderer.invoke("openServerFolder", id),
@@ -144,6 +146,35 @@ try {
       projectId: string
     ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke("removeModrinthInstall", serverId, projectId),
+    
+    createBackup: (serverId: string, name?: string): Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }> =>
+      ipcRenderer.invoke("createBackup", serverId, name),
+    getBackups: (serverId: string): Promise<BackupEntry[]> =>
+      ipcRenderer.invoke("getBackups", serverId),
+    deleteBackup: (serverId: string, filename: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("deleteBackup", serverId, filename),
+    restoreBackup: (serverId: string, filename: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("restoreBackup", serverId, filename),
+    cancelBackup: (serverId: string): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke("cancelBackup", serverId),
+    getBackupStatus: (serverId: string): Promise<{ serverId: string; inProgress: boolean; percent: number; stage: string; error?: string } | undefined> =>
+      ipcRenderer.invoke("getBackupStatus", serverId),
+    isBackupInProgress: (serverId: string): Promise<boolean> =>
+      ipcRenderer.invoke("isBackupInProgress", serverId),
+    onBackupProgress: (handler: (data: { serverId: string; percent: number; stage?: string; processedFiles?: number; totalFiles?: number }) => void) => {
+      const listener = (_event: unknown, data: { serverId: string; percent: number; stage?: string; processedFiles?: number; totalFiles?: number }) => handler(data);
+      ipcRenderer.on("backupProgress", listener);
+      return () => ipcRenderer.removeListener("backupProgress", listener);
+    },
+    onBackupCompleted: (handler: (data: { serverId: string; backup: BackupEntry }) => void) => {
+      const listener = (_event: unknown, data: { serverId: string; backup: BackupEntry }) => handler(data);
+      ipcRenderer.on("backupCompleted", listener);
+      return () => ipcRenderer.removeListener("backupCompleted", listener);
+    },
+
+    logToMain: (message: Parameters<LogToMainFn>[0], data?: Parameters<LogToMainFn>[1]) =>
+      ipcRenderer.send("rendererLog", { message, data }),
+
     openExternal: (url: string) => ipcRenderer.invoke("openExternal", url),
     checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
   });

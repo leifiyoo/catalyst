@@ -8,6 +8,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { ServersPage } from "@/pages/ServersPage";
 import { ServerDetailPage } from "@/pages/ServerDetailPage";
 import { UpdateNotifier } from "@/components/UpdateNotifier";
+import { ErrorPage } from "@/components/ErrorPage";
 
 import Ballpit from './Ballpit';
 
@@ -51,10 +52,11 @@ const router = createHashRouter([
     {
         path: "/",
         element: <DashboardLayout />,
+        errorElement: <ErrorPage />,
         children: [
-            { index: true, element: <DashboardPage /> },
-            { path: "servers", element: <ServersPage /> },
-            { path: "servers/:id", element: <ServerDetailPage /> },
+            { index: true, element: <DashboardPage />, errorElement: <ErrorPage /> },
+            { path: "servers", element: <ServersPage />, errorElement: <ErrorPage /> },
+            { path: "servers/:id", element: <ServerDetailPage />, errorElement: <ErrorPage /> },
         ],
     },
 ]);

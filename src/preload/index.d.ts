@@ -41,6 +41,16 @@ import {
   RemoveModrinthInstallFn,
   OpenExternalFn,
   CheckForUpdatesFn,
+  CreateBackupFn,
+  GetBackupsFn,
+  DeleteBackupFn,
+  RestoreBackupFn,
+  CancelBackupFn,
+  GetBackupStatusFn,
+  IsBackupInProgressFn,
+  OnBackupProgressFn,
+  OnBackupCompletedFn,
+  LogToMainFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -90,6 +100,16 @@ declare global {
       removeModrinthInstall: RemoveModrinthInstallFn;
       openExternal: OpenExternalFn;
       checkForUpdates: CheckForUpdatesFn;
+      createBackup: CreateBackupFn;
+      getBackups: GetBackupsFn;
+      deleteBackup: DeleteBackupFn;
+      restoreBackup: RestoreBackupFn;
+      cancelBackup: CancelBackupFn;
+      getBackupStatus: GetBackupStatusFn;
+      isBackupInProgress: IsBackupInProgressFn;
+      onBackupProgress: OnBackupProgressFn;
+      onBackupCompleted: OnBackupCompletedFn;
+      logToMain: LogToMainFn;
     };
   }
 }

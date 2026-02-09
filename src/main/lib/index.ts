@@ -47,6 +47,17 @@ export {
 } from "./server-manager";
 
 export {
+  createBackup,
+  getBackups,
+  deleteBackup,
+  restoreBackup,
+  checkAndRunAutoBackups,
+  cancelBackup,
+  getBackupStatus,
+  isBackupInProgress
+} from "./backup-manager";
+
+export {
   searchModrinthProjects,
   getModrinthProjectDetails,
   listModrinthInstalls,

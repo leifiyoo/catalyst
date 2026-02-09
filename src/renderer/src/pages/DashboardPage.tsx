@@ -162,9 +162,9 @@ export function DashboardPage() {
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">
                         {servers.map((server) => (
-                            <button
+                            <div
                                 key={server.id}
-                                className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-white/20"
+                                className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-white/20 cursor-pointer"
                                 onClick={() =>
                                     navigate(`/servers/${server.id}`)
                                 }
@@ -193,7 +193,7 @@ export function DashboardPage() {
                                     </Badge>
                                     <span>{server.players}</span>
                                     <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
+                                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                                             <Button variant="ghost" size="sm">
                                                 <MoreVertical className="h-4 w-4" />
                                             </Button>
@@ -218,7 +218,7 @@ export function DashboardPage() {
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </CardContent>
                 </Card>

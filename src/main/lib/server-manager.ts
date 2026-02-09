@@ -534,7 +534,7 @@ export async function saveBanlist(
 
 export async function updateServerSettings(
   id: string,
-  settings: { ramMB?: number; javaPath?: string }
+  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig'] }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const servers = await loadServerList();
@@ -552,6 +552,10 @@ export async function updateServerSettings(
 
     if (settings.javaPath !== undefined) {
       server.javaPath = settings.javaPath;
+    }
+
+    if (settings.backupConfig !== undefined) {
+      server.backupConfig = settings.backupConfig;
     }
 
     await saveServerList(servers);

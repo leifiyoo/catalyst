@@ -25,6 +25,22 @@ export type ServerRecord = {
   eulaAccepted?: boolean;
   jarFile?: string;
   javaPath?: string;
+  backupConfig?: BackupConfig;
+};
+
+export type BackupConfig = {
+  enabled: boolean;
+  intervalHours: number;
+  lastBackupAt?: string;
+};
+
+export type BackupEntry = {
+  name: string;      // human readable name or 'Automatic Backup'
+  filename: string;  // actual file name
+  path: string;
+  size: number;
+  createdAt: string;
+  type: "manual" | "auto";
 };
 
 export type FileEntry = {
@@ -197,7 +213,17 @@ export type GetWhitelistFn = (id: string) => Promise<string[]>;
 export type SaveWhitelistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
 export type GetBanlistFn = (id: string) => Promise<string[]>;
 export type SaveBanlistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
-export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string }) => Promise<{ success: boolean; error?: string }>;
+export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: BackupConfig }) => Promise<{ success: boolean; error?: string }>;
+export type CreateBackupFn = (serverId: string, name?: string) => Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }>;
+export type GetBackupsFn = (serverId: string) => Promise<BackupEntry[]>;
+export type DeleteBackupFn = (serverId: string, filename: string) => Promise<{ success: boolean; error?: string }>;
+export type RestoreBackupFn = (serverId: string, filename: string) => Promise<{ success: boolean; error?: string }>;
+export type CancelBackupFn = (serverId: string) => Promise<{ success: boolean }>;
+export type GetBackupStatusFn = (serverId: string) => Promise<{ serverId: string; inProgress: boolean; percent: number; stage: string; error?: string } | undefined>;
+export type IsBackupInProgressFn = (serverId: string) => Promise<boolean>;
+export type OnBackupProgressFn = (handler: (data: { serverId: string; percent: number; stage?: string; processedFiles?: number; totalFiles?: number }) => void) => () => void;
+export type OnBackupCompletedFn = (handler: (data: { serverId: string; backup: BackupEntry }) => void) => () => void;
+export type LogToMainFn = (message: string, data?: unknown) => void;
 export type OpenServerFolderFn = (id: string) => Promise<void>;
 export type OnServerStatsFn = (handler: (stats: ServerStats) => void) => () => void;
 export type AcceptEulaFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;

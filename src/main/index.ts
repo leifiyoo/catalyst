@@ -36,6 +36,14 @@ import {
   updateModrinthInstall,
   removeModrinthInstall,
   checkForUpdates,
+  createBackup,
+  getBackups,
+  deleteBackup,
+  restoreBackup,
+  checkAndRunAutoBackups,
+  cancelBackup,
+  getBackupStatus,
+  isBackupInProgress
 } from "@/lib";
 import {
   GetVersionsFn,
@@ -108,6 +116,11 @@ app.whenReady().then(() => {
   // });
 
   createWindow();
+
+  // Run auto backups checks
+  setInterval(() => {
+    checkAndRunAutoBackups();
+  }, 5 * 60 * 1000); // Check every 5 minutes
 
   // Clean up stale "Online" statuses from previous session
   const mainWin = BrowserWindow.getAllWindows()[0];
@@ -326,6 +339,44 @@ app.whenReady().then(() => {
   ipcMain.handle("openExternal", async (_event, url: string) => {
     await shell.openExternal(url);
   });
+
+  // Backup IPC handlers - Fire and Forget pattern
+  ipcMain.handle("createBackup", async (event, serverId: string, name?: string) => {
+    console.log("[ipc] createBackup", { serverId, name });
+    // Fire and forget - returns immediately with { started: true }
+    // Progress updates come via 'backupProgress' event
+    return createBackup(serverId, name, event.sender);
+  });
+
+  ipcMain.handle("cancelBackup", async (_event, serverId: string) => {
+    console.log("[ipc] cancelBackup", { serverId });
+    return { success: cancelBackup(serverId) };
+  });
+
+  ipcMain.handle("getBackupStatus", async (_event, serverId: string) => {
+    return getBackupStatus(serverId);
+  });
+
+  ipcMain.handle("isBackupInProgress", async (_event, serverId: string) => {
+    return isBackupInProgress(serverId);
+  });
+
+  ipcMain.on("rendererLog", (_event, payload: { message: string; data?: unknown }) => {
+    console.log("[renderer]", payload?.message, payload?.data ?? "");
+  });
+
+  ipcMain.handle("getBackups", async (_event, serverId: string) => {
+    return getBackups(serverId);
+  });
+
+  ipcMain.handle("deleteBackup", async (_event, serverId: string, filename: string) => {
+    return deleteBackup(serverId, filename);
+  });
+
+  ipcMain.handle("restoreBackup", async (_event, serverId: string, filename: string) => {
+    return restoreBackup(serverId, filename);
+  });
+
 });
 
 // Graceful shutdown: stop all running MC servers before quitting

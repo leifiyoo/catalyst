@@ -18,7 +18,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
 import {
     Dialog,
     DialogContent,
@@ -48,6 +48,10 @@ import {
     Play,
     Square,
     FolderOpen,
+    Archive,
+    Trash2,
+    RefreshCw,
+    Clock,
     Send,
     Save,
     Plus,
@@ -63,14 +67,11 @@ import {
     ChevronRight,
     ChevronLeft,
     FileText,
-    RefreshCw,
-    Trash2,
     Download,
     ExternalLink,
     Search,
     Globe,
     Heart,
-    Clock,
     Box,
     ScrollText,
     Anvil,
@@ -90,6 +91,7 @@ import type {
     ModrinthInstallEntry,
     ModrinthProjectType,
     ModrinthProjectDetails,
+    BackupEntry,
 } from "@shared/types"
 
 export function ServerDetailPage() {
@@ -185,6 +187,18 @@ export function ServerDetailPage() {
     const [fileError, setFileError] = useState<string | null>(null)
     const [fileDirty, setFileDirty] = useState(false)
 
+    // Backup state
+    const [backups, setBackups] = useState<BackupEntry[]>([])
+    const [backupsLoading, setBackupsLoading] = useState(false)
+    const [autoBackupEnabled, setAutoBackupEnabled] = useState(false)
+    const [backupInterval, setBackupInterval] = useState("24")
+    const [createBackupDialogOpen, setCreateBackupDialogOpen] = useState(false)
+    const [newBackupName, setNewBackupName] = useState("")
+    const [creatingBackup, setCreatingBackup] = useState(false)
+    const [backupPercent, setBackupPercent] = useState(0)
+    const [backupStage, setBackupStage] = useState<'idle' | 'calculating' | 'archiving' | 'complete'>('idle')
+    const [backupFileCount, setBackupFileCount] = useState({ processed: 0, total: 0 })
+
     // Modrinth library state
     const [modrinthQuery, setModrinthQuery] = useState("")
     const [modrinthResults, setModrinthResults] = useState<ModrinthSearchHit[]>([])
@@ -228,6 +242,7 @@ export function ServerDetailPage() {
         return new Set(modrinthInstalls.map((entry) => entry.projectId))
     }, [modrinthInstalls])
 
+
     // Load server
     useEffect(() => {
         if (!id) return
@@ -244,6 +259,12 @@ export function ServerDetailPage() {
                     setCustomRamMB(String(ram))
                 }
                 setJavaPath(s.javaPath || "")
+
+                // Backups
+                if (s.backupConfig) {
+                    setAutoBackupEnabled(s.backupConfig.enabled)
+                    setBackupInterval(s.backupConfig.intervalHours.toString())
+                }
             }
         })
     }, [id])
@@ -287,6 +308,50 @@ export function ServerDetailPage() {
                         players: update.players || prev.players,
                     }
                 })
+            }
+        })
+        return unsubscribe
+    }, [id])
+
+    // Backup progress subscriber - Now receives detailed progress updates
+    useEffect(() => {
+        if (!id) return
+        const unsubscribe = window.context.onBackupProgress(({ serverId, percent, stage, processedFiles, totalFiles }) => {
+            if (serverId === id) {
+                if (percent < 0) {
+                    // Error state
+                    setBackupPercent(-1);
+                    setCreatingBackup(false);
+                    setBackupStage('idle');
+                    setError("Backup failed");
+                } else {
+                    setBackupPercent(percent);
+                    setCreatingBackup(true);
+                    if (stage) {
+                        setBackupStage(stage as 'idle' | 'calculating' | 'archiving' | 'complete');
+                    }
+                    if (processedFiles !== undefined && totalFiles !== undefined) {
+                        setBackupFileCount({ processed: processedFiles, total: totalFiles });
+                    }
+                }
+            }
+        })
+        return unsubscribe
+    }, [id])
+
+    // Backup completion subscriber
+    useEffect(() => {
+        if (!id) return
+        const unsubscribe = window.context.onBackupCompleted(({ serverId }) => {
+            if (serverId === id) {
+                // Backup completed - refresh the list
+                setTimeout(() => {
+                    setCreatingBackup(false);
+                    setBackupPercent(0);
+                    setBackupStage('idle');
+                    setBackupFileCount({ processed: 0, total: 0 });
+                    loadBackups();
+                }, 1000);
             }
         })
         return unsubscribe
@@ -708,15 +773,109 @@ export function ServerDetailPage() {
         setSettingsSaving(true)
         const result = await window.context.updateServerSettings(id, {
             ramMB: effectiveRam,
-            javaPath: javaPath.trim() || undefined
+            javaPath: javaPath.trim() || undefined,
+            backupConfig: {
+                enabled: autoBackupEnabled,
+                intervalHours: parseInt(backupInterval),
+                lastBackupAt: server?.backupConfig?.lastBackupAt
+            }
         })
         setSettingsSaving(false)
         if (result.success) {
             setServer((prev) =>
-                prev ? { ...prev, ramMB: effectiveRam, javaPath: javaPath.trim() || undefined } : prev
+                prev ? { 
+                    ...prev, 
+                    ramMB: effectiveRam, 
+                    javaPath: javaPath.trim() || undefined,
+                    backupConfig: {
+                        enabled: autoBackupEnabled,
+                        intervalHours: parseInt(backupInterval),
+                        lastBackupAt: server?.backupConfig?.lastBackupAt
+                    }
+                } : prev
             )
             setSettingsSuccess(true)
             setTimeout(() => setSettingsSuccess(false), 3000)
+        }
+    }
+
+    const loadBackups = async () => {
+        if (!id) return
+        setBackupsLoading(true)
+        const data = await window.context.getBackups(id)
+        setBackups(data)
+        setBackupsLoading(false)
+    }
+
+    const handleCreateBackup = async () => {
+        if (!id) return
+        window.context.logToMain("handleCreateBackup:start", { id, name: newBackupName })
+        setCreatingBackup(true)
+        setBackupPercent(0)
+        setBackupStage('calculating')
+        setBackupFileCount({ processed: 0, total: 0 })
+        setCreateBackupDialogOpen(false) // Close dialog to show progress on main button
+        
+        const backupName = newBackupName.trim() || undefined
+        setNewBackupName("")
+
+        try {
+            // Fire and forget - backup runs in worker thread
+            const result = await window.context.createBackup(id, backupName)
+            if (!result.success) {
+                window.context.logToMain("handleCreateBackup:error", { id, error: result.error })
+                setError(result.error || "Failed to create backup")
+                setCreatingBackup(false)
+                setBackupStage('idle')
+            } else if (result.started) {
+                window.context.logToMain("handleCreateBackup:started", { id })
+                // UI updates now come from onBackupProgress and onBackupCompleted events
+            }
+        } catch (err) {
+            window.context.logToMain("handleCreateBackup:exception", { id, error: String(err) })
+            setError("Failed to initiate backup")
+            setCreatingBackup(false)
+            setBackupStage('idle')
+        }
+        // Note: We don't setCreatingBackup(false) here anymore -
+        // that happens when we receive the completion event
+    }
+
+    const handleCancelBackup = async () => {
+        if (!id) return
+        try {
+            const result = await window.context.cancelBackup(id)
+            if (result.success) {
+                window.context.logToMain("handleCancelBackup:success", { id })
+                setCreatingBackup(false)
+                setBackupPercent(0)
+                setBackupStage('idle')
+                setBackupFileCount({ processed: 0, total: 0 })
+            }
+        } catch (err) {
+            window.context.logToMain("handleCancelBackup:error", { id, error: String(err) })
+        }
+    }
+
+    const handleDeleteBackup = async (filename: string) => {
+        if (!id) return
+        const result = await window.context.deleteBackup(id, filename)
+        if (result.success) {
+            loadBackups()
+        } else {
+             setError(result.error || "Failed to delete backup")
+        }
+    }
+
+    const handleRestoreBackup = async (filename: string) => {
+        if (!id) return
+        const result = await window.context.restoreBackup(id, filename)
+        if (result.success) {
+            // maybe refresh file list?
+             setSettingsSuccess(true)
+             setTimeout(() => setSettingsSuccess(false), 3000)
+        } else {
+             setError(result.error || "Failed to restore backup")
         }
     }
 
@@ -1009,7 +1168,7 @@ export function ServerDetailPage() {
                     <TabsTrigger value="files" onClick={() => handleLoadFiles(currentPath)}>
                         Files
                     </TabsTrigger>
-                    <TabsTrigger value="settings">Settings</TabsTrigger>
+                    <TabsTrigger value="settings" onClick={loadBackups}>Settings</TabsTrigger>
                 </TabsList>
 
                 {/* Console Tab */}
@@ -2015,179 +2174,426 @@ export function ServerDetailPage() {
                     </AlertDialog>
                 </TabsContent>
 
+
+
+                {/* Backups Tab - MOVED TO SETTINGS */}
+                
+                {/* Create Backup Dialog */}
+                 <Dialog open={createBackupDialogOpen} onOpenChange={setCreateBackupDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Create Backup</DialogTitle>
+                            <DialogDescription>
+                                Enter a name for this backup.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <label htmlFor="name" className="text-sm font-medium">Backup Name (Optional)</label>
+                                <Input 
+                                    id="name" 
+                                    value={newBackupName} 
+                                    onChange={(e) => setNewBackupName(e.target.value)} 
+                                    placeholder="e.g. Before Mod Update" 
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setCreateBackupDialogOpen(false)}>Cancel</Button>
+                            <Button onClick={handleCreateBackup} disabled={creatingBackup} className="bg-indigo-500 hover:bg-indigo-600">
+                                {creatingBackup && <Spinner className="mr-2" />}
+                                Create
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
                 {/* Settings Tab */}
-                <TabsContent value="settings">
-                    <div className="grid gap-4 xl:grid-cols-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Performance</CardTitle>
-                                <CardDescription>
-                                    Changes require a server restart
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-4">
-                                {settingsSuccess && (
-                                    <Alert className="border-cyan-400/30 bg-cyan-400/10">
-                                        <CheckCircle2 className="h-4 w-4 text-cyan-400" />
-                                        <AlertTitle className="text-cyan-300">
-                                            Saved
-                                        </AlertTitle>
-                                        <AlertDescription className="text-cyan-300/70">
-                                            Settings saved. Restart the server to
-                                            apply.
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-                                <div className="grid gap-2">
-                                    <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
-                                        RAM
-                                    </label>
-                                    <Select
-                                        value={ramOption}
-                                        onValueChange={setRamOption}
-                                    >
-                                        <SelectTrigger className="w-[200px]">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="2048">
-                                                2 GB
-                                            </SelectItem>
-                                            <SelectItem value="4096">
-                                                4 GB
-                                            </SelectItem>
-                                            <SelectItem value="6144">
-                                                6 GB
-                                            </SelectItem>
-                                            <SelectItem value="8192">
-                                                8 GB
-                                            </SelectItem>
-                                            <SelectItem value="12288">
-                                                12 GB
-                                            </SelectItem>
-                                            <SelectItem value="16384">
-                                                16 GB
-                                            </SelectItem>
-                                            <SelectItem value="custom">
-                                                Custom
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    {ramOption === "custom" && (
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                type="number"
-                                                min={512}
-                                                max={32768}
-                                                value={customRamMB}
-                                                onChange={(e) =>
-                                                    setCustomRamMB(e.target.value)
-                                                }
-                                                placeholder="e.g. 7168"
-                                                className="w-[200px]"
-                                            />
-                                            <span className="text-xs text-white/50 whitespace-nowrap">
-                                                MB
+                <TabsContent value="settings" className="space-y-8 pb-10 max-h-[75vh] overflow-y-auto pr-2">
+                    
+                    {/* Fixed Success Alert */}
+                    {settingsSuccess && (
+                        <div className="fixed bottom-6 right-6 z-50 w-[380px] animate-in slide-in-from-bottom-5 fade-in duration-300">
+                             <Alert className="border-cyan-500/50 bg-[#0e1324] text-cyan-200 shadow-xl">
+                                <CheckCircle2 className="h-4 w-4" />
+                                <AlertTitle>Success</AlertTitle>
+                                <AlertDescription>Settings have been saved successfully.</AlertDescription>
+                                <AlertAction>
+                                    <Button variant="ghost" size="icon" className="-mt-2 -mr-2 h-8 w-8 text-cyan-200/50 hover:text-cyan-200" onClick={() => setSettingsSuccess(false)}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </AlertAction>
+                             </Alert>
+                        </div>
+                    )}
+
+                    {/* Section: General */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                            <Info className="h-5 w-5 text-cyan-400" />
+                            <h3 className="text-lg font-semibold tracking-tight">General Information</h3>
+                        </div>
+                        <div className="grid gap-4 xl:grid-cols-2">
+                             <Card>
+                                <CardHeader>
+                                    <CardTitle>Server Details</CardTitle>
+                                    <CardDescription>
+                                        Quick reference and tools
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-col gap-4">
+                                    <div className="grid gap-2 text-sm">
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Framework</span>
+                                            <span className="font-medium flex items-center gap-2">
+                                                {server.framework}
+                                                <Badge variant="outline" className="text-[10px] py-0 h-5 bg-black/20">{server.version}</Badge>
                                             </span>
                                         </div>
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Created</span>
+                                            <span className="font-medium">
+                                                {new Date(server.createdAt).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Path</span>
+                                            <span className="font-medium truncate max-w-[200px] text-right text-xs font-mono opacity-80" title={server.serverPath}>
+                                                {server.serverPath}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 pt-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1 border-white/10 hover:bg-white/5"
+                                            onClick={() => id && window.context.openServerFolder(id)}
+                                        >
+                                            <FolderOpen className="h-4 w-4 mr-2" />
+                                            Folder
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1 border-white/10 hover:bg-white/5"
+                                            onClick={() => handleLoadFiles(currentPath)}
+                                        >
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            Refresh
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+
+                    {/* Section: Performance */}
+                    <div className="space-y-4">
+                         <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                            <Gauge className="h-5 w-5 text-indigo-400" />
+                            <h3 className="text-lg font-semibold tracking-tight">Performance</h3>
+                        </div>
+                        <div className="grid gap-4 xl:grid-cols-2">
+                             <Card>
+                                <CardHeader>
+                                    <CardTitle>Java & Memory</CardTitle>
+                                    <CardDescription>
+                                        Changes require a server restart to take effect
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-col gap-6">
+                                    <div className="grid gap-3">
+                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
+                                            Allocated Memory (RAM)
+                                        </label>
+                                        <div className="flex gap-4 items-start">
+                                            <Select
+                                                value={ramOption}
+                                                onValueChange={setRamOption}
+                                            >
+                                                <SelectTrigger className="w-[180px]">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="2048">2 GB</SelectItem>
+                                                    <SelectItem value="4096">4 GB</SelectItem>
+                                                    <SelectItem value="6144">6 GB</SelectItem>
+                                                    <SelectItem value="8192">8 GB</SelectItem>
+                                                    <SelectItem value="12288">12 GB</SelectItem>
+                                                    <SelectItem value="16384">16 GB</SelectItem>
+                                                    <SelectItem value="custom">Custom</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            {ramOption === "custom" && (
+                                                <div className="flex-1 flex items-center gap-2">
+                                                    <Input
+                                                        type="number"
+                                                        min={512}
+                                                        max={32768}
+                                                        value={customRamMB}
+                                                        onChange={(e) =>
+                                                            setCustomRamMB(e.target.value)
+                                                        }
+                                                        placeholder="MB"
+                                                    />
+                                                    <span className="text-xs text-white/50">MB</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-3">
+                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
+                                            Java Executable
+                                        </label>
+                                        <Input
+                                            placeholder="System default (java)"
+                                            value={javaPath}
+                                            onChange={(e) => setJavaPath(e.target.value)}
+                                            className="font-mono text-xs"
+                                        />
+                                    </div>
+                                    <Button
+                                        className="w-full bg-indigo-500 text-white hover:bg-indigo-600"
+                                        onClick={handleSaveSettings}
+                                        disabled={settingsSaving}
+                                    >
+                                        {settingsSaving ? (
+                                            <Spinner className="mr-2" />
+                                        ) : (
+                                            <Save className="h-4 w-4 mr-1" />
+                                        )}
+                                        Save Performance Settings
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                
+                    {/* Section: Backups */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                            <Archive className="h-5 w-5 text-amber-500" />
+                            <h3 className="text-lg font-semibold tracking-tight">Backups</h3>
+                        </div>
+
+                        <div className="grid gap-4 xl:grid-cols-2">
+                             {/* Backup Config */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Configuration</CardTitle>
+                                    <CardDescription>Automated backup schedule</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-col gap-4">
+                                     <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                                        <div className="space-y-0.5">
+                                            <div className="text-sm font-medium">Automatic Backups</div>
+                                            <div className="text-xs text-muted-foreground">{autoBackupEnabled ? "Active" : "Paused"}</div>
+                                        </div>
+                                        <Select 
+                                            value={autoBackupEnabled ? "on" : "off"} 
+                                            onValueChange={(v) => setAutoBackupEnabled(v === "on")}
+                                        >
+                                            <SelectTrigger className="w-[100px] h-8 text-xs">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="off">Off</SelectItem>
+                                                <SelectItem value="on">On</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    {autoBackupEnabled && (
+                                        <div className="grid gap-2">
+                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
+                                                Interval
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    max={168}
+                                                    value={backupInterval}
+                                                    onChange={(e) => setBackupInterval(e.target.value)}
+                                                    className="w-24"
+                                                />
+                                                <span className="text-sm text-white/50">Hours</span>
+                                            </div>
+                                        </div>
                                     )}
+                                    <div className="pt-2">
+                                        <Button
+                                            className="w-full bg-white/10 text-white hover:bg-white/20"
+                                            onClick={handleSaveSettings}
+                                            disabled={settingsSaving}
+                                            variant="outline"
+                                        >
+                                            {settingsSaving ? <Spinner className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                                            Save Backup Config
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Manual Action */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Manual Backup</CardTitle>
+                                    <CardDescription>Create a snapshot now</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-col justify-center gap-4">
+                                    {/* Work in Progress Warning */}
+                                    <div className="bg-amber-500/20 border border-amber-500/40 rounded-lg p-3 mb-2">
+                                        <div className="flex items-start gap-2">
+                                            <Info className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                                            <div className="text-sm">
+                                                <span className="font-semibold text-amber-300">Work in Progress:</span>
+                                                <span className="text-amber-200/80 ml-1">Backup functionality is currently under development and may not work correctly.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {creatingBackup ? (
+                                        <div className="space-y-3">
+                                            {/* Progress Bar */}
+                                            <div className="w-full bg-slate-700 rounded-full h-2.5">
+                                                <div
+                                                    className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
+                                                    style={{ width: `${Math.max(0, backupPercent)}%` }}
+                                                ></div>
+                                            </div>
+                                            
+                                            {/* Status Text */}
+                                            <div className="flex items-center justify-between text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <Spinner className="h-4 w-4" />
+                                                    <span className="text-white/80">
+                                                        {backupStage === 'calculating' && "Calculating..."}
+                                                        {backupStage === 'archiving' && `Archiving ${backupFileCount.total > 0 ? `(${backupFileCount.processed}/${backupFileCount.total})` : ''}`}
+                                                        {backupStage === 'complete' && "Finalizing..."}
+                                                        {!backupStage && "Creating Backup..."}
+                                                    </span>
+                                                </div>
+                                                <span className="text-white/60 font-mono">
+                                                    {backupPercent}%
+                                                </span>
+                                            </div>
+                                            
+                                            {/* Cancel Button */}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full h-8 border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                                                onClick={handleCancelBackup}
+                                            >
+                                                <X className="h-3 w-3 mr-1" />
+                                                Cancel Backup
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            className="w-full h-12 bg-amber-600/80 hover:bg-amber-600 text-white"
+                                            onClick={() => setCreateBackupDialogOpen(true)}
+                                        >
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            New Backup
+                                        </Button>
+                                    )}
+                                    <div className="text-xs text-center text-white/40">
+                                        Backups are stored in <code>/backups</code> folder
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                        
+                        {/* List */}
+                        <Card>
+                             <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                <div>
+                                    <CardTitle>History</CardTitle>
+                                    <CardDescription>
+                                        {backups.length} snapshot{backups.length !== 1 ? 's' : ''} available
+                                    </CardDescription>
                                 </div>
-                                <div className="grid gap-2">
-                                    <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
-                                        Java Path
-                                    </label>
-                                    <Input
-                                        placeholder="System default (java)"
-                                        value={javaPath}
-                                        onChange={(e) => setJavaPath(e.target.value)}
-                                        className="font-mono text-xs"
-                                    />
-                                    <p className="text-[11px] text-white/40">
-                                        Path to the Java executable. Leave empty to use system default.
+                                <Button variant="ghost" size="icon" onClick={loadBackups} disabled={backupsLoading}>
+                                    <RefreshCw className={`h-4 w-4 ${backupsLoading ? "animate-spin" : ""}`} />
+                                </Button>
+                            </CardHeader>
+                            <CardContent>
+                                {backupsLoading && backups.length === 0 ? (
+                                    <div className="flex justify-center py-8">
+                                        <Spinner />
+                                    </div>
+                                ) : backups.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2 bg-white/5 rounded-lg border border-dashed border-white/10 mx-1">
+                                        <Archive className="h-6 w-6 opacity-20" />
+                                        <p className="text-xs">No backups found</p>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2 max-h-[300px] overflow-auto pr-2 custom-scrollbar">
+                                        {backups.map((backup) => (
+                                            <div key={backup.filename} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 group hover:border-white/20 transition-all">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`h-8 w-8 rounded-md flex items-center justify-center ${backup.type === 'auto' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                                                        {backup.type === 'auto' ? <Clock className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-medium">{backup.name}</div>
+                                                        <div className="text-[10px] text-white/50 flex gap-3">
+                                                            <span>{new Date(backup.createdAt).toLocaleString()}</span>
+                                                            <span className="opacity-30">•</span>
+                                                            <span>{formatFileSize(backup.size)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRestoreBackup(backup.filename)}>
+                                                                    <RefreshCw className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Restore</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400/70 hover:text-red-400 hover:bg-red-400/10" onClick={() => handleDeleteBackup(backup.filename)}>
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Delete</TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Section: Danger Zone */}
+                    <div className="space-y-4 pt-4 border-t border-white/5">
+                        <div className="flex items-center gap-2 pb-2">
+                             <h3 className="text-lg font-semibold tracking-tight text-red-500/80">Danger Zone</h3>
+                        </div>
+                        <Card className="border-red-500/10 bg-red-500/5">
+                            <CardContent className="flex items-center justify-between p-6">
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-medium text-white">Delete Server</h4>
+                                    <p className="text-xs text-white/50 max-w-[400px]">
+                                        This action will permanently delete this server and all associated files, logs, and backups. This action cannot be undone.
                                     </p>
                                 </div>
                                 <Button
-                                    className="w-fit bg-cyan-400 text-black hover:bg-cyan-300"
-                                    onClick={handleSaveSettings}
-                                    disabled={settingsSaving}
-                                >
-                                    {settingsSaving ? (
-                                        <Spinner className="mr-2" />
-                                    ) : (
-                                        <Save className="h-4 w-4 mr-1" />
-                                    )}
-                                    Save settings
-                                </Button>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Server Info</CardTitle>
-                                <CardDescription>
-                                    Quick reference and tools
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-4">
-                                <div className="grid gap-2 text-sm">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-white/50">Framework</span>
-                                        <span className="font-medium">{server.framework}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-white/50">Version</span>
-                                        <span className="font-medium">{server.version}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-white/50">Created</span>
-                                        <span className="font-medium">
-                                            {new Date(server.createdAt).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-white/50">Path</span>
-                                        <span className="font-medium truncate max-w-[220px] text-right">
-                                            {server.serverPath}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        variant="ghost"
-                                        onClick={() => id && window.context.openServerFolder(id)}
-                                    >
-                                        <FolderOpen className="h-4 w-4 mr-2" />
-                                        Open folder
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        onClick={() => handleLoadFiles(currentPath)}
-                                    >
-                                        <FileText className="h-4 w-4 mr-2" />
-                                        Refresh files
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="xl:col-span-2 border-red-400/30 bg-red-500/5">
-                            <CardHeader>
-                                <CardTitle>Danger Zone</CardTitle>
-                                <CardDescription>
-                                    This permanently removes the server and its files
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-3">
-                                <p className="text-sm text-white/50">
-                                    Deleting a server cannot be undone. Make sure you
-                                    have backed up any important worlds or configs.
-                                </p>
-                                <Button
-                                    className="w-fit bg-red-500 text-white hover:bg-red-600"
+                                    variant="destructive"
                                     onClick={() => setDeleteDialogOpen(true)}
                                 >
                                     <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete server
+                                    Delete Server
                                 </Button>
                             </CardContent>
                         </Card>
