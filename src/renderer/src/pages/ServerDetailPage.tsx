@@ -235,6 +235,7 @@ export function ServerDetailPage() {
 
     const [starting, setStarting] = useState(false)
     const [stopping, setStopping] = useState(false)
+    const [restarting, setRestarting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     const isOnline = server?.status === "Online"
@@ -440,8 +441,16 @@ export function ServerDetailPage() {
             setEulaDialogOpen(true)
             return
         }
-        // Auto-start ngrok if enabled for this server
-        await doStartServer(server.useNgrok === true)
+        // Check if ngrok is enabled globally (not just per-server setting)
+        const ngrokEnabled = await window.context.isNgrokEnabled()
+        const hasToken = await window.context.isNgrokAuthtokenConfigured()
+        
+        // Auto-start ngrok if enabled globally and has token
+        if (ngrokEnabled && hasToken) {
+            await doStartServer(true)
+        } else {
+            await doStartServer(false)
+        }
     }
 
     const doStartServer = async (withNgrok = false) => {
@@ -581,6 +590,26 @@ export function ServerDetailPage() {
             setError(result.error || "Failed to stop server")
         }
         setStopping(false)
+    }
+
+    const handleRestart = async () => {
+        if (!id) return
+        setRestarting(true)
+        setError(null)
+        
+        // Check if ngrok is enabled globally
+        const ngrokEnabled = await window.context.isNgrokEnabled()
+        const hasToken = await window.context.isNgrokAuthtokenConfigured()
+        
+        const result = await window.context.restartServer(id)
+        if (!result.success) {
+            setError(result.error || "Failed to restart server")
+        } else if (ngrokEnabled && hasToken) {
+            // Start ngrok tunnel after server restarts
+            const port = properties.find(p => p.key === "server-port")?.value || "25565"
+            await window.context.startNgrok(id, parseInt(port, 10))
+        }
+        setRestarting(false)
     }
 
     const handleSendCommand = () => {
@@ -1243,18 +1272,32 @@ export function ServerDetailPage() {
                         Open folder
                     </Button>
                     {isOnline ? (
-                        <Button
-                            variant="destructive"
-                            onClick={handleStop}
-                            disabled={stopping}
-                        >
-                            {stopping ? (
-                                <Spinner className="mr-2" />
-                            ) : (
-                                <Square className="h-4 w-4 mr-1" />
-                            )}
-                            {stopping ? "Stopping..." : "Stop"}
-                        </Button>
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={handleRestart}
+                                disabled={restarting}
+                            >
+                                {restarting ? (
+                                    <Spinner className="mr-2" />
+                                ) : (
+                                    <RefreshCw className="h-4 w-4 mr-1" />
+                                )}
+                                {restarting ? "Restarting..." : "Restart"}
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleStop}
+                                disabled={stopping}
+                            >
+                                {stopping ? (
+                                    <Spinner className="mr-2" />
+                                ) : (
+                                    <Square className="h-4 w-4 mr-1" />
+                                )}
+                                {stopping ? "Stopping..." : "Stop"}
+                            </Button>
+                        </>
                     ) : (
                         <Button
                             className="bg-cyan-400 text-black hover:bg-cyan-300"

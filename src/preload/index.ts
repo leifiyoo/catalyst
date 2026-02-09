@@ -74,6 +74,7 @@ try {
     getServer: (id: string) => ipcRenderer.invoke("getServer", id),
     startServer: (id: string) => ipcRenderer.invoke("startServer", id),
     stopServer: (id: string) => ipcRenderer.invoke("stopServer", id),
+    restartServer: (id: string) => ipcRenderer.invoke("restartServer", id),
     sendCommand: (id: string, command: string) =>
       ipcRenderer.invoke("sendCommand", id, command),
     getServerLogs: (serverId: string) => ipcRenderer.invoke("getServerLogs", serverId),

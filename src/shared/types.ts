@@ -206,7 +206,8 @@ export type OnServerCreationProgressFn = (
 ) => () => void;
 export type StartServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
 export type StopServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
-export type SendCommandFn = (id: string, command: string) => Promise<void>;
+export type RestartServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
+export type SendCommandFn = (id: string, command: string) => Promise<{ success: boolean; error?: string }>;
 export type OnConsoleOutputFn = (handler: (serverId: string, line: ConsoleLine) => void) => () => void;
 export type OnServerStatusFn = (handler: (update: ServerStatusUpdate) => void) => () => void;
 export type GetServerPropertiesFn = (id: string) => Promise<ServerProperty[]>;

@@ -13,6 +13,7 @@ import {
   OnServerCreationProgressFn,
   StartServerFn,
   StopServerFn,
+  RestartServerFn,
   SendCommandFn,
   OnConsoleOutputFn,
   OnServerStatusFn,
@@ -79,6 +80,7 @@ declare global {
       getServerLogs: GetServerLogsFn;
       startServer: StartServerFn;
       stopServer: StopServerFn;
+      restartServer: RestartServerFn;
       sendCommand: SendCommandFn;
       onConsoleOutput: OnConsoleOutputFn;
       onServerStatus: OnServerStatusFn;

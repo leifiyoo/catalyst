@@ -34,6 +34,7 @@ export {
   stopAllServers,
   refreshServerStatuses,
   getServerLogs,
+  restartServer,
 } from "./server-runner";
 
 export {

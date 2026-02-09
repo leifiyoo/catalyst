@@ -29,6 +29,7 @@ import {
   renameServerFile,
   copyServerFile,
   getServerLogs,
+  restartServer,
   searchModrinthProjects,
   getModrinthProjectDetails,
   listModrinthInstalls,
@@ -232,8 +233,25 @@ app.whenReady().then(() => {
     return stopServer(id);
   });
 
+  ipcMain.handle("restartServer", async (_event, id: string) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) {
+      return { success: false, error: "No window available" };
+    }
+    return restartServer(id, mainWindow);
+  });
+
   ipcMain.handle("sendCommand", async (_event, id: string, command: string) => {
+    // Intercept restart command to handle it properly on all platforms
+    if (/^\s*restart\s*$/i.test(command)) {
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+      if (!mainWindow) {
+        return { success: false, error: "No window available" };
+      }
+      return restartServer(id, mainWindow);
+    }
     sendCommand(id, command);
+    return { success: true };
   });
 
   ipcMain.handle("getServerProperties", async (_event, id: string) => {

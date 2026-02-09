@@ -3,6 +3,7 @@ import { spawn, ChildProcess, execFile } from "child_process";
 import { ConsoleLine, ServerStats, ServerStatusUpdate } from "@shared/types";
 import { getServer, getServers, updateServerStatus } from "./server-manager";
 import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
+import { startNgrokTunnel, isNgrokEnabled, isAuthtokenConfigured } from "./ngrok-manager";
 
 const runningServers = new Map<string, ChildProcess>();
 const serverStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -10,6 +11,7 @@ const serverStatsData = new Map<string, ServerStats>();
 const serverReady = new Map<string, boolean>();
 const lastMemCommandAt = new Map<string, number>();
 const serverLogs = new Map<string, ConsoleLine[]>();
+const serverRestarting = new Map<string, boolean>(); // Track if server is restarting
 const MAX_LOG_LINES = 1000;
 const ANSI_ESCAPE_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
 
@@ -138,6 +140,14 @@ function parseStatsFromLine(serverId: string, line: string): void {
   // Detect server fully loaded: "Done (X.XXXs)! For help, type "help""
   if (/Done \(\d+\.\d+s\)/.test(normalizedLine)) {
     serverReady.set(serverId, true);
+  }
+
+  // Detect server restart command issued (for auto-restart on exit)
+  // Pattern: "Server is restarting" or "[RestartCommand]" or "Startup script...does not exist"
+  if (/Server is restarting/i.test(normalizedLine) || 
+      /\[RestartCommand\]/i.test(normalizedLine) ||
+      /Startup script.*does not exist/i.test(normalizedLine)) {
+    serverRestarting.set(serverId, true);
   }
 
   // Parse player join
@@ -440,6 +450,11 @@ export async function startServer(
     child.on("close", async (code) => {
       runningServers.delete(serverId);
       stopStatsPolling(serverId);
+      
+      // Check if server was restarting (in-game /restart command)
+      const wasRestarting = serverRestarting.get(serverId) || false;
+      serverRestarting.delete(serverId);
+      
       if (!mainWindow.isDestroyed()) {
         sendConsoleLine(
           mainWindow,
@@ -448,6 +463,59 @@ export async function startServer(
           "system"
         );
       }
+      
+      // If server was restarting, auto-restart it
+      if (wasRestarting) {
+        if (!mainWindow.isDestroyed()) {
+          sendConsoleLine(
+            mainWindow,
+            serverId,
+            "Detected restart command, restarting server...",
+            "system"
+          );
+        }
+        
+        // Wait a moment for cleanup
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Restart the server - call startServer which will get fresh server data
+        const restartResult = await startServer(serverId, mainWindow);
+        if (!restartResult.success && !mainWindow.isDestroyed()) {
+          sendConsoleLine(
+            mainWindow,
+            serverId,
+            `Failed to restart server: ${restartResult.error}`,
+            "stderr"
+          );
+          await updateServerStatus(serverId, "Offline");
+          sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
+          return;
+        }
+        
+        // Check if ngrok is enabled globally and restart tunnel
+        const ngrokEnabled = await isNgrokEnabled();
+        const hasToken = await isAuthtokenConfigured();
+        
+        if (ngrokEnabled && hasToken) {
+          // Get the server port from properties
+          const { getServerProperties } = await import("./server-manager");
+          const properties = await getServerProperties(server.serverPath);
+          const portProp = properties.find(p => p.key === "server-port");
+          const port = portProp ? parseInt(portProp.value, 10) : 25565;
+          
+          const ngrokResult = await startNgrokTunnel(mainWindow, serverId, port);
+          if (ngrokResult.success && ngrokResult.publicUrl && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("ngrokUrlChanged", {
+              serverId,
+              publicUrl: ngrokResult.publicUrl,
+              port,
+              protocol: "tcp"
+            });
+          }
+        }
+        return;
+      }
+      
       await updateServerStatus(serverId, "Offline");
       if (!mainWindow.isDestroyed()) {
         sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
@@ -525,4 +593,59 @@ export async function stopAllServers(): Promise<void> {
 
 export function getServerLogs(serverId: string): ConsoleLine[] {
   return serverLogs.get(serverId) || [];
+}
+
+export async function restartServer(
+  serverId: string,
+  mainWindow: BrowserWindow
+): Promise<{ success: boolean; error?: string }> {
+  // Check if server is running
+  if (!runningServers.has(serverId)) {
+    return { success: false, error: "Server is not running" };
+  }
+
+  // Send restart message to console
+  sendConsoleLine(mainWindow, serverId, "Restarting server...", "system");
+
+  // Stop the server gracefully
+  const stopResult = await stopServer(serverId);
+  if (!stopResult.success) {
+    return { success: false, error: stopResult.error || "Failed to stop server" };
+  }
+
+  // Wait a moment for cleanup
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Start the server again
+  const startResult = await startServer(serverId, mainWindow);
+  if (!startResult.success) {
+    return { success: false, error: startResult.error || "Failed to start server" };
+  }
+
+  // Check if ngrok is enabled globally and start tunnel if so
+  const ngrokEnabled = await isNgrokEnabled();
+  const hasToken = await isAuthtokenConfigured();
+  
+  if (ngrokEnabled && hasToken) {
+    const server = await getServer(serverId);
+    if (server) {
+      // Get the server port from properties file
+      const { getServerProperties } = await import("./server-manager");
+      const properties = await getServerProperties(server.serverPath);
+      const portProp = properties.find(p => p.key === "server-port");
+      const port = portProp ? parseInt(portProp.value, 10) : 25565;
+      
+      const ngrokResult = await startNgrokTunnel(mainWindow, serverId, port);
+      if (ngrokResult.success && ngrokResult.publicUrl && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("ngrokUrlChanged", {
+          serverId,
+          publicUrl: ngrokResult.publicUrl,
+          port,
+          protocol: "tcp"
+        });
+      }
+    }
+  }
+
+  return { success: true };
 }
