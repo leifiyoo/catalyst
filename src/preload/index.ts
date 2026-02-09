@@ -104,6 +104,14 @@ try {
       ipcRenderer.invoke("updateServerSettings", id, settings),
     openServerFolder: (id: string) =>
       ipcRenderer.invoke("openServerFolder", id),
+    exportServer: (id: string) =>
+      ipcRenderer.invoke("exportServer", id),
+    importServer: (zipPath: string, customName: string) =>
+      ipcRenderer.invoke("importServer", zipPath, customName),
+    openImportDialog: () =>
+      ipcRenderer.invoke("openImportDialog"),
+    getServerDiskUsage: (serverId: string) =>
+      ipcRenderer.invoke("getServerDiskUsage", serverId),
     onServerStats: (handler: (stats: ServerStats) => void) => {
       const listener = (_event: unknown, stats: ServerStats) =>
         handler(stats);

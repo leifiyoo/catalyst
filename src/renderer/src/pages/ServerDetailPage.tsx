@@ -236,7 +236,12 @@ export function ServerDetailPage() {
     const [starting, setStarting] = useState(false)
     const [stopping, setStopping] = useState(false)
     const [restarting, setRestarting] = useState(false)
+    const [exporting, setExporting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    
+    // Disk usage state
+    const [diskUsage, setDiskUsage] = useState<number | null>(null)
+    const [diskUsageLoading, setDiskUsageLoading] = useState(false)
 
     const isOnline = server?.status === "Online"
     const modrinthContext = useMemo(() => {
@@ -287,6 +292,18 @@ export function ServerDetailPage() {
                     setPropsLoaded(true)
                 })
             }
+        })
+    }, [id])
+
+    // Load disk usage
+    useEffect(() => {
+        if (!id) return
+        setDiskUsageLoading(true)
+        window.context.getServerDiskUsage(id).then((result) => {
+            if (result.success && result.bytes !== undefined) {
+                setDiskUsage(result.bytes)
+            }
+            setDiskUsageLoading(false)
         })
     }, [id])
 
@@ -597,19 +614,23 @@ export function ServerDetailPage() {
         setRestarting(true)
         setError(null)
         
-        // Check if ngrok is enabled globally
-        const ngrokEnabled = await window.context.isNgrokEnabled()
-        const hasToken = await window.context.isNgrokAuthtokenConfigured()
-        
+        // Backend handles ngrok checking and starting internally
         const result = await window.context.restartServer(id)
         if (!result.success) {
             setError(result.error || "Failed to restart server")
-        } else if (ngrokEnabled && hasToken) {
-            // Start ngrok tunnel after server restarts
-            const port = properties.find(p => p.key === "server-port")?.value || "25565"
-            await window.context.startNgrok(id, parseInt(port, 10))
         }
         setRestarting(false)
+    }
+
+    const handleExport = async () => {
+        if (!id) return
+        setExporting(true)
+        setError(null)
+        const result = await window.context.exportServer(id)
+        if (!result.success && result.error !== "Export cancelled") {
+            setError(result.error || "Failed to export server")
+        }
+        setExporting(false)
     }
 
     const handleSendCommand = () => {
@@ -1084,6 +1105,21 @@ export function ServerDetailPage() {
         return `${ramMB} MB`
     }
 
+    const formatBytes = (bytes: number) => {
+        if (bytes >= 1073741824) { // GB
+            const gb = bytes / 1073741824
+            return gb % 1 === 0 ? `${gb} GB` : `${gb.toFixed(2)} GB`
+        }
+        if (bytes >= 1048576) { // MB
+            const mb = bytes / 1048576
+            return mb % 1 === 0 ? `${mb} MB` : `${mb.toFixed(1)} MB`
+        }
+        if (bytes >= 1024) { // KB
+            return `${(bytes / 1024).toFixed(1)} KB`
+        }
+        return `${bytes} B`
+    }
+
     const renderAnsiText = (text: string) => {
         const segments: React.ReactNode[] = []
         const regex = /\x1b\[([0-9;]*)m/g
@@ -1231,8 +1267,8 @@ export function ServerDetailPage() {
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                    {/* Ngrok URL if active */}
-                    {(server.ngrokUrl || ngrokStatus?.publicUrl) && (
+                    {/* Ngrok URL if active - only show when server is online */}
+                    {server.status === "Online" && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1270,6 +1306,19 @@ export function ServerDetailPage() {
                     >
                         <FolderOpen className="h-4 w-4 mr-1" />
                         Open folder
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleExport}
+                        disabled={exporting}
+                    >
+                        {exporting ? (
+                            <Spinner className="h-4 w-4 mr-1" />
+                        ) : (
+                            <Download className="h-4 w-4 mr-1" />
+                        )}
+                        {exporting ? "Exporting..." : "Export"}
                     </Button>
                     {isOnline ? (
                         <>
@@ -2565,9 +2614,23 @@ export function ServerDetailPage() {
                                 </CardHeader>
                                 <CardContent className="flex flex-col gap-6">
                                     <div className="grid gap-3">
-                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
-                                            Allocated Memory (RAM)
-                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
+                                                Allocated Memory (RAM)
+                                            </label>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Info className="h-3.5 w-3.5 text-white/30 cursor-help" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="right" className="max-w-xs">
+                                                        <p className="text-xs">
+                                                            This sets the Java heap size (-Xmx). The actual process memory will be ~10-20% higher due to JVM overhead (metaspace, code cache, thread stacks).
+                                                        </p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
                                         <div className="flex gap-4 items-start">
                                             <Select
                                                 value={ramOption}
@@ -2613,6 +2676,26 @@ export function ServerDetailPage() {
                                             onChange={(e) => setJavaPath(e.target.value)}
                                             className="font-mono text-xs"
                                         />
+                                    </div>
+                                    {/* Disk Usage */}
+                                    <div className="grid gap-3">
+                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
+                                            Disk Usage
+                                        </label>
+                                        <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/5">
+                                            {diskUsageLoading ? (
+                                                <Spinner className="h-4 w-4" />
+                                            ) : diskUsage !== null ? (
+                                                <>
+                                                    <Folder className="h-4 w-4 text-amber-500" />
+                                                    <span className="text-sm">
+                                                        {formatBytes(diskUsage)}
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <span className="text-sm text-white/50">Unable to calculate</span>
+                                            )}
+                                        </div>
                                     </div>
                                     <Button
                                         className="w-full bg-indigo-500 text-white hover:bg-indigo-600"

@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from "electron";
+import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
@@ -30,6 +30,9 @@ import {
   copyServerFile,
   getServerLogs,
   restartServer,
+  exportServer,
+  importServer,
+  getServerDiskUsage,
   searchModrinthProjects,
   getModrinthProjectDetails,
   listModrinthInstalls,
@@ -290,7 +293,7 @@ app.whenReady().then(() => {
     return saveBanlist(server.serverPath, players);
   });
 
-  ipcMain.handle("updateServerSettings", async (_event, id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: any; useNgrok?: boolean; ngrokUrl?: string }) => {
+  ipcMain.handle("updateServerSettings", async (_event, id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: any; useNgrok?: boolean; ngrokUrl?: string; name?: string }) => {
     return updateServerSettings(id, settings);
   });
 
@@ -299,6 +302,42 @@ app.whenReady().then(() => {
     if (server) {
       shell.openPath(server.serverPath);
     }
+  });
+
+  ipcMain.handle("exportServer", async (_event, id: string) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) {
+      return { success: false, error: "No window available" };
+    }
+    return exportServer(id, mainWindow);
+  });
+
+  ipcMain.handle("importServer", async (_event, zipPath: string, customName: string) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) {
+      return { success: false, error: "No window available" };
+    }
+    return importServer(zipPath, customName, mainWindow);
+  });
+
+  ipcMain.handle("openImportDialog", async () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (!mainWindow) {
+      return { success: false, error: "No window available" };
+    }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Select Server Export",
+      filters: [{ name: "Zip Files", extensions: ["zip"] }],
+      properties: ["openFile"]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, error: "No file selected" };
+    }
+    return { success: true, filePath: result.filePaths[0] };
+  });
+
+  ipcMain.handle("getServerDiskUsage", async (_event, serverId: string) => {
+    return getServerDiskUsage(serverId);
   });
 
   ipcMain.handle("acceptEula", async (_event, serverId: string) => {

@@ -53,7 +53,7 @@ import {
 } from "@/components/ui/pagination"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
-import { MoreVertical, Server, Plus, CheckCircle2 } from "lucide-react"
+import { MoreVertical, Server, Plus, CheckCircle2, Upload, Pencil } from "lucide-react"
 import type { ServerRecord, ServerCreationProgress } from "@shared/types"
 
 const ITEMS_PER_PAGE = 20
@@ -69,6 +69,18 @@ export function ServersPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [creationProgress, setCreationProgress] = useState<ServerCreationProgress | null>(null)
     const [creationError, setCreationError] = useState<string | null>(null)
+    
+    // Import state
+    const [showImportDialog, setShowImportDialog] = useState(false)
+    const [importZipPath, setImportZipPath] = useState<string | null>(null)
+    const [importName, setImportName] = useState("")
+    const [isImporting, setIsImporting] = useState(false)
+    const [importError, setImportError] = useState<string | null>(null)
+    
+    // Rename state
+    const [renameTarget, setRenameTarget] = useState<ServerRecord | null>(null)
+    const [renameValue, setRenameValue] = useState("")
+    const [isRenaming, setIsRenaming] = useState(false)
     
     // Ref to track creation status without dependency cycle in useEffect
     const isCreatingRef = useRef(false)
@@ -161,6 +173,61 @@ export function ServersPage() {
         }
         setDeleteTarget(null)
     }
+    
+    const handleSelectImportFile = async () => {
+        const result = await window.context.openImportDialog()
+        if (result.success && result.filePath) {
+            setImportZipPath(result.filePath)
+            // Extract default name from filename
+            const fileName = result.filePath.split(/[/\\]/).pop() || "Imported Server"
+            const defaultName = fileName.replace(/\.zip$/i, "")
+            setImportName(defaultName)
+            setShowImportDialog(true)
+        }
+    }
+    
+    const handleImportServer = async () => {
+        if (!importZipPath || !importName.trim()) return
+        
+        setIsImporting(true)
+        setImportError(null)
+        
+        const result = await window.context.importServer(importZipPath, importName.trim())
+        
+        if (result.success && result.server) {
+            setServers((prev) => [...prev, result.server!])
+            setShowImportDialog(false)
+            setImportZipPath(null)
+            setImportName("")
+            setSuccessMessage(`Server "${result.server.name}" was imported successfully.`)
+            setTimeout(() => setSuccessMessage(null), 4000)
+        } else {
+            setImportError(result.error || "Failed to import server")
+        }
+        
+        setIsImporting(false)
+    }
+    
+    const handleRenameServer = async () => {
+        if (!renameTarget || !renameValue.trim()) return
+        
+        setIsRenaming(true)
+        
+        const result = await window.context.updateServerSettings(renameTarget.id, { name: renameValue.trim() })
+        
+        if (result.success) {
+            setServers((prev) => prev.map((s) => s.id === renameTarget.id ? { ...s, name: renameValue.trim() } : s))
+            setRenameTarget(null)
+            setRenameValue("")
+            setSuccessMessage(`Server renamed to "${renameValue.trim()}"`)
+            setTimeout(() => setSuccessMessage(null), 4000)
+        } else {
+            // Could show error toast here
+            console.error("Failed to rename server:", result.error)
+        }
+        
+        setIsRenaming(false)
+    }
 
     const formatRam = (ramMB: number) => {
         if (ramMB >= 1024 && ramMB % 1024 === 0) {
@@ -248,13 +315,23 @@ export function ServersPage() {
                     </p>
                     <h1 className="mt-2 text-3xl font-semibold">Servers</h1>
                 </div>
-                <Button
-                    className="bg-cyan-400 text-black hover:bg-cyan-300"
-                    onClick={() => setShowCreateForm(!showCreateForm)}
-                >
-                    <Plus className="h-4 w-4" />
-                    New server
-                </Button>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        className="border-white/10"
+                        onClick={handleSelectImportFile}
+                    >
+                        <Upload className="h-4 w-4" />
+                        Import
+                    </Button>
+                    <Button
+                        className="bg-cyan-400 text-black hover:bg-cyan-300"
+                        onClick={() => setShowCreateForm(!showCreateForm)}
+                    >
+                        <Plus className="h-4 w-4" />
+                        New server
+                    </Button>
+                </div>
             </header>
 
             {successMessage && (
@@ -513,6 +590,16 @@ export function ServersPage() {
                                             >
                                                 Open folder
                                             </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setRenameTarget(server)
+                                                    setRenameValue(server.name)
+                                                }}
+                                            >
+                                                <Pencil className="h-4 w-4 mr-2" />
+                                                Rename
+                                            </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 className="text-red-300"
@@ -561,6 +648,97 @@ export function ServersPage() {
                             }
                         >
                             Delete server
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Import Server Dialog */}
+            <AlertDialog
+                open={showImportDialog}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setShowImportDialog(false)
+                        setImportZipPath(null)
+                        setImportName("")
+                        setImportError(null)
+                    }
+                }}
+            >
+                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Import Server</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Enter a name for the imported server.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="py-4">
+                        <Input
+                            value={importName}
+                            onChange={(e) =>
+                                setImportName(e.target.value.replace(/[^a-zA-Z0-9 ]/g, ""))
+                            }
+                            placeholder="My Imported Server"
+                            disabled={isImporting}
+                        />
+                        {importError && (
+                            <p className="mt-2 text-sm text-red-400">{importError}</p>
+                        )}
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-cyan-400 text-black hover:bg-cyan-300"
+                            disabled={isImporting || !importName.trim()}
+                            onClick={handleImportServer}
+                        >
+                            {isImporting && <Spinner className="mr-2" />}
+                            {isImporting ? "Importing..." : "Import"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Rename Server Dialog */}
+            <AlertDialog
+                open={renameTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setRenameTarget(null)
+                        setRenameValue("")
+                    }
+                }}
+            >
+                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Rename Server</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Enter a new name for "{renameTarget?.name}"
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="py-4">
+                        <Input
+                            value={renameValue}
+                            onChange={(e) =>
+                                setRenameValue(e.target.value.replace(/[^a-zA-Z0-9 ]/g, ""))
+                            }
+                            placeholder="New server name"
+                            disabled={isRenaming}
+                        />
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-cyan-400 text-black hover:bg-cyan-300"
+                            disabled={isRenaming || !renameValue.trim()}
+                            onClick={handleRenameServer}
+                        >
+                            {isRenaming && <Spinner className="mr-2" />}
+                            {isRenaming ? "Renaming..." : "Rename"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

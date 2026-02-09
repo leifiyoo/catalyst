@@ -14,6 +14,8 @@ import {
   StartServerFn,
   StopServerFn,
   RestartServerFn,
+  ExportServerFn,
+  ImportServerFn,
   SendCommandFn,
   OnConsoleOutputFn,
   OnServerStatusFn,
@@ -92,6 +94,10 @@ declare global {
       saveBanlist: SaveBanlistFn;
       updateServerSettings: UpdateServerSettingsFn;
       openServerFolder: OpenServerFolderFn;
+      exportServer: ExportServerFn;
+      importServer: ImportServerFn;
+      openImportDialog: () => Promise<{ success: boolean; error?: string; filePath?: string }>;
+      getServerDiskUsage: (serverId: string) => Promise<{ success: boolean; bytes?: number; error?: string }>;
       onServerStats: OnServerStatsFn;
       acceptEula: AcceptEulaFn;
       listServerFiles: ListServerFilesFn;

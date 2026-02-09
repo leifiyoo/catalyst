@@ -207,6 +207,8 @@ export type OnServerCreationProgressFn = (
 export type StartServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
 export type StopServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
 export type RestartServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
+export type ExportServerFn = (id: string) => Promise<{ success: boolean; error?: string; path?: string }>;
+export type ImportServerFn = (zipPath: string, customName: string) => Promise<{ success: boolean; error?: string; server?: ServerRecord }>;
 export type SendCommandFn = (id: string, command: string) => Promise<{ success: boolean; error?: string }>;
 export type OnConsoleOutputFn = (handler: (serverId: string, line: ConsoleLine) => void) => () => void;
 export type OnServerStatusFn = (handler: (update: ServerStatusUpdate) => void) => () => void;
@@ -216,7 +218,7 @@ export type GetWhitelistFn = (id: string) => Promise<string[]>;
 export type SaveWhitelistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
 export type GetBanlistFn = (id: string) => Promise<string[]>;
 export type SaveBanlistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
-export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: BackupConfig; useNgrok?: boolean; ngrokUrl?: string }) => Promise<{ success: boolean; error?: string }>;
+export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: BackupConfig; useNgrok?: boolean; ngrokUrl?: string; name?: string }) => Promise<{ success: boolean; error?: string }>;
 export type CreateBackupFn = (serverId: string, name?: string) => Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }>;
 export type GetBackupsFn = (serverId: string) => Promise<BackupEntry[]>;
 export type DeleteBackupFn = (serverId: string, filename: string) => Promise<{ success: boolean; error?: string }>;

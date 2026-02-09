@@ -704,9 +704,9 @@ export async function isNgrokEnabled(): Promise<boolean> {
   try {
     const content = await fs.readFile(settingsPath, "utf-8");
     const settings = JSON.parse(content) as { enabled: boolean };
-    return settings.enabled !== false;
+    return settings.enabled === true;
   } catch {
-    return true; // Default to enabled
+    return false; // Default to disabled if file doesn't exist or can't be read
   }
 }
 

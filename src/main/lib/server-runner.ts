@@ -1,7 +1,7 @@
 import { BrowserWindow } from "electron";
 import { spawn, ChildProcess, execFile } from "child_process";
 import { ConsoleLine, ServerStats, ServerStatusUpdate } from "@shared/types";
-import { getServer, getServers, updateServerStatus } from "./server-manager";
+import { getServer, getServers, updateServerStatus, updateServerSettings } from "./server-manager";
 import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
 import { startNgrokTunnel, isNgrokEnabled, isAuthtokenConfigured } from "./ngrok-manager";
 
@@ -552,6 +552,8 @@ export async function stopServer(
   return new Promise((resolve) => {
     const onClose = () => {
       clearTimeout(timeout);
+      // Clear the ngrok URL from server record when server stops
+      updateServerSettings(serverId, { ngrokUrl: undefined }).catch(() => {});
       resolve({ success: true });
     };
 
@@ -563,6 +565,8 @@ export async function stopServer(
     const timeout = setTimeout(() => {
       child.removeListener("close", onClose);
       child.kill("SIGKILL");
+      // Clear the ngrok URL from server record when server stops
+      updateServerSettings(serverId, { ngrokUrl: undefined }).catch(() => {});
       resolve({ success: true });
     }, 15000);
 

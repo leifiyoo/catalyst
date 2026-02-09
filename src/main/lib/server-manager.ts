@@ -1,10 +1,12 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import { createWriteStream } from "fs";
 import https from "https";
 import http from "http";
 import crypto from "crypto";
+import archiver from "archiver";
+import AdmZip from "adm-zip";
 import {
   CreateServerParams,
   CreateServerResult,
@@ -541,7 +543,7 @@ export async function saveBanlist(
 
 export async function updateServerSettings(
   id: string,
-  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig']; useNgrok?: boolean; ngrokUrl?: string }
+  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig']; useNgrok?: boolean; ngrokUrl?: string; name?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const servers = await loadServerList();
@@ -571,6 +573,10 @@ export async function updateServerSettings(
 
     if (settings.ngrokUrl !== undefined) {
       server.ngrokUrl = settings.ngrokUrl;
+    }
+
+    if (settings.name !== undefined) {
+      server.name = settings.name;
     }
 
     await saveServerList(servers);
@@ -795,4 +801,191 @@ export async function copyServerFile(
         const msg = err instanceof Error ? err.message : "Unknown error";
         return { success: false, error: msg };
     }
+}
+
+// ---- Server Export/Import ----
+
+interface ServerManifest {
+  version: string;
+  exportedAt: string;
+  server: {
+    name: string;
+    platform: string;
+    mcVersion: string;
+    ramMB: number;
+    jarFile?: string;
+  };
+}
+
+export async function exportServer(
+  serverId: string,
+  mainWindow: BrowserWindow
+): Promise<{ success: boolean; error?: string; path?: string }> {
+  const server = await getServer(serverId);
+  if (!server) {
+    return { success: false, error: "Server not found" };
+  }
+
+  // Show save dialog
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Export Server",
+    defaultPath: `${server.name}-export.zip`,
+    filters: [{ name: "Zip Archive", extensions: ["zip"] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, error: "Export cancelled" };
+  }
+
+  const outputPath = result.filePath;
+
+  return new Promise((resolve) => {
+    const output = createWriteStream(outputPath);
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    output.on("close", () => {
+      resolve({ success: true, path: outputPath });
+    });
+
+    archive.on("error", (err) => {
+      resolve({ success: false, error: err.message });
+    });
+
+    archive.pipe(output);
+
+    // Add manifest
+    const manifest: ServerManifest = {
+      version: "1.0",
+      exportedAt: new Date().toISOString(),
+      server: {
+        name: server.name,
+        platform: server.framework,
+        mcVersion: server.version,
+        ramMB: server.ramMB,
+        jarFile: server.jarFile,
+      },
+    };
+    archive.append(JSON.stringify(manifest, null, 2), { name: "manifest.json" });
+
+    // Add entire server directory
+    archive.directory(server.serverPath, false, (entry) => {
+      // Skip large unnecessary files like logs
+      if (entry.name.startsWith("logs/")) {
+        return false;
+      }
+      return entry;
+    });
+
+    archive.finalize();
+  });
+}
+
+export async function importServer(
+  zipPath: string,
+  customName: string,
+  _mainWindow: BrowserWindow
+): Promise<{ success: boolean; error?: string; server?: ServerRecord }> {
+  try {
+    // Read the zip file
+    const zip = new AdmZip(zipPath);
+    const zipEntries = zip.getEntries();
+
+    // Find and read manifest
+    const manifestEntry = zipEntries.find((e) => e.entryName === "manifest.json");
+    if (!manifestEntry) {
+      return { success: false, error: "Invalid export file: missing manifest.json" };
+    }
+
+    const manifestData = manifestEntry.getData().toString("utf8");
+    const manifest: ServerManifest = JSON.parse(manifestData);
+
+    // Generate new server ID
+    const serverId = crypto.randomUUID();
+    const serverPath = path.join(SERVERS_DIR, serverId);
+
+    // Create server directory
+    await fs.mkdir(serverPath, { recursive: true });
+
+    // Extract all files except manifest
+    for (const entry of zipEntries) {
+      if (entry.entryName === "manifest.json") continue;
+      if (entry.isDirectory) continue;
+
+      const outputPath = path.join(serverPath, entry.entryName);
+      const outputDir = path.dirname(outputPath);
+
+      // Create directory if needed
+      await fs.mkdir(outputDir, { recursive: true });
+
+      // Write file
+      const data = entry.getData();
+      await fs.writeFile(outputPath, data);
+    }
+
+    // Create server record
+    const newServer: ServerRecord = {
+      id: serverId,
+      name: customName || manifest.server.name,
+      version: manifest.server.mcVersion,
+      framework: manifest.server.platform,
+      serverPath,
+      ramMB: manifest.server.ramMB,
+      status: "Offline",
+      players: "0/20",
+      createdAt: new Date().toISOString(),
+      jarFile: manifest.server.jarFile || "server.jar",
+    };
+
+    // Add to servers list
+    const servers = await loadServerList();
+    servers.push(newServer);
+    await saveServerList(servers);
+
+    return { success: true, server: newServer };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Calculate the size of a directory recursively
+ */
+async function calculateFolderSize(dirPath: string): Promise<number> {
+  let totalSize = 0;
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        totalSize += await calculateFolderSize(entryPath);
+      } else if (entry.isFile()) {
+        const stats = await fs.stat(entryPath);
+        totalSize += stats.size;
+      }
+    }
+  } catch {
+    // Ignore errors (permission issues, etc.)
+  }
+  return totalSize;
+}
+
+/**
+ * Get disk usage for a server
+ */
+export async function getServerDiskUsage(
+  serverId: string
+): Promise<{ success: boolean; bytes?: number; error?: string }> {
+  try {
+    const server = await getServer(serverId);
+    if (!server) {
+      return { success: false, error: "Server not found" };
+    }
+
+    const bytes = await calculateFolderSize(server.serverPath);
+    return { success: true, bytes };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: msg };
+  }
 }
