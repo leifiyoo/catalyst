@@ -1,4 +1,4 @@
-# Catalyst
+# ![catalyst](/.github/assets/banner.png)
 
 Catalyst is an upcoming modern server interface.
 
