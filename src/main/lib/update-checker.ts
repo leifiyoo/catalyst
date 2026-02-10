@@ -1,5 +1,4 @@
-import { app } from 'electron';
-import https from 'https';
+import { app, net } from 'electron';
 import { ChangelogData, ChangelogEntry } from '@shared/types';
 
 const REPO_OWNER = 'leifiyoo';
@@ -20,86 +19,61 @@ export type UpdateCheckResult = {
  * version entry against the locally installed app version.
  */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
-    return new Promise((resolve) => {
-        const currentVersion = app.getVersion();
+    const currentVersion = app.getVersion();
+    const url = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/refs/heads/${BRANCH}/CHANGELOG.json`;
 
-        // Fetch the raw CHANGELOG.json from the repo
-        const url = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/CHANGELOG.json`;
+    try {
+        const response = await net.fetch(url, {
+            headers: { 'User-Agent': 'Catalyst-Updater' }
+        });
 
-        const options = {
-            hostname: 'raw.githubusercontent.com',
-            path: `/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/CHANGELOG.json`,
-            headers: {
-                'User-Agent': 'Catalyst-Updater'
-            }
-        };
-
-        https.get(options, (res) => {
-            let data = '';
-
-            if (res.statusCode !== 200) {
-                resolve({
-                    updateAvailable: false,
-                    latestVersion: '0.0.0',
-                    currentVersion,
-                    releaseUrl: '',
-                    error: `Failed to fetch changelog: HTTP ${res.statusCode}`
-                });
-                return;
-            }
-
-            res.on('data', (chunk) => (data += chunk));
-            res.on('end', () => {
-                try {
-                    const changelog: ChangelogData = JSON.parse(data);
-                    
-                    if (!changelog.versions || changelog.versions.length === 0) {
-                        resolve({
-                            updateAvailable: false,
-                            latestVersion: currentVersion,
-                            currentVersion,
-                            releaseUrl: ''
-                        });
-                        return;
-                    }
-
-                    const latestEntry = changelog.versions[0];
-                    const latestVersion = latestEntry.version;
-
-                    const isNewer = compareVersions(latestVersion, currentVersion) > 0;
-
-                    // Collect all changelog entries that are newer than the current version
-                    const newChanges = changelog.versions.filter(
-                        (entry) => compareVersions(entry.version, currentVersion) > 0
-                    );
-
-                    resolve({
-                        updateAvailable: isNewer,
-                        latestVersion,
-                        currentVersion,
-                        releaseUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
-                        changelog: isNewer ? newChanges : undefined
-                    });
-                } catch (e) {
-                    resolve({
-                        updateAvailable: false,
-                        latestVersion: '0.0.0',
-                        currentVersion,
-                        releaseUrl: '',
-                        error: 'Failed to parse changelog data'
-                    });
-                }
-            });
-        }).on('error', (err) => {
-            resolve({
+        if (!response.ok) {
+            return {
                 updateAvailable: false,
                 latestVersion: '0.0.0',
                 currentVersion,
                 releaseUrl: '',
-                error: err.message
-            });
-        });
-    });
+                error: `Failed to fetch changelog: HTTP ${response.status}`
+            };
+        }
+
+        const data = await response.text();
+        const changelog: ChangelogData = JSON.parse(data);
+
+        if (!changelog.versions || changelog.versions.length === 0) {
+            return {
+                updateAvailable: false,
+                latestVersion: currentVersion,
+                currentVersion,
+                releaseUrl: ''
+            };
+        }
+
+        const latestEntry = changelog.versions[0];
+        const latestVersion = latestEntry.version;
+        const isNewer = compareVersions(latestVersion, currentVersion) > 0;
+
+        // Collect all changelog entries that are newer than the current version
+        const newChanges = changelog.versions.filter(
+            (entry) => compareVersions(entry.version, currentVersion) > 0
+        );
+
+        return {
+            updateAvailable: isNewer,
+            latestVersion,
+            currentVersion,
+            releaseUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
+            changelog: isNewer ? newChanges : undefined
+        };
+    } catch (e: any) {
+        return {
+            updateAvailable: false,
+            latestVersion: '0.0.0',
+            currentVersion,
+            releaseUrl: '',
+            error: e?.message || 'Unknown error checking for updates'
+        };
+    }
 }
 
 function compareVersions(v1: string, v2: string): number {

@@ -229,6 +229,19 @@ export function SettingsPage() {
                             </div>
                         </CardContent>
                     </Card>
+                    {/* Version Info Card */}
+                    <Card className="bg-card/70">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <p className="font-medium text-foreground/80">Version</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Catalyst v{__APP_VERSION__}
+                                    </p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             )}
             

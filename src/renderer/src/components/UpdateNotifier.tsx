@@ -57,14 +57,14 @@ export function UpdateNotifier() {
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogContent className="bg-popover border-border max-h-[80vh] flex flex-col">
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Update verfügbar!</AlertDialogTitle>
+                    <AlertDialogTitle>Update Available</AlertDialogTitle>
                     <AlertDialogDescription asChild>
                         <div className="text-muted-foreground">
                             <p>
-                                Eine neue Version von Catalyst ist verfügbar.<br/>
-                                Aktuell: <span className="text-destructive font-medium">{updateInfo.currentVersion}</span>
+                                A new version of Catalyst is available.<br/>
+                                Current: <span className="text-destructive font-medium">{updateInfo.currentVersion}</span>
                                 {" → "}
-                                Neu: <span className="text-primary font-medium">{updateInfo.latestVersion}</span>
+                                Latest: <span className="text-primary font-medium">{updateInfo.latestVersion}</span>
                             </p>
                         </div>
                     </AlertDialogDescription>
@@ -93,10 +93,10 @@ export function UpdateNotifier() {
 
                 <AlertDialogFooter>
                     <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
-                        Später
+                        Later
                     </AlertDialogCancel>
                     <AlertDialogAction onClick={handleUpdate}>
-                        Herunterladen
+                        Download
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

@@ -1,19 +1,14 @@
 {
   "versions": [
     {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "date": "2026-02-10",
       "title": "Initial Release",
       "changes": [
-        "Erste Veröffentlichung der Anwendung",
-        "Server-Management: Erstellen, Starten, Stoppen und Überwachen",
-        "Modrinth-Integration für Mods, Plugins und Modpacks",
-        "Automatische Java-Verwaltung",
-        "Modernes, dunkles Dashboard",
-        "Datei- und Konfigurationseditor",
-        "Backup-System mit automatischen und manuellen Backups",
-        "Ngrok-Integration für öffentliche Server",
-        "NSIS Installer mit High-DPI Support"
+        "Added changelog.",
+        "New User Interface.",
+        "Improved performance.",
+        "Fixed minor bugs."
       ]
     }
   ]
