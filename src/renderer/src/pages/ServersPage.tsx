@@ -69,7 +69,6 @@ export function ServersPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [creationProgress, setCreationProgress] = useState<ServerCreationProgress | null>(null)
     const [creationError, setCreationError] = useState<string | null>(null)
-    
     // Import state
     const [showImportDialog, setShowImportDialog] = useState(false)
     const [importZipPath, setImportZipPath] = useState<string | null>(null)
@@ -307,10 +306,10 @@ export function ServersPage() {
     }
 
     return (
-        <section className="flex flex-col gap-6 px-10 pb-10 pt-4">
-            <header className="flex items-end justify-between gap-6">
+        <section className="flex flex-col gap-6 px-10 pb-10 pt-6">
+            <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/70">
+                    <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
                         Server management
                     </p>
                     <h1 className="mt-2 text-3xl font-semibold">Servers</h1>
@@ -318,14 +317,12 @@ export function ServersPage() {
                 <div className="flex gap-2">
                     <Button
                         variant="outline"
-                        className="border-white/10"
                         onClick={handleSelectImportFile}
                     >
                         <Upload className="h-4 w-4" />
                         Import
                     </Button>
                     <Button
-                        className="bg-cyan-400 text-black hover:bg-cyan-300"
                         onClick={() => setShowCreateForm(!showCreateForm)}
                     >
                         <Plus className="h-4 w-4" />
@@ -335,12 +332,10 @@ export function ServersPage() {
             </header>
 
             {successMessage && (
-                <Alert className="border-cyan-400/30 bg-cyan-400/10">
-                    <CheckCircle2 className="h-4 w-4 text-cyan-300" />
-                    <AlertTitle className="text-cyan-200">
-                        Success
-                    </AlertTitle>
-                    <AlertDescription className="text-cyan-200/70">
+                <Alert className="border-primary/30 bg-primary/10">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <AlertTitle className="text-primary">Success</AlertTitle>
+                    <AlertDescription className="text-muted-foreground">
                         {successMessage}
                     </AlertDescription>
                 </Alert>
@@ -356,7 +351,7 @@ export function ServersPage() {
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4">
                         <div className="grid gap-2">
-                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/70">
+                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
                                 Server name
                             </label>
                             <Input
@@ -370,14 +365,14 @@ export function ServersPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div className="grid gap-2">
-                                <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/70">
+                                <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
                                     Version
                                 </label>
                                 <Select value={version} onValueChange={setVersion} disabled={isCreating}>
-                                    <SelectTrigger className="border-white/10 bg-white/5">
+                                    <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-60 border-white/10 bg-[#121218]">
+                                    <SelectContent className="max-h-60">
                                         {[
                                             "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
                                             "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
@@ -402,14 +397,14 @@ export function ServersPage() {
                                 </Select>
                             </div>
                             <div className="grid gap-2">
-                                <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/70">
+                                <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
                                     Platform
                                 </label>
                                 <Select value={framework} onValueChange={setFramework} disabled={isCreating}>
-                                    <SelectTrigger className="border-white/10 bg-white/5">
+                                    <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="border-white/10 bg-[#121218]">
+                                    <SelectContent>
                                         <SelectItem value="Paper">Paper</SelectItem>
                                         <SelectItem value="Purpur">Purpur</SelectItem>
                                         <SelectItem value="Fabric">Fabric</SelectItem>
@@ -419,14 +414,14 @@ export function ServersPage() {
                             </div>
                         </div>
                         <div className="grid gap-2">
-                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/70">
+                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
                                 RAM
                             </label>
                             <Select value={ramOption} onValueChange={setRamOption} disabled={isCreating}>
-                                <SelectTrigger className="w-[200px] border-white/10 bg-white/5">
+                                <SelectTrigger className="w-[200px]">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="border-white/10 bg-[#121218]">
+                                <SelectContent>
                                     <SelectItem value="2048">2 GB</SelectItem>
                                     <SelectItem value="4096">4 GB</SelectItem>
                                     <SelectItem value="6144">6 GB</SelectItem>
@@ -448,7 +443,7 @@ export function ServersPage() {
                                         disabled={isCreating}
                                         className="w-[200px]"
                                     />
-                                    <span className="text-xs text-white/70 whitespace-nowrap">MB</span>
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">MB</span>
                                 </div>
                             )}
                         </div>
@@ -456,12 +451,12 @@ export function ServersPage() {
                         {isCreating && creationProgress && (
                             <div className="flex flex-col gap-2">
                                 <div className="flex items-center gap-3">
-                                    <Spinner className="text-cyan-300" />
-                                    <span className="text-sm text-white/70">{creationProgress.message}</span>
+                                    <Spinner className="text-primary" />
+                                    <span className="text-sm text-muted-foreground">{creationProgress.message}</span>
                                 </div>
-                                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                                <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
                                     <div
-                                        className="h-full bg-cyan-400 rounded-full transition-all duration-300"
+                                        className="h-full bg-primary rounded-full transition-all duration-300"
                                         style={{ width: `${Math.min(creationProgress.percent, 100)}%` }}
                                     />
                                 </div>
@@ -469,17 +464,14 @@ export function ServersPage() {
                         )}
 
                         {creationError && (
-                            <Alert className="border-red-400/30 bg-red-400/10">
-                                <AlertTitle className="text-red-200">Error</AlertTitle>
-                                <AlertDescription className="text-red-200/70">
-                                    {creationError}
-                                </AlertDescription>
+                            <Alert variant="destructive">
+                                <AlertTitle>Error</AlertTitle>
+                                <AlertDescription>{creationError}</AlertDescription>
                             </Alert>
                         )}
 
                         <div className="flex gap-3">
                             <Button
-                                className="bg-cyan-400 text-black hover:bg-cyan-300"
                                 onClick={handleCreateServer}
                                 disabled={
                                     isCreating ||
@@ -505,7 +497,7 @@ export function ServersPage() {
             )}
 
             {servers.length === 0 && !showCreateForm ? (
-                <Empty className="border-white/10">
+                <Empty className="border-border">
                     <EmptyHeader>
                         <EmptyMedia variant="icon">
                             <Server />
@@ -518,7 +510,6 @@ export function ServersPage() {
                     </EmptyHeader>
                     <EmptyContent>
                         <Button
-                            className="bg-cyan-400 text-black hover:bg-cyan-300"
                             onClick={() => setShowCreateForm(true)}
                         >
                             <Plus className="h-4 w-4" />
@@ -541,14 +532,14 @@ export function ServersPage() {
                         {paginatedServers.map((server) => (
                             <div
                                 key={server.id}
-                                className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/20 cursor-pointer"
+                                className="flex items-center justify-between rounded-2xl border border-border bg-background/50 px-4 py-3 transition hover:border-muted-foreground/30 cursor-pointer"
                                 onClick={() => navigate(`/servers/${server.id}`)}
                             >
                                 <div>
                                     <p className="text-sm font-semibold">
                                         {server.name}
                                     </p>
-                                    <span className="text-xs text-white/70">
+                                    <span className="text-xs text-muted-foreground">
                                         {server.framework} &bull;{" "}
                                         {server.version} &bull;{" "}
                                         {formatRam(server.ramMB)}
@@ -558,15 +549,15 @@ export function ServersPage() {
                                     <Badge
                                         className={
                                             server.status === "Online"
-                                                ? "bg-cyan-400/20 text-cyan-200"
+                                                ? "bg-primary/15 text-primary"
                                                 : server.status === "Idle"
-                                                  ? "bg-white/10 text-white/70"
-                                                  : "bg-red-400/20 text-red-200"
+                                                  ? "bg-muted text-muted-foreground"
+                                                  : "bg-destructive/15 text-destructive"
                                         }
                                     >
                                         {server.status}
                                     </Badge>
-                                    <span>{server.players}</span>
+                                    <span className="text-muted-foreground">{server.players}</span>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
@@ -602,7 +593,7 @@ export function ServersPage() {
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
-                                                className="text-red-300"
+                                                className="text-destructive"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     setDeleteTarget(server)
@@ -626,7 +617,7 @@ export function ServersPage() {
                     if (!open) setDeleteTarget(null)
                 }}
             >
-                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>
                             Delete server "{deleteTarget?.name}"?
@@ -637,7 +628,7 @@ export function ServersPage() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                        <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
@@ -665,7 +656,7 @@ export function ServersPage() {
                     }
                 }}
             >
-                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Import Server</AlertDialogTitle>
                         <AlertDialogDescription>
@@ -686,11 +677,10 @@ export function ServersPage() {
                         )}
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                        <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-cyan-400 text-black hover:bg-cyan-300"
                             disabled={isImporting || !importName.trim()}
                             onClick={handleImportServer}
                         >
@@ -711,7 +701,7 @@ export function ServersPage() {
                     }
                 }}
             >
-                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Rename Server</AlertDialogTitle>
                         <AlertDialogDescription>
@@ -729,11 +719,10 @@ export function ServersPage() {
                         />
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                        <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-cyan-400 text-black hover:bg-cyan-300"
                             disabled={isRenaming || !renameValue.trim()}
                             onClick={handleRenameServer}
                         >

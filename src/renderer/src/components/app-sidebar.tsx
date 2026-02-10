@@ -28,15 +28,15 @@ export function AppSidebar() {
     const location = useLocation()
 
     return (
-        <Sidebar className="border-r border-border bg-sidebar backdrop-blur">
+        <Sidebar className="border-r border-border bg-sidebar/95 backdrop-blur">
             <SidebarHeader className="px-5 pt-14 pb-4 border-b border-border">
                 <div className="flex items-center justify-between">
                     <div>
-                        <div className="text-lg font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                        <div className="text-lg font-semibold tracking-[0.08em]">
                             Catalyst
                         </div>
-                        <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
-                            Local studio
+                        <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+                            Server studio
                         </p>
                     </div>
                 </div>
@@ -73,8 +73,8 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter className="px-4 pb-5">
-                <div className="rounded-xl border border-cyan-400/10 bg-cyan-400/5 px-3 py-2 text-xs text-cyan-300/60">
-                    Ready for new worlds.
+                <div className="rounded-xl border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                    Workspace ready.
                 </div>
             </SidebarFooter>
             <SidebarRail />

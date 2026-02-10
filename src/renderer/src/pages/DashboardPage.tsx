@@ -82,175 +82,225 @@ export function DashboardPage() {
         : null
 
     return (
-        <section className="flex flex-col gap-6 px-10 pb-10 pt-4">
-            <header className="flex items-end justify-between gap-6">
+        <section className="flex flex-col gap-8 px-10 pb-10 pt-6">
+            <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/70">
-                        Minecraft hosting
+                    <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
+                        Overview
                     </p>
                     <h1 className="mt-2 text-3xl font-semibold">
-                        Server command center
+                        Command center
                     </h1>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        Manage your Minecraft servers and keep tabs on live activity.
+                    </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Button
-                        className="bg-cyan-400 text-black hover:bg-cyan-300"
-                        onClick={() => navigate("/servers?create=true")}
-                    >
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => navigate("/servers?create=true")}
+                        className="min-w-[140px]">
                         <Plus className="h-4 w-4" />
                         New server
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate("/servers")}
+                        className="min-w-[140px]">
+                        View all
                     </Button>
                 </div>
             </header>
 
-            <div className="grid grid-cols-3 gap-4">
-                <Card>
-                    <CardHeader>
-                        <CardDescription>Total servers</CardDescription>
-                        <CardTitle className="text-2xl">
-                            {servers.length}
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-white/70">
-                        {servers.filter((s) => s.status === "Online").length}{" "}
-                        online now
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardDescription>Players online</CardDescription>
-                        <CardTitle className="text-2xl">0</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-white/70">
-                        Active on live servers
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardDescription>Last created</CardDescription>
-                        <CardTitle className="text-2xl">
-                            {lastCreated ? lastCreated.name : "-"}
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-white/70">
-                        {lastCreated
-                            ? new Date(lastCreated.createdAt).toLocaleDateString()
-                            : "No servers yet"}
-                    </CardContent>
-                </Card>
-            </div>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="flex flex-col gap-6">
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <Card>
+                            <CardHeader>
+                                <CardDescription>Total servers</CardDescription>
+                                <CardTitle className="text-2xl">
+                                    {servers.length}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="text-sm text-muted-foreground">
+                                {servers.filter((s) => s.status === "Online").length}{" "}
+                                online now
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardDescription>Players online</CardDescription>
+                                <CardTitle className="text-2xl">0</CardTitle>
+                            </CardHeader>
+                            <CardContent className="text-sm text-muted-foreground">
+                                Active on live servers
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardDescription>Last created</CardDescription>
+                                <CardTitle className="text-2xl">
+                                    {lastCreated ? lastCreated.name : "-"}
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="text-sm text-muted-foreground">
+                                {lastCreated
+                                    ? new Date(lastCreated.createdAt).toLocaleDateString()
+                                    : "No servers yet"}
+                            </CardContent>
+                        </Card>
+                    </div>
 
-            {servers.length === 0 ? (
-                <Empty className="border-white/10">
-                    <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                            <Server />
-                        </EmptyMedia>
-                        <EmptyTitle>No Servers Yet</EmptyTitle>
-                        <EmptyDescription>
-                            You haven't created any servers yet. Get started by
-                            creating your first Minecraft server.
-                        </EmptyDescription>
-                    </EmptyHeader>
-                    <EmptyContent>
-                        <Button
-                            className="bg-cyan-400 text-black hover:bg-cyan-300"
-                            onClick={() => navigate("/servers")}
-                        >
-                            <Plus className="h-4 w-4" />
-                            Create your first server
-                        </Button>
-                    </EmptyContent>
-                </Empty>
-            ) : (
-                <Card>
-                    <CardHeader className="flex-row items-center justify-between">
-                        <div>
-                            <CardTitle>Servers</CardTitle>
-                            <CardDescription>
-                                Click a server to open its panel
-                            </CardDescription>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            className="text-cyan-200"
-                            onClick={() => navigate("/servers")}
-                        >
-                            View all
-                        </Button>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {servers.map((server) => (
-                            <div
-                                key={server.id}
-                                className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-white/20 cursor-pointer"
-                                onClick={() =>
-                                    navigate(`/servers/${server.id}`)
-                                }
-                            >
+                    {servers.length === 0 ? (
+                        <Empty className="border-border">
+                            <EmptyHeader>
+                                <EmptyMedia variant="icon">
+                                    <Server />
+                                </EmptyMedia>
+                                <EmptyTitle>No Servers Yet</EmptyTitle>
+                                <EmptyDescription>
+                                    You haven't created any servers yet. Get started by
+                                    creating your first Minecraft server.
+                                </EmptyDescription>
+                            </EmptyHeader>
+                            <EmptyContent>
+                                <Button onClick={() => navigate("/servers")}
+                                    className="min-w-[200px]">
+                                    <Plus className="h-4 w-4" />
+                                    Create your first server
+                                </Button>
+                            </EmptyContent>
+                        </Empty>
+                    ) : (
+                        <Card>
+                            <CardHeader className="flex-row items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-semibold">
-                                        {server.name}
-                                    </p>
-                                    <span className="text-xs text-white/70">
-                                        {server.framework} &bull;{" "}
-                                        {server.version} &bull;{" "}
-                                        {formatRam(server.ramMB)}
-                                    </span>
+                                    <CardTitle>Servers</CardTitle>
+                                    <CardDescription>
+                                        Click a server to open its panel
+                                    </CardDescription>
                                 </div>
-                                <div className="flex items-center gap-3 text-xs">
-                                    <Badge
-                                        className={
-                                            server.status === "Online"
-                                                ? "bg-cyan-400/20 text-cyan-200"
-                                                : server.status === "Idle"
-                                                  ? "bg-white/10 text-white/70"
-                                                  : "bg-red-400/20 text-red-200"
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-3">
+                                {servers.map((server) => (
+                                    <div
+                                        key={server.id}
+                                        className="flex items-center justify-between rounded-2xl border border-border bg-background/50 px-4 py-3 text-left transition hover:border-muted-foreground/30 cursor-pointer"
+                                        onClick={() =>
+                                            navigate(`/servers/${server.id}`)
                                         }
                                     >
-                                        {server.status}
-                                    </Badge>
-                                    <span>{server.players}</span>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                            <Button variant="ghost" size="sm">
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    navigate(`/servers/${server.id}`)
-                                                }}
+                                        <div>
+                                            <p className="text-sm font-semibold">
+                                                {server.name}
+                                            </p>
+                                            <span className="text-xs text-muted-foreground">
+                                                {server.framework} &bull;{" "}
+                                                {server.version} &bull;{" "}
+                                                {formatRam(server.ramMB)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-xs">
+                                            <Badge
+                                                className={
+                                                    server.status === "Online"
+                                                        ? "bg-primary/15 text-primary"
+                                                        : server.status === "Idle"
+                                                          ? "bg-muted text-muted-foreground"
+                                                          : "bg-destructive/15 text-destructive"
+                                                }
                                             >
-                                                Open panel
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    window.context.openServerFolder(server.id)
-                                                }}
-                                            >
-                                                Open folder
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                className="text-red-400 focus:text-red-400"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setDeleteTarget(server)
-                                                }}
-                                            >
-                                                Delete server
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                                {server.status}
+                                            </Badge>
+                                            <span className="text-muted-foreground">{server.players}</span>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                    <Button variant="ghost" size="sm">
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            navigate(`/servers/${server.id}`)
+                                                        }}
+                                                    >
+                                                        Open panel
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            window.context.openServerFolder(server.id)
+                                                        }}
+                                                    >
+                                                        Open folder
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        className="text-destructive focus:text-destructive"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setDeleteTarget(server)
+                                                        }}
+                                                    >
+                                                        Delete server
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+
+                <aside className="flex flex-col gap-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Quick actions</CardTitle>
+                            <CardDescription>Shortcuts for common tasks</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-2">
+                            <Button variant="outline" onClick={() => navigate("/servers?create=true")}>
+                                <Plus className="h-4 w-4" />
+                                Create server
+                            </Button>
+                            <Button variant="outline" onClick={() => navigate("/servers")}>
+                                <Server className="h-4 w-4" />
+                                View all servers
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Latest activity</CardTitle>
+                            <CardDescription>Most recent server change</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3 text-sm">
+                            {lastCreated ? (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">Server</span>
+                                        <span className="font-medium">{lastCreated.name}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">Created</span>
+                                        <span>
+                                            {new Date(lastCreated.createdAt).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">Status</span>
+                                        <Badge className="bg-muted text-muted-foreground">
+                                            {lastCreated.status}
+                                        </Badge>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-            )}
+                            ) : (
+                                <p className="text-muted-foreground">No activity yet.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </aside>
+            </div>
 
             <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
                 <AlertDialogContent>

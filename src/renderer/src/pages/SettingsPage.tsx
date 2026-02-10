@@ -113,19 +113,19 @@ export function SettingsPage() {
     }
     
     return (
-        <section className="flex flex-col gap-6 px-10 pb-10 pt-4">
+        <section className="flex flex-col gap-6 px-10 pb-10 pt-6">
             <header>
-                <p className="text-xs uppercase tracking-[0.3em] text-white/70">
+                <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
                     Application
                 </p>
                 <h1 className="mt-2 text-3xl font-semibold">Settings</h1>
             </header>
             
             {tokenSuccess && (
-                <Alert className="border-green-400/30 bg-green-400/10">
-                    <CheckCircle2 className="h-4 w-4 text-green-300" />
-                    <AlertTitle className="text-green-200">Success</AlertTitle>
-                    <AlertDescription className="text-green-200/70">
+                <Alert className="border-primary/30 bg-primary/10">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <AlertTitle className="text-primary">Success</AlertTitle>
+                    <AlertDescription className="text-muted-foreground">
                         Ngrok authtoken has been updated successfully.
                     </AlertDescription>
                 </Alert>
@@ -133,7 +133,7 @@ export function SettingsPage() {
             
             {loading ? (
                 <div className="flex items-center justify-center py-8">
-                    <Spinner className="h-8 w-8 text-cyan-300" />
+                    <Spinner className="h-8 w-8 text-primary" />
                 </div>
             ) : (
                 <div className="grid gap-6">
@@ -141,7 +141,7 @@ export function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-purple-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                                 </svg>
                                 Ngrok Settings
@@ -172,12 +172,11 @@ export function SettingsPage() {
                                     <Input
                                         value={censoredToken || "No token configured"}
                                         disabled
-                                        className="flex-1 bg-white/5 border-white/10"
+                                        className="flex-1"
                                     />
                                     <Button
                                         variant="outline"
                                         onClick={() => setShowTokenDialog(true)}
-                                        className="border-white/10 bg-white/5 hover:bg-white/10"
                                     >
                                         Change
                                     </Button>
@@ -185,17 +184,17 @@ export function SettingsPage() {
                                         <Button
                                             variant="outline"
                                             onClick={() => setShowRemoveDialog(true)}
-                                            className="border-red-400/30 bg-red-400/10 hover:bg-red-400/20 text-red-300"
+                                            className="border-destructive/40 text-destructive hover:bg-destructive/10"
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     )}
                                 </div>
-                                <p className="text-xs text-white/50">
+                                <p className="text-xs text-muted-foreground">
                                     Get your free authtoken at{" "}
                                     <a
                                         href="#"
-                                        className="text-purple-300 hover:underline"
+                                        className="text-primary hover:underline"
                                         onClick={(e) => {
                                             e.preventDefault()
                                             window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
@@ -210,21 +209,21 @@ export function SettingsPage() {
                     </Card>
                     
                     {/* Info Card */}
-                    <Card className="border-white/5 bg-white/[0.02]">
+                    <Card className="bg-card/70">
                         <CardContent className="pt-6">
                             <div className="flex gap-3">
-                                <div className="p-2 rounded-lg bg-purple-400/10">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-purple-300">
+                                <div className="p-2 rounded-lg bg-primary/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
                                         <circle cx="12" cy="12" r="10"/>
                                         <path d="M12 16v-4"/>
                                         <path d="M12 8h.01"/>
                                     </svg>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="font-medium text-white/80">About Ngrok</p>
-                                    <p className="text-sm text-white/50">
+                                    <p className="font-medium text-foreground/80">About Ngrok</p>
+                                    <p className="text-sm text-muted-foreground">
                                         Ngrok creates secure tunnels to your local servers, allowing players from anywhere in the world to connect to your Minecraft server. 
-                                        Each server can have its own ngrok tunnel, giving you a public address like <code className="text-purple-300 bg-purple-400/10 px-1 rounded">0.tcp.ngrok.io:12345</code>.
+                                        Each server can have its own ngrok tunnel, giving you a public address like <code className="text-primary bg-primary/10 px-1 rounded">0.tcp.ngrok.io:12345</code>.
                                     </p>
                                 </div>
                             </div>
@@ -235,7 +234,7 @@ export function SettingsPage() {
             
             {/* Change Token Dialog */}
             <AlertDialog open={showTokenDialog} onOpenChange={setShowTokenDialog}>
-                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Change Ngrok Authtoken</AlertDialogTitle>
                         <AlertDialogDescription className="text-white/60">
@@ -251,18 +250,16 @@ export function SettingsPage() {
                                 setNewToken(e.target.value)
                                 setTokenError(null)
                             }}
-                            className="bg-white/5 border-white/10"
                         />
                         {tokenError && (
                             <p className="text-sm text-red-400 mt-2">{tokenError}</p>
                         )}
                     </div>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white/70 hover:bg-white/10">
+                        <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-purple-500 text-white hover:bg-purple-400"
                             onClick={handleValidateAndSaveToken}
                             disabled={tokenValidating}
                         >
@@ -281,7 +278,7 @@ export function SettingsPage() {
             
             {/* Remove Token Confirmation Dialog */}
             <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
-                <AlertDialogContent className="border-white/10 bg-[#121218]">
+                <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Remove Authtoken</AlertDialogTitle>
                         <AlertDialogDescription className="text-white/60">
@@ -289,7 +286,7 @@ export function SettingsPage() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white/70 hover:bg-white/10">
+                        <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction

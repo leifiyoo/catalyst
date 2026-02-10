@@ -176,10 +176,10 @@ export function ServerDetailPage() {
         if (lower.includes("fabric")) return { color: "bg-stone-200/10 text-[#d6c2a3] border-stone-500/20 hover:bg-stone-500/20", icon: ScrollText }
         if (lower.includes("forge")) return { color: "bg-indigo-500/10 text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20", icon: Anvil }
         if (lower.includes("neoforge")) return { color: "bg-orange-500/10 text-orange-300 border-orange-500/20 hover:bg-orange-500/20", icon: Zap }
-        if (lower.includes("quilt")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/15", icon: Layers }
+        if (lower.includes("quilt")) return { color: "bg-purple-500/10 text-purple-300 border-purple-500/20 hover:bg-purple-500/20", icon: Layers }
         if (lower.includes("paper")) return { color: "bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20", icon: Send } 
         if (lower.includes("spigot")) return { color: "bg-yellow-500/10 text-yellow-300 border-yellow-500/20 hover:bg-yellow-500/20", icon: Droplet }
-        if (lower.includes("velocity")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20", icon: Wind } 
+        if (lower.includes("velocity")) return { color: "bg-cyan-500/10 text-cyan-300 border-cyan-500/20 hover:bg-cyan-500/20", icon: Wind } 
         if (lower.includes("folia")) return { color: "bg-green-500/10 text-green-300 border-green-500/20 hover:bg-green-500/20", icon: Leaf }
         if (lower.includes("bukkit")) return { color: "bg-orange-700/10 text-orange-400 border-orange-700/20 hover:bg-orange-700/20", icon: Box }
         if (lower.includes("bungeecord")) return { color: "bg-yellow-600/10 text-yellow-400 border-yellow-600/20 hover:bg-yellow-600/20", icon: Layers }
@@ -1214,215 +1214,283 @@ export function ServerDetailPage() {
     }
 
     return (
-        <section className="flex flex-col gap-0 pb-10">
+        <section className="flex flex-col gap-6 px-10 pb-10 pt-4">
             {/* Header */}
-            <header className="px-10 pt-6 pb-5">
-                {/* Back link */}
-                <button
-                    onClick={() => navigate("/servers")}
-                    className="text-sm text-primary hover:underline flex items-center gap-1.5 mb-4"
-                >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    All servers
-                </button>
-
-                {/* Server title row */}
-                <div className="flex items-start gap-5">
-                    {/* Server icon */}
-                    <div className="h-16 w-16 rounded-xl bg-muted/60 border border-border flex items-center justify-center shrink-0 overflow-hidden">
-                        <Box className="h-8 w-8 text-muted-foreground" />
+            <header className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate("/servers")}
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-semibold">
+                            {server.name}
+                        </h1>
+                        <span className="text-xs text-muted-foreground">
+                            {server.framework} {server.version} &bull;{" "}
+                            {formatRam(server.ramMB)}
+                        </span>
                     </div>
-
-                    {/* Name + meta */}
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4">
-                            <h1 className="text-2xl font-bold tracking-tight">{server.name}</h1>
-                            <div className="flex items-center gap-2 shrink-0">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => id && window.context.openServerFolder(id)}
-                                >
-                                    <FolderOpen className="h-4 w-4 mr-1" />
-                                    Open folder
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleExport}
-                                    disabled={exporting}
-                                >
-                                    {exporting ? <Spinner className="h-4 w-4 mr-1" /> : <Download className="h-4 w-4 mr-1" />}
-                                    {exporting ? "Exporting..." : "Export"}
-                                </Button>
-                                {isOnline ? (
-                                    <>
-                                        <Button variant="outline" size="sm" onClick={handleRestart} disabled={restarting}>
-                                            {restarting ? <Spinner className="mr-1.5 h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-                                            {restarting ? "Restarting..." : "Restart"}
-                                        </Button>
-                                        <Button variant="destructive" size="sm" onClick={handleStop} disabled={stopping}>
-                                            {stopping ? <Spinner className="mr-1.5 h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5 mr-1.5" />}
-                                            {stopping ? "Stopping..." : "Stop"}
-                                        </Button>
-                                    </>
-                                ) : (
-                                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90" size="sm" onClick={handleStart} disabled={starting}>
-                                        {starting ? <Spinner className="mr-1.5 h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
-                                        {starting ? "Starting..." : "Start"}
+                    <Badge
+                        variant={isOnline ? "default" : "destructive"}
+                    >
+                        {server.status}
+                    </Badge>
+                    {/* IP Address with Copy Button */}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                                    <Globe className="h-4 w-4 text-cyan-400" />
+                                    <span className="text-sm font-mono">
+                                        {localIp}:{properties.find(p => p.key === "server-port")?.value || "25565"}
+                                    </span>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-white/10"
+                                        onClick={handleCopyIP}
+                                    >
+                                        {ipCopied ? (
+                                            <Check className="h-3 w-3 text-green-400" />
+                                        ) : (
+                                            <Copy className="h-3 w-3" />
+                                        )}
                                     </Button>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-                                <Box className="h-3 w-3" />
-                                Minecraft {server.version}
-                            </Badge>
-                            <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-                                <Layers className="h-3 w-3" />
-                                {server.framework} {server.version}
-                            </Badge>
-                            <Badge
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Local IP Address - Click to copy</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    {/* Ngrok URL if active - only show when server is online */}
+                    {server.status === "Online" && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                        <Link className="h-4 w-4 text-purple-400" />
+                                        <span className="text-sm font-mono text-purple-300 truncate max-w-[200px]">
+                                            {server.ngrokUrl || ngrokStatus?.publicUrl}
+                                        </span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 hover:bg-purple-500/20"
+                                            onClick={handleCopyNgrokUrl}
+                                        >
+                                            {ngrokUrlCopied ? (
+                                                <Check className="h-3 w-3 text-green-400" />
+                                            ) : (
+                                                <Copy className="h-3 w-3" />
+                                            )}
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Ngrok Public URL - Share with friends!</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => id && window.context.openServerFolder(id)}
+                    >
+                        <FolderOpen className="h-4 w-4 mr-1" />
+                        Open folder
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleExport}
+                        disabled={exporting}
+                    >
+                        {exporting ? (
+                            <Spinner className="h-4 w-4 mr-1" />
+                        ) : (
+                            <Download className="h-4 w-4 mr-1" />
+                        )}
+                        {exporting ? "Exporting..." : "Export"}
+                    </Button>
+                    {isOnline ? (
+                        <>
+                            <Button
                                 variant="outline"
-                                className="gap-1.5 font-normal text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-                                onClick={handleCopyIP}
+                                onClick={handleRestart}
+                                disabled={restarting}
                             >
-                                <Globe className="h-3 w-3" />
-                                {ipCopied ? "Copied!" : `${localIp}:${properties.find(p => p.key === "server-port")?.value || "25565"}`}
-                            </Badge>
-                            {server.status === "Online" && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
-                                <Badge
-                                    variant="outline"
-                                    className="gap-1.5 font-normal text-primary cursor-pointer hover:text-primary/80 transition-colors border-primary/30"
-                                    onClick={handleCopyNgrokUrl}
-                                >
-                                    <Link className="h-3 w-3" />
-                                    {ngrokUrlCopied ? "Copied!" : (server.ngrokUrl || ngrokStatus?.publicUrl)}
-                                </Badge>
+                                {restarting ? (
+                                    <Spinner className="mr-2" />
+                                ) : (
+                                    <RefreshCw className="h-4 w-4 mr-1" />
+                                )}
+                                {restarting ? "Restarting..." : "Restart"}
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleStop}
+                                disabled={stopping}
+                            >
+                                {stopping ? (
+                                    <Spinner className="mr-2" />
+                                ) : (
+                                    <Square className="h-4 w-4 mr-1" />
+                                )}
+                                {stopping ? "Stopping..." : "Stop"}
+                            </Button>
+                        </>
+                    ) : (
+                        <Button
+                            className="bg-cyan-400 text-black hover:bg-cyan-300"
+                            onClick={handleStart}
+                            disabled={starting}
+                        >
+                            {starting ? (
+                                <Spinner className="mr-2" />
+                            ) : (
+                                <Play className="h-4 w-4 mr-1" />
                             )}
-                            <Badge variant={isOnline ? "default" : "outline"} className={`gap-1.5 ${isOnline ? "" : "text-muted-foreground"}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-primary-foreground" : "bg-muted-foreground"}`} />
-                                {server.status}
-                            </Badge>
-                        </div>
-                    </div>
+                            {starting ? "Starting..." : "Start"}
+                        </Button>
+                    )}
                 </div>
             </header>
 
             {error && (
-                <div className="px-10">
-                    <Alert variant="destructive">
-                        <AlertTitle>Error</AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                </div>
+                <Alert variant="destructive">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>
+                        {error}
+                    </AlertDescription>
+                </Alert>
             )}
 
-            {/* Tabs */}
-            <Tabs defaultValue="overview" className="flex flex-col">
-                <div className="px-10 border-b border-border">
-                    <TabsList className="bg-transparent p-0 h-auto gap-0 rounded-none">
-                        <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Overview</TabsTrigger>
-                        <TabsTrigger value="library" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Content</TabsTrigger>
-                        <TabsTrigger value="files" onClick={() => handleLoadFiles(currentPath)} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Files</TabsTrigger>
-                        <TabsTrigger value="settings" onClick={loadBackups} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Backups</TabsTrigger>
-                        <TabsTrigger value="properties" onClick={() => { handleLoadProperties(); handleLoadWhitelist(); handleLoadBanlist(); }} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Options</TabsTrigger>
-                    </TabsList>
-                </div>
-
-                {/* Overview Tab */}
-                <TabsContent value="overview" className="mt-0 px-10 pt-6">
-                    {/* Stats cards */}
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                        {/* Players card */}
-                        <Card className="overflow-hidden">
-                            <CardContent className="p-5 relative">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <span className="text-3xl font-bold tabular-nums">
-                                            {isOnline
-                                                ? stats ? `${stats.playerCount}` : "0"
-                                                : "—"}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground ml-1">
-                                            / {isOnline && stats ? stats.maxPlayers : "20"}
-                                        </span>
-                                    </div>
-                                    <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center">
-                                        <Users className="h-4.5 w-4.5 text-muted-foreground" />
-                                    </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">Players online</p>
-                                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <div
-                                        className="h-full rounded-full bg-primary transition-all duration-500"
-                                        style={{ width: isOnline && stats ? `${Math.min(100, (stats.playerCount / stats.maxPlayers) * 100)}%` : "0%" }}
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Memory card */}
-                        <Card className="overflow-hidden">
-                            <CardContent className="p-5 relative">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <span className={`text-3xl font-bold tabular-nums ${isOnline && memoryPercent != null && memoryPercent > 85 ? "text-destructive" : ""}`}>
-                                            {isOnline && memoryPercent != null
-                                                ? `${memoryPercent}%`
-                                                : isOnline ? "..." : "—"}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground ml-1">
-                                            {isOnline && memoryUsed != null ? `${memoryUsed} / ${memoryMax ?? "?"} MB` : formatRam(server.ramMB)}
-                                        </span>
-                                    </div>
-                                    <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center">
-                                        <MemoryStick className="h-4.5 w-4.5 text-muted-foreground" />
-                                    </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">Memory usage</p>
-                                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-500 ${isOnline && memoryPercent != null && memoryPercent > 85 ? "bg-destructive" : "bg-primary"}`}
-                                        style={{ width: isOnline && memoryPercent != null ? `${memoryPercent}%` : "0%" }}
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Storage card */}
-                        <Card className="overflow-hidden">
-                            <CardContent className="p-5 relative">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <span className="text-3xl font-bold tabular-nums">
-                                            {diskUsage !== null ? formatBytes(diskUsage) : diskUsageLoading ? "..." : "—"}
-                                        </span>
-                                    </div>
-                                    <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center">
-                                        <Archive className="h-4.5 w-4.5 text-muted-foreground" />
-                                    </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">Storage usage</p>
-                                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <div className="h-full rounded-full bg-primary/40" style={{ width: "0%" }} />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Console */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-3">
-                            <h2 className="text-lg font-semibold">Console</h2>
-                            <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-primary animate-pulse" : "bg-muted-foreground/40"}`} />
+            {/* Stats cards - always visible */}
+            <div className="grid grid-cols-3 gap-4">
+                <Card>
+                    <CardContent className="flex items-center gap-4 p-5">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${isOnline ? "bg-primary/10" : "bg-muted"}`}>
+                            <Users className={`h-6 w-6 ${isOnline ? "text-primary" : "text-muted-foreground"}`} />
                         </div>
-                        <div className="rounded-xl border border-border overflow-hidden">
-                            <div className="h-[420px] overflow-auto bg-black/80 font-mono text-xs text-zinc-300 select-text p-4">
+                        <div>
+                            <p className="text-xs text-muted-foreground">Players</p>
+                            <p className="text-2xl font-semibold">
+                                {isOnline
+                                    ? stats ? `${stats.playerCount}/${stats.maxPlayers}` : "0/20"
+                                    : "—"
+                                }
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="flex items-center gap-4 p-5">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${isOnline ? "bg-primary/10" : "bg-muted"}`}>
+                            <Gauge className={`h-6 w-6 ${isOnline ? "text-primary" : "text-muted-foreground"}`} />
+                        </div>
+                        <div>
+                            <p className="text-xs text-muted-foreground">TPS</p>
+                            <p className={`text-2xl font-semibold ${
+                                isOnline && stats?.tps != null
+                                    ? stats.tps >= 18
+                                        ? "text-primary"
+                                        : stats.tps >= 15
+                                          ? "text-yellow-400"
+                                          : "text-destructive"
+                                    : ""
+                            }`}>
+                                {isOnline
+                                    ? supportsInServerStats
+                                        ? stats?.tps != null ? stats.tps.toFixed(1) : "..."
+                                        : "n/a"
+                                    : "—"
+                                }
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="flex items-center gap-4 p-5">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${isOnline ? "bg-primary/10" : "bg-muted"}`}>
+                            <MemoryStick className={`h-6 w-6 ${isOnline ? "text-primary" : "text-muted-foreground"}`} />
+                        </div>
+                        <div>
+                            <p className="text-xs text-muted-foreground">Memory</p>
+                            <p className="text-2xl font-semibold">
+                                {isOnline && memoryUsed != null
+                                    ? `${memoryUsed} / ${memoryMax ?? "?"} MB`
+                                    : server ? formatRam(server.ramMB) : "—"
+                                }
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <span>
+                                    {isOnline && memoryUsed != null
+                                        ? supportsInServerStats
+                                            ? "used / max"
+                                            : "rss / limit"
+                                        : "allocated"}
+                                </span>
+                                {isOnline && memoryPercent != null && (
+                                    <span>{memoryPercent}%</span>
+                                )}
+                            </div>
+                            {isOnline && memoryPercent != null && (
+                                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                                    <div
+                                        className="h-full rounded-full bg-primary"
+                                        style={{ width: `${memoryPercent}%` }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Tabs */}
+            <Tabs defaultValue="console">
+                <TabsList>
+                    <TabsTrigger value="console">Console</TabsTrigger>
+                    <TabsTrigger
+                        value="properties"
+                        onClick={handleLoadProperties}
+                    >
+                        Properties
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="players"
+                        onClick={() => {
+                            handleLoadWhitelist()
+                            handleLoadBanlist()
+                        }}
+                    >
+                        Players
+                    </TabsTrigger>
+                    <TabsTrigger value="library">Library</TabsTrigger>
+                    <TabsTrigger value="files" onClick={() => handleLoadFiles(currentPath)}>
+                        Files
+                    </TabsTrigger>
+                    <TabsTrigger value="settings" onClick={loadBackups}>Settings</TabsTrigger>
+                </TabsList>
+
+                {/* Console Tab */}
+                <TabsContent value="console">
+                    <Card>
+                        <CardContent className="p-0">
+                            <div className="h-[550px] overflow-auto bg-black font-mono text-xs text-zinc-300 select-text p-4 rounded-t-lg">
                                 {consoleLines.length === 0 ? (
                                     <p className="text-muted-foreground">
-                                        {isOnline ? "Waiting for output..." : "Start the server to see console output"}
+                                        {isOnline
+                                            ? "Waiting for output..."
+                                            : "Start the server to see console output"}
                                     </p>
                                 ) : (
                                     consoleLines.map((line, i) => (
@@ -1432,7 +1500,7 @@ export function ServerDetailPage() {
                                                 line.type === "stderr"
                                                     ? "text-red-400"
                                                     : line.type === "system"
-                                                      ? "text-primary"
+                                                      ? "text-cyan-400"
                                                       : "text-zinc-300"
                                             }
                                         >
@@ -1442,23 +1510,41 @@ export function ServerDetailPage() {
                                 )}
                                 <div ref={consoleEndRef} />
                             </div>
-                            <div className="flex items-center gap-2 px-4 py-3 border-t border-border bg-card/50">
-                                <Send className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <div className="flex gap-2 p-3 border-t border-border">
                                 <Input
                                     value={commandInput}
-                                    onChange={(e) => setCommandInput(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") handleSendCommand() }}
-                                    placeholder={isOnline ? "Send a command" : "Server is offline"}
+                                    onChange={(e) =>
+                                        setCommandInput(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter")
+                                            handleSendCommand()
+                                    }}
+                                    placeholder={
+                                        isOnline
+                                            ? "Type a command..."
+                                            : "Server is offline"
+                                    }
                                     disabled={!isOnline}
-                                    className="font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
+                                    className="font-mono text-xs"
                                 />
+                                <Button
+                                    size="sm"
+                                    onClick={handleSendCommand}
+                                    disabled={
+                                        !isOnline || !commandInput.trim()
+                                    }
+                                    className="bg-cyan-400 text-black hover:bg-cyan-300"
+                                >
+                                    <Send className="h-4 w-4" />
+                                </Button>
                             </div>
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* Properties Tab */}
-                <TabsContent value="properties" className="mt-0 px-10 pt-6">
+                <TabsContent value="properties">
                     <Card>
                         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
@@ -1475,7 +1561,7 @@ export function ServerDetailPage() {
                                     className="h-9 w-full sm:w-[220px]"
                                 />
                                 <Button
-                                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="bg-cyan-400 text-black hover:bg-cyan-300"
                                     onClick={handleSaveProperties}
                                     disabled={propsSaving}
                                 >
@@ -1490,19 +1576,19 @@ export function ServerDetailPage() {
                         </CardHeader>
                         <CardContent>
                             {propsSuccess && (
-                                <Alert className="mb-4 border-primary/30 bg-primary/10">
-                                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                                    <AlertTitle className="text-primary">
+                                <Alert className="mb-4 border-cyan-400/30 bg-cyan-400/10">
+                                    <CheckCircle2 className="h-4 w-4 text-cyan-400" />
+                                    <AlertTitle className="text-cyan-300">
                                         Saved
                                     </AlertTitle>
-                                    <AlertDescription className="text-muted-foreground">
+                                    <AlertDescription className="text-cyan-300/70">
                                         Restart the server for changes to take
                                         effect.
                                     </AlertDescription>
                                 </Alert>
                             )}
                             {properties.length === 0 ? (
-                                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                                <div className="flex items-center gap-2 text-white/50 text-sm">
                                     <Info className="h-4 w-4" />
                                     <span>
                                         No server.properties file found. Start
@@ -1511,7 +1597,7 @@ export function ServerDetailPage() {
                                 </div>
                             ) : (
                                 <div>
-                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-[11px] uppercase tracking-[0.2em] text-white/50">
                                         <span>Property</span>
                                         <span>Value</span>
                                     </div>
@@ -1519,11 +1605,11 @@ export function ServerDetailPage() {
                                         {filteredProperties.map(({ prop, index }) => (
                                             <div
                                                 key={`${prop.key}-${index}`}
-                                                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 items-center rounded-xl border border-border bg-muted/50 px-3 py-2"
+                                                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2"
                                             >
                                                 <div className="flex items-center gap-2">
-                                                    <FileText className="h-3 w-3 text-primary" />
-                                                    <span className="text-xs text-muted-foreground font-mono truncate">
+                                                    <FileText className="h-3 w-3 text-cyan-400" />
+                                                    <span className="text-xs text-white/70 font-mono truncate">
                                                         {prop.key}
                                                     </span>
                                                 </div>
@@ -1542,7 +1628,7 @@ export function ServerDetailPage() {
                                             </div>
                                         ))}
                                         {filteredProperties.length === 0 && (
-                                            <p className="text-xs text-muted-foreground">No properties match that search.</p>
+                                            <p className="text-xs text-white/50">No properties match that search.</p>
                                         )}
                                     </div>
                                 </div>
@@ -1552,7 +1638,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Players Tab */}
-                <TabsContent value="players" className="mt-0 px-10 pt-6">
+                <TabsContent value="players">
                     <div className="grid grid-cols-2 gap-4">
                         {/* Whitelist */}
                         <Card>
@@ -1568,7 +1654,7 @@ export function ServerDetailPage() {
                                 </div>
                                 <Button
                                     size="sm"
-                                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="bg-cyan-400 text-black hover:bg-cyan-300"
                                     onClick={handleSaveWhitelist}
                                     disabled={whitelistSaving}
                                 >
@@ -1622,11 +1708,11 @@ export function ServerDetailPage() {
                                     {whitelist.map((player, i) => (
                                         <div
                                             key={i}
-                                            className="flex items-center justify-between rounded-lg bg-muted/50 border border-border px-3 py-1.5 text-xs"
+                                            className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-xs"
                                         >
                                             <span>{player}</span>
                                             <button
-                                                className="text-muted-foreground/60 hover:text-rose-400 transition"
+                                                className="text-white/40 hover:text-rose-400 transition"
                                                 onClick={() =>
                                                     setWhitelist((prev) =>
                                                         prev.filter(
@@ -1640,7 +1726,7 @@ export function ServerDetailPage() {
                                         </div>
                                     ))}
                                     {whitelist.length === 0 && (
-                                        <p className="text-xs text-muted-foreground">
+                                        <p className="text-xs text-white/50">
                                             No players whitelisted
                                         </p>
                                     )}
@@ -1662,7 +1748,7 @@ export function ServerDetailPage() {
                                 </div>
                                 <Button
                                     size="sm"
-                                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="bg-cyan-400 text-black hover:bg-cyan-300"
                                     onClick={handleSaveBanlist}
                                     disabled={banlistSaving}
                                 >
@@ -1716,11 +1802,11 @@ export function ServerDetailPage() {
                                     {banlist.map((player, i) => (
                                         <div
                                             key={i}
-                                            className="flex items-center justify-between rounded-lg bg-muted/50 border border-border px-3 py-1.5 text-xs"
+                                            className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-xs"
                                         >
                                             <span>{player}</span>
                                             <button
-                                                className="text-muted-foreground/60 hover:text-rose-400 transition"
+                                                className="text-white/40 hover:text-rose-400 transition"
                                                 onClick={() =>
                                                     setBanlist((prev) =>
                                                         prev.filter(
@@ -1734,7 +1820,7 @@ export function ServerDetailPage() {
                                         </div>
                                     ))}
                                     {banlist.length === 0 && (
-                                        <p className="text-xs text-muted-foreground">
+                                        <p className="text-xs text-white/50">
                                             No players banned
                                         </p>
                                     )}
@@ -1745,7 +1831,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Library Tab */}
-                <TabsContent value="library" className="mt-0 px-10 pt-6 max-h-[740px] overflow-auto pr-1">
+                <TabsContent value="library" className="max-h-[740px] overflow-auto pr-1">
                     {!modrinthContext ? (
                         <Card>
                             <CardHeader>
@@ -1797,7 +1883,7 @@ export function ServerDetailPage() {
                                         </Select>
                                         <Button
                                             size="sm"
-                                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                            className="bg-cyan-400 text-black hover:bg-cyan-300"
                                             onClick={() => handleSearchModrinth()}
                                             disabled={modrinthLoading}
                                         >
@@ -1814,7 +1900,7 @@ export function ServerDetailPage() {
                                         </Alert>
                                     )}
                                     {modrinthResults.length === 0 ? (
-                                        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                                        <div className="flex items-center gap-2 text-white/50 text-sm">
                                             <Info className="h-4 w-4" />
                                             <span>Run a search to see results.</span>
                                         </div>
@@ -1824,7 +1910,7 @@ export function ServerDetailPage() {
                                                 {modrinthResults.map((hit) => (
                                                 <div
                                                     key={hit.projectId}
-                                                    className="group relative flex flex-row w-full items-stretch gap-4 rounded-xl border border-border bg-card p-3 transition-all hover:border-border hover:bg-muted/50 cursor-pointer"
+                                                    className="group relative flex flex-row w-full items-stretch gap-4 rounded-xl border border-white/10 bg-[#1e1e1e] p-3 transition-all hover:border-white/20 hover:bg-white/5 cursor-pointer"
                                                     onClick={() => handleOpenModrinthDetails(hit)}
                                                     role="button"
                                                     tabIndex={0}
@@ -1833,8 +1919,8 @@ export function ServerDetailPage() {
                                                     }}
                                                 >
                                                     {/* Left: Icon Frame */}
-                                                    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-muted p-2 border border-border/50 overflow-hidden">
-                                                         <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-muted-foreground/20 z-0 select-none">
+                                                    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-[#2b2b2b] p-2 border border-white/5 overflow-hidden">
+                                                         <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-white/10 z-0 select-none">
                                                             {hit.title.charAt(0).toUpperCase()}
                                                          </div>
                                                          <img
@@ -1851,10 +1937,10 @@ export function ServerDetailPage() {
                                                     <div className="flex flex-1 flex-col justify-between py-1 min-w-0">
                                                         <div>
                                                             <div className="flex items-baseline gap-2">
-                                                                <h3 className="text-base font-bold text-foreground underline decoration-muted-foreground/30 underline-offset-4 truncate">{hit.title}</h3>
-                                                                <span className="text-xs text-muted-foreground truncate">by {hit.author}</span>
+                                                                <h3 className="text-base font-bold text-white underline decoration-white/30 underline-offset-4 truncate">{hit.title}</h3>
+                                                                <span className="text-xs text-white/50 truncate">by {hit.author}</span>
                                                             </div>
-                                                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground leading-snug">
+                                                            <p className="mt-1 line-clamp-2 text-sm text-white/60 leading-snug">
                                                                 {hit.description}
                                                             </p>
                                                         </div>
@@ -1863,7 +1949,7 @@ export function ServerDetailPage() {
                                                         <div className="flex flex-wrap items-center gap-2 mt-2">
                                                             {/* Client/Server Tag */}
                                                             {(hit.clientSide !== 'unsupported' || hit.serverSide !== 'unsupported') && (
-                                                                <Badge variant="outline" className="flex items-center gap-1.5 border-border bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20 px-2 py-0.5 font-normal">
+                                                                <Badge variant="outline" className="flex items-center gap-1.5 border-white/10 bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20 px-2 py-0.5 font-normal">
                                                                     <Globe className="h-3 w-3" />
                                                                     <span>
                                                                         {hit.clientSide === 'required' && hit.serverSide === 'required' ? 'Client & Server' :
@@ -1907,12 +1993,12 @@ export function ServerDetailPage() {
                                                                             <TooltipProvider>
                                                                                 <Tooltip>
                                                                                     <TooltipTrigger asChild>
-                                                                                        <Badge variant="outline" className="flex items-center gap-1 border-border bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20 px-2 py-0.5 font-normal cursor-help">
+                                                                                        <Badge variant="outline" className="flex items-center gap-1 border-white/10 bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20 px-2 py-0.5 font-normal cursor-help">
                                                                                             <Plus className="h-3 w-3" />
                                                                                             <span>{overflow.length}</span>
                                                                                         </Badge>
                                                                                     </TooltipTrigger>
-                                                                                    <TooltipContent side="bottom" className="bg-card border border-border p-2">
+                                                                                    <TooltipContent side="bottom" className="bg-[#1e1e1e] border border-white/10 p-2">
                                                                                         <div className="flex flex-wrap gap-2 max-w-[200px]">
                                                                                             {overflow.map(cat => {
                                                                                                 const config = getTagConfig(cat);
@@ -1938,7 +2024,7 @@ export function ServerDetailPage() {
                                                     {/* Right: Metadata & Actions */}
                                                     <div className="flex shrink-0 flex-col items-end justify-between py-1 pl-4 min-w-[140px]">
                                                         {/* Top Right: Stats */}
-                                                        <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+                                                        <div className="flex items-center gap-4 text-xs font-medium text-white/50">
                                                              <div className="flex items-center gap-1.5" title={`${hit.downloads} Downloads`}>
                                                                  <Download className="h-3.5 w-3.5" />
                                                                  <span>
@@ -1973,7 +2059,7 @@ export function ServerDetailPage() {
                                                         </div>
 
                                                         {/* Bottom Right: Timestamp */}
-                                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
+                                                        <div className="flex items-center gap-1.5 text-[10px] text-white/40">
                                                             <Clock className="h-3 w-3" />
                                                             <span>
                                                                 {(() => {
@@ -1994,7 +2080,7 @@ export function ServerDetailPage() {
                                         </div>
                                     )}
                                     {modrinthTotalHits > 20 && (
-                                        <div className="flex items-center justify-between pt-4 pb-2 text-xs text-muted-foreground">
+                                        <div className="flex items-center justify-between pt-4 pb-2 text-xs text-white/50">
                                             <span>
                                                 Page {modrinthPage + 1} of {Math.ceil(modrinthTotalHits / 20)}
                                             </span>
@@ -2007,7 +2093,7 @@ export function ServerDetailPage() {
                                                         handleSearchModrinth(nextPage)
                                                     }}
                                                     disabled={modrinthPage === 0 || modrinthLoading}
-                                                    className="bg-zinc-800 border-border text-foreground hover:bg-zinc-700 h-8"
+                                                    className="bg-zinc-800 border-white/10 text-white hover:bg-zinc-700 h-8"
                                                 >
                                                     <ChevronLeft className="h-4 w-4 mr-1" />
                                                     Prev
@@ -2020,7 +2106,7 @@ export function ServerDetailPage() {
                                                         handleSearchModrinth(nextPage)
                                                     }}
                                                     disabled={modrinthLoading || (modrinthPage + 1) * 20 >= modrinthTotalHits}
-                                                    className="bg-zinc-800 border-border text-foreground hover:bg-zinc-700 h-8"
+                                                    className="bg-zinc-800 border-white/10 text-white hover:bg-zinc-700 h-8"
                                                 >
                                                     Next
                                                     <ChevronRight className="h-4 w-4 ml-1" />
@@ -2035,7 +2121,7 @@ export function ServerDetailPage() {
                                 <CardHeader className="flex flex-row items-center justify-between">
                                     <div>
                                         <CardTitle className="text-white">Installed {modrinthContext.label}</CardTitle>
-                                        <CardDescription className="text-muted-foreground">
+                                        <CardDescription className="text-white/60">
                                             Manage installed {modrinthContext.label.toLowerCase()}
                                         </CardDescription>
                                     </div>
@@ -2051,16 +2137,16 @@ export function ServerDetailPage() {
                                 <CardContent className="flex flex-col gap-2">
                                     {modrinthInstallsLoading ? (
                                         <div className="flex items-center justify-center py-10">
-                                            <Spinner className="text-primary" />
+                                            <Spinner className="text-cyan-400" />
                                         </div>
                                     ) : modrinthInstalls.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground">Nothing installed yet.</p>
+                                        <p className="text-xs text-white/50">Nothing installed yet.</p>
                                     ) : (
                                         <div className="flex flex-col gap-2 max-h-[420px] overflow-auto pr-1">
                                             {modrinthInstalls.map((entry) => (
                                                 <div
                                                     key={entry.projectId}
-                                                    className="flex items-center justify-between rounded-xl border border-border bg-muted/50 px-3 py-3"
+                                                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-3"
                                                 >
                                                     <div className="flex items-center gap-3 min-w-0">
                                                         <div className="relative h-10 w-10 shrink-0">
@@ -2080,7 +2166,7 @@ export function ServerDetailPage() {
                                                         </div>
                                                         <div className="min-w-0">
                                                             <p className="text-sm font-semibold truncate">{entry.title}</p>
-                                                            <p className="text-[10px] text-muted-foreground/60 truncate">
+                                                            <p className="text-[10px] text-white/40 truncate">
                                                                 {entry.fileName}
                                                             </p>
                                                         </div>
@@ -2131,7 +2217,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Files Tab */}
-                <TabsContent value="files" className="mt-0 px-10 pt-6">
+                <TabsContent value="files">
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between">
@@ -2162,16 +2248,16 @@ export function ServerDetailPage() {
                                 {/* Breadcrumb */}
                                 <div className="flex items-center gap-1 mb-4 text-xs">
                                     <button
-                                        className="text-primary hover:underline"
+                                        className="text-cyan-300 hover:underline"
                                         onClick={() => handleLoadFiles("")}
                                     >
                                         root
                                     </button>
                                     {pathSegments.map((segment, i) => (
                                         <span key={i} className="flex items-center gap-1">
-                                            <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                                            <ChevronRight className="h-3 w-3 text-white/40" />
                                             <button
-                                                className="text-primary hover:underline"
+                                                className="text-cyan-300 hover:underline"
                                                 onClick={() =>
                                                     handleLoadFiles(
                                                         pathSegments.slice(0, i + 1).join("/")
@@ -2186,18 +2272,18 @@ export function ServerDetailPage() {
 
                                 {filesLoading ? (
                                     <div className="flex items-center justify-center py-12">
-                                        <Spinner className="text-primary" />
+                                        <Spinner className="text-cyan-400" />
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-1 max-h-[520px] overflow-auto">
                                         {/* Go up (..) */}
                                         {currentPath && (
                                             <button
-                                                className="flex items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-muted/50"
+                                                className="flex items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/5"
                                                 onClick={handleNavigateUp}
                                             >
-                                                <Folder className="h-4 w-4 text-primary" />
-                                                <span className="text-sm text-muted-foreground">..</span>
+                                                <Folder className="h-4 w-4 text-cyan-400" />
+                                                <span className="text-sm text-white/50">..</span>
                                             </button>
                                         )}
                                         {files.map((entry) => {
@@ -2206,8 +2292,8 @@ export function ServerDetailPage() {
                                             return (
                                                 <button
                                                     key={entry.name}
-                                                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-left transition hover:bg-muted/50 ${
-                                                        isSelected ? "bg-primary/10 border border-primary/30" : ""
+                                                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-left transition hover:bg-white/5 ${
+                                                        isSelected ? "bg-cyan-500/10 border border-cyan-400/30" : ""
                                                     }`}
                                                     onClick={() => handleNavigateFile(entry)}
                                                     onContextMenu={(e) => onContextMenu(e, entry)}
@@ -2217,15 +2303,15 @@ export function ServerDetailPage() {
                                                 >
                                                     <div className="flex items-center gap-3">
                                                         {entry.isDirectory ? (
-                                                            <Folder className="h-4 w-4 text-primary" />
+                                                            <Folder className="h-4 w-4 text-cyan-400" />
                                                         ) : (
-                                                            <File className="h-4 w-4 text-muted-foreground/60" />
+                                                            <File className="h-4 w-4 text-white/40" />
                                                         )}
                                                         <span className="text-sm">
                                                             {entry.name}
                                                         </span>
                                                     </div>
-                                                    <div className="flex items-center gap-4 text-xs text-muted-foreground/60">
+                                                    <div className="flex items-center gap-4 text-xs text-white/40">
                                                         <span>{entry.isDirectory ? "" : formatFileSize(entry.size)}</span>
                                                         <span className="w-[100px] text-right">
                                                             {new Date(entry.modifiedAt).toLocaleDateString()}
@@ -2235,13 +2321,13 @@ export function ServerDetailPage() {
                                             )
                                         })}
                                         {files.length === 0 && !currentPath && (
-                                            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground text-sm">
+                                            <div className="flex items-center gap-2 py-8 justify-center text-white/50 text-sm">
                                                 <Info className="h-4 w-4" />
                                                 <span>No files yet. Start the server once to generate files.</span>
                                             </div>
                                         )}
                                         {files.length === 0 && currentPath && (
-                                            <p className="text-xs text-muted-foreground text-center py-8">
+                                            <p className="text-xs text-white/50 text-center py-8">
                                                 This folder is empty
                                             </p>
                                         )}
@@ -2268,7 +2354,7 @@ export function ServerDetailPage() {
                                         <RefreshCw className="h-4 w-4" />
                                     </Button>
                                     <Button
-                                        className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                        className="bg-cyan-400 text-black hover:bg-cyan-300"
                                         size="sm"
                                         onClick={handleSaveFile}
                                         disabled={!selectedFilePath || !fileDirty || fileSaving}
@@ -2288,13 +2374,13 @@ export function ServerDetailPage() {
                                     </Alert>
                                 )}
                                 {!selectedFilePath ? (
-                                    <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground text-sm">
+                                    <div className="flex flex-col items-center justify-center gap-2 py-10 text-white/50 text-sm">
                                         <FileText className="h-5 w-5" />
                                         <span>Select a file to start editing</span>
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-3">
-                                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                        <div className="flex items-center justify-between text-xs text-white/50">
                                             <span className="truncate">{selectedFilePath}</span>
                                             {selectedFileMeta && (
                                                 <span>
@@ -2302,10 +2388,10 @@ export function ServerDetailPage() {
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="rounded-xl border border-border bg-black/50">
+                                        <div className="rounded-xl border border-white/10 bg-black/50">
                                             {fileLoading ? (
                                                 <div className="flex items-center justify-center py-16">
-                                                    <Spinner className="text-primary" />
+                                                    <Spinner className="text-cyan-400" />
                                                 </div>
                                             ) : (
                                                 <textarea
@@ -2315,12 +2401,12 @@ export function ServerDetailPage() {
                                                         setFileDirty(true)
                                                     }}
                                                     spellCheck={false}
-                                                    className="h-[360px] w-full resize-none bg-transparent p-3 text-xs font-mono text-foreground/90 outline-none select-text"
+                                                    className="h-[360px] w-full resize-none bg-transparent p-3 text-xs font-mono text-white/90 outline-none select-text"
                                                 />
                                             )}
                                         </div>
                                         {fileDirty && (
-                                            <div className="text-[11px] text-primary">
+                                            <div className="text-[11px] text-cyan-300">
                                                 Unsaved changes
                                             </div>
                                         )}
@@ -2333,20 +2419,20 @@ export function ServerDetailPage() {
                     {/* File Context Menu & Modals */}
                     {contextMenu && (
                         <div
-                            className="fixed z-50 min-w-[160px] rounded-lg border border-border bg-[#1e1e24] p-1 shadow-xl animate-in fade-in zoom-in-95"
+                            className="fixed z-50 min-w-[160px] rounded-lg border border-white/10 bg-[#1e1e24] p-1 shadow-xl animate-in fade-in zoom-in-95"
                             style={{ top: contextMenu.y, left: contextMenu.x }}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <button onClick={() => { if(contextMenu.entry.isDirectory) { handleLoadFiles(currentPath ? `${currentPath}/${contextMenu.entry.name}` : contextMenu.entry.name) } else { handleOpenFile(currentPath ? `${currentPath}/${contextMenu.entry.name}` : contextMenu.entry.name, contextMenu.entry) } setContextMenu(null) }} className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-muted/50 rounded-md">Open</button>
-                            <button onClick={handleRenameClick} className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-muted/50 rounded-md">Rename</button>
-                            <button onClick={handleDuplicateClick} className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-muted/50 rounded-md">Duplicate</button>
-                            <div className="h-[1px] bg-muted/50 my-1" />
-                            <button onClick={handleDeleteClick} className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-muted/50 rounded-md">Delete</button>
+                            <button onClick={() => { if(contextMenu.entry.isDirectory) { handleLoadFiles(currentPath ? `${currentPath}/${contextMenu.entry.name}` : contextMenu.entry.name) } else { handleOpenFile(currentPath ? `${currentPath}/${contextMenu.entry.name}` : contextMenu.entry.name, contextMenu.entry) } setContextMenu(null) }} className="w-full text-left px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded-md">Open</button>
+                            <button onClick={handleRenameClick} className="w-full text-left px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded-md">Rename</button>
+                            <button onClick={handleDuplicateClick} className="w-full text-left px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded-md">Duplicate</button>
+                            <div className="h-[1px] bg-white/10 my-1" />
+                            <button onClick={handleDeleteClick} className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-white/10 rounded-md">Delete</button>
                         </div>
                     )}
 
                     <Dialog open={fileRenameDialogOpen} onOpenChange={setFileRenameDialogOpen}>
-                        <DialogContent className="bg-[#121218] border-border">
+                        <DialogContent className="bg-[#121218] border-white/10">
                             <DialogHeader>
                                 <DialogTitle className="text-white">Rename File</DialogTitle>
                                 <DialogDescription>Enter a new name for the file.</DialogDescription>
@@ -2354,17 +2440,17 @@ export function ServerDetailPage() {
                             <Input 
                                 value={fileActionInput} 
                                 onChange={(e) => setFileActionInput(e.target.value)} 
-                                className="bg-black/20 border-border text-white font-mono" 
+                                className="bg-black/20 border-white/10 text-white font-mono" 
                             />
                             <div className="flex justify-end gap-2 mt-4">
                                 <Button variant="ghost" onClick={() => setFileRenameDialogOpen(false)}>Cancel</Button>
-                                <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={confirmRename}>Rename</Button>
+                                <Button className="bg-cyan-500 text-black hover:bg-cyan-400" onClick={confirmRename}>Rename</Button>
                             </div>
                         </DialogContent>
                     </Dialog>
 
                     <Dialog open={fileDuplicateDialogOpen} onOpenChange={setFileDuplicateDialogOpen}>
-                        <DialogContent className="bg-[#121218] border-border">
+                        <DialogContent className="bg-[#121218] border-white/10">
                             <DialogHeader>
                                 <DialogTitle className="text-white">Duplicate File</DialogTitle>
                                 <DialogDescription>Enter a name for the copy.</DialogDescription>
@@ -2372,26 +2458,26 @@ export function ServerDetailPage() {
                             <Input 
                                 value={fileActionInput} 
                                 onChange={(e) => setFileActionInput(e.target.value)} 
-                                className="bg-black/20 border-border text-white font-mono" 
+                                className="bg-black/20 border-white/10 text-white font-mono" 
                             />
                             <div className="flex justify-end gap-2 mt-4">
                                 <Button variant="ghost" onClick={() => setFileDuplicateDialogOpen(false)}>Cancel</Button>
-                                <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={confirmDuplicate}>Duplicate</Button>
+                                <Button className="bg-cyan-500 text-black hover:bg-cyan-400" onClick={confirmDuplicate}>Duplicate</Button>
                             </div>
                         </DialogContent>
                     </Dialog>
 
                     <AlertDialog open={fileDeleteDialogOpen} onOpenChange={setFileDeleteDialogOpen}>
-                        <AlertDialogContent className="bg-[#121218] border-border">
+                        <AlertDialogContent className="bg-[#121218] border-white/10">
                             <AlertDialogHeader>
                                 <AlertDialogTitle className="text-white">Are you absolutely sure?</AlertDialogTitle>
                                 <AlertDialogDescription>
                                     This action cannot be undone. This will permanently delete 
-                                    <span className="text-primary font-mono mx-1">{targetEntry?.name}</span>.
+                                    <span className="text-cyan-400 font-mono mx-1">{targetEntry?.name}</span>.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                                <AlertDialogCancel className="border-border bg-muted/50 text-foreground hover:bg-muted/50 hover:text-white">Cancel</AlertDialogCancel>
+                                <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">Cancel</AlertDialogCancel>
                                 <AlertDialogAction onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">Delete</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
@@ -2433,17 +2519,17 @@ export function ServerDetailPage() {
                 </Dialog>
 
                 {/* Settings Tab */}
-                <TabsContent value="settings" className="mt-0 px-10 pt-6 space-y-8 pb-10 max-h-[75vh] overflow-y-auto pr-2">
+                <TabsContent value="settings" className="space-y-8 pb-10 max-h-[75vh] overflow-y-auto pr-2">
                     
                     {/* Fixed Success Alert */}
                     {settingsSuccess && (
                         <div className="fixed bottom-6 right-6 z-50 w-[380px] animate-in slide-in-from-bottom-5 fade-in duration-300">
-                             <Alert className="border-primary/40 bg-[#0e1324] text-primary shadow-xl">
+                             <Alert className="border-cyan-500/50 bg-[#0e1324] text-cyan-200 shadow-xl">
                                 <CheckCircle2 className="h-4 w-4" />
                                 <AlertTitle>Success</AlertTitle>
                                 <AlertDescription>Settings have been saved successfully.</AlertDescription>
                                 <AlertAction>
-                                    <Button variant="ghost" size="icon" className="-mt-2 -mr-2 h-8 w-8 text-primary/60 hover:text-primary" onClick={() => setSettingsSuccess(false)}>
+                                    <Button variant="ghost" size="icon" className="-mt-2 -mr-2 h-8 w-8 text-cyan-200/50 hover:text-cyan-200" onClick={() => setSettingsSuccess(false)}>
                                         <X className="h-4 w-4" />
                                     </Button>
                                 </AlertAction>
@@ -2453,8 +2539,8 @@ export function ServerDetailPage() {
 
                     {/* Section: General */}
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-border/50">
-                            <Info className="h-5 w-5 text-primary" />
+                        <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                            <Info className="h-5 w-5 text-cyan-400" />
                             <h3 className="text-lg font-semibold tracking-tight">General Information</h3>
                         </div>
                         <div className="grid gap-4 xl:grid-cols-2">
@@ -2467,34 +2553,34 @@ export function ServerDetailPage() {
                                 </CardHeader>
                                 <CardContent className="flex flex-col gap-4">
                                     <div className="grid gap-2 text-sm">
-                                        <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                            <span className="text-muted-foreground">Platform</span>
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Platform</span>
                                             <span className="font-medium flex items-center gap-2">
                                                 {server.framework}
                                                 <Badge variant="outline" className="text-[10px] py-0 h-5 bg-black/20">{server.version}</Badge>
                                             </span>
                                         </div>
-                                        <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                            <span className="text-muted-foreground">Created</span>
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Created</span>
                                             <span className="font-medium">
                                                 {new Date(server.createdAt).toLocaleDateString()}
                                             </span>
                                         </div>
-                                        <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                            <span className="text-muted-foreground">Path</span>
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Path</span>
                                             <span className="font-medium truncate max-w-[200px] text-right text-xs font-mono opacity-80" title={server.serverPath}>
                                                 {server.serverPath}
                                             </span>
                                         </div>
-                                        <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                                            <span className="text-muted-foreground">Disk Usage</span>
+                                        <div className="flex items-center justify-between p-2 rounded-md bg-white/5">
+                                            <span className="text-white/50">Disk Usage</span>
                                             <span className="font-medium flex items-center gap-2">
                                                 {diskUsageLoading ? (
                                                     <Spinner className="h-3.5 w-3.5" />
                                                 ) : diskUsage !== null ? (
                                                     formatBytes(diskUsage)
                                                 ) : (
-                                                    <span className="text-muted-foreground">—</span>
+                                                    <span className="text-white/50">—</span>
                                                 )}
                                             </span>
                                         </div>
@@ -2503,7 +2589,7 @@ export function ServerDetailPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="flex-1 border-border hover:bg-muted/50"
+                                            className="flex-1 border-white/10 hover:bg-white/5"
                                             onClick={() => id && window.context.openServerFolder(id)}
                                         >
                                             <FolderOpen className="h-4 w-4 mr-2" />
@@ -2512,7 +2598,7 @@ export function ServerDetailPage() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="flex-1 border-border hover:bg-muted/50"
+                                            className="flex-1 border-white/10 hover:bg-white/5"
                                             onClick={() => handleLoadFiles(currentPath)}
                                         >
                                             <RefreshCw className="h-4 w-4 mr-2" />
@@ -2526,7 +2612,7 @@ export function ServerDetailPage() {
 
                     {/* Section: Performance */}
                     <div className="space-y-4">
-                         <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                         <div className="flex items-center gap-2 pb-2 border-b border-white/5">
                             <Gauge className="h-5 w-5 text-indigo-400" />
                             <h3 className="text-lg font-semibold tracking-tight">Performance</h3>
                         </div>
@@ -2541,13 +2627,13 @@ export function ServerDetailPage() {
                                 <CardContent className="flex flex-col gap-6">
                                     <div className="grid gap-3">
                                         <div className="flex items-center gap-2">
-                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
                                                 Allocated Memory (RAM)
                                             </label>
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
-                                                        <Info className="h-3.5 w-3.5 text-muted-foreground/40 cursor-help" />
+                                                        <Info className="h-3.5 w-3.5 text-white/30 cursor-help" />
                                                     </TooltipTrigger>
                                                     <TooltipContent side="right" className="max-w-xs">
                                                         <p className="text-xs">
@@ -2587,13 +2673,13 @@ export function ServerDetailPage() {
                                                         }
                                                         placeholder="MB"
                                                     />
-                                                    <span className="text-xs text-muted-foreground">MB</span>
+                                                    <span className="text-xs text-white/50">MB</span>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                     <div className="grid gap-3">
-                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
                                             Java Executable
                                         </label>
                                         <Input
@@ -2604,7 +2690,7 @@ export function ServerDetailPage() {
                                         />
                                     </div>
                                     <Button
-                                        className="w-full bg-indigo-500 text-foreground hover:bg-indigo-600"
+                                        className="w-full bg-indigo-500 text-white hover:bg-indigo-600"
                                         onClick={handleSaveSettings}
                                         disabled={settingsSaving}
                                     >
@@ -2622,7 +2708,7 @@ export function ServerDetailPage() {
                 
                     {/* Section: Backups */}
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                        <div className="flex items-center gap-2 pb-2 border-b border-white/5">
                             <Archive className="h-5 w-5 text-amber-500" />
                             <h3 className="text-lg font-semibold tracking-tight">Backups</h3>
                         </div>
@@ -2635,7 +2721,7 @@ export function ServerDetailPage() {
                                     <CardDescription>Automated backup schedule</CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex flex-col gap-4">
-                                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50">
+                                     <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
                                         <div className="space-y-0.5">
                                             <div className="text-sm font-medium">Automatic Backups</div>
                                             <div className="text-xs text-muted-foreground">{autoBackupEnabled ? "Active" : "Paused"}</div>
@@ -2655,7 +2741,7 @@ export function ServerDetailPage() {
                                     </div>
                                     {autoBackupEnabled && (
                                         <div className="grid gap-2">
-                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-white/50">
                                                 Interval
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -2667,13 +2753,13 @@ export function ServerDetailPage() {
                                                     onChange={(e) => setBackupInterval(e.target.value)}
                                                     className="w-24"
                                                 />
-                                                <span className="text-sm text-muted-foreground">Hours</span>
+                                                <span className="text-sm text-white/50">Hours</span>
                                             </div>
                                         </div>
                                     )}
                                     <div className="pt-2">
                                         <Button
-                                            className="w-full bg-muted/50 text-foreground hover:bg-muted"
+                                            className="w-full bg-white/10 text-white hover:bg-white/20"
                                             onClick={handleSaveSettings}
                                             disabled={settingsSaving}
                                             variant="outline"
@@ -2716,14 +2802,14 @@ export function ServerDetailPage() {
                                             <div className="flex items-center justify-between text-sm">
                                                 <div className="flex items-center gap-2">
                                                     <Spinner className="h-4 w-4" />
-                                                    <span className="text-foreground/80">
+                                                    <span className="text-white/80">
                                                         {backupStage === 'calculating' && "Calculating..."}
                                                         {backupStage === 'archiving' && `Archiving ${backupFileCount.total > 0 ? `(${backupFileCount.processed}/${backupFileCount.total})` : ''}`}
                                                         {backupStage === 'complete' && "Finalizing..."}
                                                         {!backupStage && "Creating Backup..."}
                                                     </span>
                                                 </div>
-                                                <span className="text-muted-foreground font-mono">
+                                                <span className="text-white/60 font-mono">
                                                     {backupPercent}%
                                                 </span>
                                             </div>
@@ -2748,7 +2834,7 @@ export function ServerDetailPage() {
                                             New Backup
                                         </Button>
                                     )}
-                                    <div className="text-xs text-center text-muted-foreground/60">
+                                    <div className="text-xs text-center text-white/40">
                                         Backups are stored in <code>/backups</code> folder
                                     </div>
                                 </CardContent>
@@ -2774,21 +2860,21 @@ export function ServerDetailPage() {
                                         <Spinner />
                                     </div>
                                 ) : backups.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2 bg-muted/50 rounded-lg border border-dashed border-border mx-1">
+                                    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2 bg-white/5 rounded-lg border border-dashed border-white/10 mx-1">
                                         <Archive className="h-6 w-6 opacity-20" />
                                         <p className="text-xs">No backups found</p>
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-2 max-h-[300px] overflow-auto pr-2 custom-scrollbar">
                                         {backups.map((backup) => (
-                                            <div key={backup.filename} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border group hover:border-border transition-all">
+                                            <div key={backup.filename} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10 group hover:border-white/20 transition-all">
                                                 <div className="flex items-center gap-3">
                                                     <div className={`h-8 w-8 rounded-md flex items-center justify-center ${backup.type === 'auto' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
                                                         {backup.type === 'auto' ? <Clock className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
                                                     </div>
                                                     <div>
                                                         <div className="text-sm font-medium">{backup.name}</div>
-                                                        <div className="text-[10px] text-muted-foreground flex gap-3">
+                                                        <div className="text-[10px] text-white/50 flex gap-3">
                                                             <span>{new Date(backup.createdAt).toLocaleString()}</span>
                                                             <span className="opacity-30">•</span>
                                                             <span>{formatFileSize(backup.size)}</span>
@@ -2826,7 +2912,7 @@ export function ServerDetailPage() {
                     </div>
 
                     {/* Section: Danger Zone */}
-                    <div className="space-y-4 pt-4 border-t border-border/50">
+                    <div className="space-y-4 pt-4 border-t border-white/5">
                         <div className="flex items-center gap-2 pb-2">
                              <h3 className="text-lg font-semibold tracking-tight text-red-500/80">Danger Zone</h3>
                         </div>
@@ -2834,7 +2920,7 @@ export function ServerDetailPage() {
                             <CardContent className="flex items-center justify-between p-6">
                                 <div className="space-y-1">
                                     <h4 className="text-sm font-medium text-white">Delete Server</h4>
-                                    <p className="text-xs text-muted-foreground max-w-[400px]">
+                                    <p className="text-xs text-white/50 max-w-[400px]">
                                         This action will permanently delete this server and all associated files, logs, and backups. This action cannot be undone.
                                     </p>
                                 </div>
@@ -2852,10 +2938,10 @@ export function ServerDetailPage() {
             </Tabs>
 
             <Dialog open={modrinthDetailOpen} onOpenChange={setModrinthDetailOpen}>
-                <DialogContent className="max-w-[800px] border-border bg-[#0e1324] max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <DialogContent className="max-w-[800px] border-white/10 bg-[#0e1324] max-h-[85vh] overflow-y-auto custom-scrollbar">
                     <DialogHeader>
                         <DialogTitle>Modrinth Overview</DialogTitle>
-                        <DialogDescription className="text-muted-foreground">
+                        <DialogDescription className="text-white/60">
                             Details, screenshots, and install status
                         </DialogDescription>
                     </DialogHeader>
@@ -2873,14 +2959,14 @@ export function ServerDetailPage() {
                             {/* Header Section */}
                             <div className="flex items-start gap-4">
                                 <div className="relative h-20 w-20 shrink-0">
-                                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[#1c1c1c] text-2xl font-bold text-muted-foreground/20 border border-border/50">
+                                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[#1c1c1c] text-2xl font-bold text-white/10 border border-white/5">
                                         {modrinthDetail.title.charAt(0).toUpperCase()}
                                     </div>
                                     {modrinthDetail.iconUrl && (
                                         <img
                                             src={modrinthDetail.iconUrl}
                                             alt={modrinthDetail.title}
-                                            className="relative h-20 w-20 rounded-2xl object-contain bg-[#1c1c1c] border border-border/50"
+                                            className="relative h-20 w-20 rounded-2xl object-contain bg-[#1c1c1c] border border-white/5"
                                             onError={(e) => {
                                                 e.currentTarget.style.opacity = "0"
                                             }}
@@ -2891,15 +2977,15 @@ export function ServerDetailPage() {
                                     <h2 className="text-2xl font-bold text-white truncate">
                                         {modrinthDetail.title}
                                     </h2>
-                                    <p className="text-base text-muted-foreground mt-1">
+                                    <p className="text-base text-white/60 mt-1">
                                         {modrinthDetail.description}
                                     </p>
-                                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                        <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 text-muted-foreground font-normal">
+                                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/50">
+                                        <Badge variant="secondary" className="bg-white/5 hover:bg-white/10 text-white/70 font-normal">
                                             <Download className="w-3 h-3 mr-1" />
                                             {modrinthDetail.downloads.toLocaleString()} downloads
                                         </Badge>
-                                        <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 text-muted-foreground font-normal">
+                                        <Badge variant="secondary" className="bg-white/5 hover:bg-white/10 text-white/70 font-normal">
                                             <Heart className="w-3 h-3 mr-1" />
                                             {modrinthDetail.followers.toLocaleString()} followers
                                         </Badge>
@@ -2907,7 +2993,7 @@ export function ServerDetailPage() {
                                             <Badge
                                                 key={category}
                                                 variant="outline"
-                                                className="border-border text-muted-foreground font-normal capitalize"
+                                                className="border-white/10 text-white/50 font-normal capitalize"
                                             >
                                                 {category}
                                             </Badge>
@@ -2952,7 +3038,7 @@ export function ServerDetailPage() {
                                     {modrinthDetail.slug && (
                                         <Button
                                             variant="ghost"
-                                            className="w-full justify-start text-muted-foreground hover:text-white"
+                                            className="w-full justify-start text-white/50 hover:text-white"
                                             onClick={() => handleOpenModrinth({ slug: modrinthDetail.slug, projectType: modrinthContext?.projectType ?? "plugin" })}
                                         >
                                             <ExternalLink className="h-4 w-4 mr-2" />
@@ -2964,14 +3050,14 @@ export function ServerDetailPage() {
 
                             {modrinthDetail.gallery && modrinthDetail.gallery.length > 0 && (
                                 <div className="space-y-2">
-                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Gallery</h3>
+                                    <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider">Gallery</h3>
                                     <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
                                         {modrinthDetail.gallery.map((image) => (
                                             <img
                                                 key={image.url}
                                                 src={image.url}
                                                 alt={image.title || modrinthDetail.title}
-                                                className="h-48 rounded-lg object-cover border border-border bg-black/20 snap-start"
+                                                className="h-48 rounded-lg object-cover border border-white/10 bg-black/20 snap-start"
                                                 loading="lazy"
                                             />
                                         ))}
@@ -2980,8 +3066,8 @@ export function ServerDetailPage() {
                             )}
 
                             <div className="space-y-2">
-                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">About</h3>
-                                <div className="rounded-xl border border-border bg-card p-6 text-sm text-foreground/80 leading-relaxed font-sans prose prose-invert max-w-none">
+                                <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider">About</h3>
+                                <div className="rounded-xl border border-white/10 bg-[#151925] p-6 text-sm text-white/80 leading-relaxed font-sans prose prose-invert max-w-none">
                                     {/* Rudimentary markdown support (converting newlines and links) would go here ideally */}
                                     {/* For now, preserving whitespace and basic structure */}
                                     <div className="whitespace-pre-wrap font-sans">
@@ -2996,16 +3082,16 @@ export function ServerDetailPage() {
 
             {/* EULA Dialog */}
             <AlertDialog open={eulaDialogOpen} onOpenChange={setEulaDialogOpen}>
-                <AlertDialogContent className="border-border bg-[#121218]">
+                <AlertDialogContent className="border-white/10 bg-[#121218]">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Minecraft EULA</AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
+                        <AlertDialogDescription className="text-white/60">
                             By starting this server, you agree to the{" "}
                             <a
                                 href="https://aka.ms/MinecraftEULA"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-primary underline hover:text-primary"
+                                className="text-cyan-300 underline hover:text-cyan-200"
                             >
                                 Minecraft End User License Agreement
                             </a>
@@ -3013,11 +3099,11 @@ export function ServerDetailPage() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-border bg-muted/50 text-muted-foreground hover:bg-muted/50">
+                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white/70 hover:bg-white/10">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                            className="bg-cyan-400 text-black hover:bg-cyan-300"
                             onClick={handleAcceptEula}
                         >
                             Accept & Start
@@ -3028,19 +3114,19 @@ export function ServerDetailPage() {
 
             {/* Ngrok Dialog */}
             <AlertDialog open={ngrokDialogOpen} onOpenChange={setNgrokDialogOpen}>
-                <AlertDialogContent className="border-border bg-[#121218] max-w-md">
+                <AlertDialogContent className="border-white/10 bg-[#121218] max-w-md">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
-                            <Globe className="h-5 w-5 text-primary" />
+                            <Globe className="h-5 w-5 text-purple-400" />
                             Enable External Access?
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
+                        <AlertDialogDescription className="text-white/60">
                             Would you like to use ngrok to allow players from outside your network to join this server?
                             This will automatically download and install ngrok, then create a public tunnel to your server.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-3 py-4">
-                        <label className="text-sm font-medium text-foreground/80">
+                        <label className="text-sm font-medium text-white/80">
                             Ngrok Authtoken <span className="text-red-400">*</span>
                         </label>
                         <Input
@@ -3051,18 +3137,18 @@ export function ServerDetailPage() {
                                 setNgrokAuthtoken(e.target.value)
                                 setNgrokAuthtokenError(null)
                             }}
-                            className="bg-muted/50 border-border text-white placeholder:text-muted-foreground/40"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
                         />
                         {ngrokAuthtokenError && (
                             <p className="text-sm text-red-400">{ngrokAuthtokenError}</p>
                         )}
-                        <p className="text-xs text-muted-foreground/60">
+                        <p className="text-xs text-white/40">
                             Get your free authtoken at{" "}
                             <a
                                 href="https://dashboard.ngrok.com/get-started/your-authtoken"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-primary hover:underline"
+                                className="text-purple-400 hover:underline"
                                 onClick={(e) => {
                                     e.preventDefault()
                                     window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
@@ -3074,13 +3160,13 @@ export function ServerDetailPage() {
                     </div>
                     <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
                         <AlertDialogCancel
-                            className="border-border bg-muted/50 text-muted-foreground hover:bg-muted/50"
+                            className="border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
                             onClick={handleSkipNgrok}
                         >
                             No, local only
                         </AlertDialogCancel>
                         <Button
-                            className="bg-primary text-foreground hover:bg-primary/90"
+                            className="bg-purple-500 text-white hover:bg-purple-400"
                             onClick={(e) => {
                                 e.preventDefault()
                                 handleEnableNgrok()
@@ -3102,21 +3188,21 @@ export function ServerDetailPage() {
 
             {/* Ngrok Installing Dialog */}
             <AlertDialog open={ngrokInstalling}>
-                <AlertDialogContent className="border-border bg-[#121218]">
+                <AlertDialogContent className="border-white/10 bg-[#121218]">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
                             <Spinner className="h-5 w-5" />
                             {ngrokInstallProgress < 0 ? "Configuring ngrok..." : "Installing ngrok..."}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
+                        <AlertDialogDescription className="text-white/60">
                             <div className="mt-4">
                                 {ngrokInstallProgress < 0 ? (
                                     <p className="text-center text-sm">Setting up your authtoken...</p>
                                 ) : (
                                     <>
-                                        <div className="h-2 w-full rounded-full bg-muted/50 overflow-hidden">
+                                        <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
                                             <div
-                                                className="h-full bg-primary rounded-full transition-all duration-300"
+                                                className="h-full bg-purple-500 rounded-full transition-all duration-300"
                                                 style={{ width: `${ngrokInstallProgress}%` }}
                                             />
                                         </div>
@@ -3131,20 +3217,20 @@ export function ServerDetailPage() {
 
             {/* Delete Dialog */}
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                <AlertDialogContent className="border-border bg-[#121218]">
+                <AlertDialogContent className="border-white/10 bg-[#121218]">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete server "{server.name}"?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
+                        <AlertDialogDescription className="text-white/60">
                             This action cannot be undone. The server folder and all data
                             will be permanently removed.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="border-border bg-muted/50 text-muted-foreground hover:bg-muted/50">
+                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white/70 hover:bg-white/10">
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-red-500 text-foreground hover:bg-red-600"
+                            className="bg-red-500 text-white hover:bg-red-600"
                             onClick={handleDeleteServer}
                         >
                             Delete server
@@ -3155,4 +3241,3 @@ export function ServerDetailPage() {
         </section>
     )
 }
-

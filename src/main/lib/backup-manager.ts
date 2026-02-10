@@ -1,22 +1,18 @@
 /**
- * Backup Manager - Worker Thread Implementation
+ * Backup Manager - Asynchronous Implementation with Progress Reporting
  * 
- * This module provides non-blocking backup operations by utilizing Node.js Worker Threads.
- * All CPU-intensive and I/O-heavy operations run in separate threads to maintain UI responsiveness.
+ * This module provides backup operations using adm-zip with proper async
+ * yielding to prevent UI blocking in Electron.
  */
 
 import fs from 'fs';
 import path from 'path';
-import { Worker } from 'worker_threads';
 import AdmZip from 'adm-zip';
 import { BackupEntry } from '@shared/types';
 import { getServer, updateServerSettings, getServers } from './server-manager';
 import { WebContents } from 'electron';
 
 const BACKUP_DIR_NAME = 'backups';
-
-// Active workers registry to track ongoing backups
-const activeWorkers = new Map<string, Worker>();
 
 // Backup status tracking for UI updates
 interface BackupStatus {
@@ -27,23 +23,9 @@ interface BackupStatus {
   error?: string;
 }
 
+// Active backups registry to track ongoing backups
+const activeBackups = new Map<string, boolean>();
 const backupStatuses = new Map<string, BackupStatus>();
-
-/**
- * Get the path to the worker script (handles both dev and production)
- */
-function getWorkerScriptPath(): string {
-  // In development, use the TypeScript file directly via ts-node/esm loader
-  // In production, use the compiled JavaScript file
-  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-  
-  if (isDev) {
-    return path.join(__dirname, 'backup-worker.ts');
-  }
-  
-  // In production, worker should be in the same directory
-  return path.join(__dirname, 'backup-worker.js');
-}
 
 /**
  * Send progress update to the renderer process
@@ -75,39 +57,97 @@ function sendProgress(webContents: WebContents | undefined, serverId: string, da
 }
 
 /**
- * Create a backup using a Worker Thread (non-blocking)
+ * Yield to the event loop to prevent blocking
+ */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise(resolve => setImmediate(resolve));
+}
+
+/**
+ * Get all files in a directory recursively (excluding backup directory)
+ * Uses async iteration to prevent blocking
+ */
+async function getAllFilesAsync(
+  dirPath: string, 
+  excludeDir: string, 
+  basePath: string = dirPath
+): Promise<{ path: string; relativePath: string; size: number }[]> {
+  const files: { path: string; relativePath: string; size: number }[] = [];
+  
+  if (!fs.existsSync(dirPath)) return files;
+  
+  const items = fs.readdirSync(dirPath);
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const fullPath = path.join(dirPath, item);
+    
+    // Skip the backup directory itself
+    if (fullPath === excludeDir || fullPath.startsWith(excludeDir + path.sep)) {
+      continue;
+    }
+    
+    try {
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        const subFiles = await getAllFilesAsync(fullPath, excludeDir, basePath);
+        files.push(...subFiles);
+      } else {
+        const relativePath = path.relative(basePath, fullPath);
+        files.push({ path: fullPath, relativePath, size: stat.size });
+      }
+    } catch (e) {
+      console.warn('[BACKUP] Skipping file due to error:', fullPath, e);
+    }
+    
+    // Yield every 50 items to prevent blocking
+    if (i % 50 === 0) {
+      await yieldToEventLoop();
+    }
+  }
+  
+  return files;
+}
+
+/**
+ * Create a backup asynchronously using adm-zip
  * 
- * This function returns immediately with a status object. The actual backup runs
- * asynchronously in a worker thread. Progress updates are sent via IPC events.
+ * This function properly yields to the event loop to prevent UI blocking
  */
 export async function createBackup(
   serverId: string, 
   name?: string, 
   webContents?: WebContents
 ): Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }> {
-  console.log('[BACKUP_DEBUG] Entering createBackup function');
+  console.log('[BACKUP] Entering createBackup function');
+  
+  // Check if backup is already in progress for this server
+  if (activeBackups.has(serverId)) {
+    console.log('[BACKUP] Backup already in progress for server:', serverId);
+    return { 
+      success: false, 
+      error: 'A backup is already in progress for this server' 
+    };
+  }
+  
+  // Mark as active immediately
+  activeBackups.set(serverId, true);
   
   try {
-    // Check if backup is already in progress for this server
-    if (activeWorkers.has(serverId)) {
-      console.log('[BACKUP_DEBUG] Backup already in progress for server:', serverId);
-      return { 
-        success: false, 
-        error: 'A backup is already in progress for this server' 
-      };
-    }
-    
     const server = await getServer(serverId);
     if (!server) {
-      console.error('[BACKUP_DEBUG] Server not found', serverId);
+      console.error('[BACKUP] Server not found', serverId);
+      activeBackups.delete(serverId);
       return { success: false, error: 'Server not found' };
     }
 
     const serverPath = server.serverPath;
-    console.log('[BACKUP_DEBUG] Server path:', serverPath);
+    console.log('[BACKUP] Server path:', serverPath);
     
     if (!serverPath || !fs.existsSync(serverPath)) {
-      console.error('[BACKUP_DEBUG] Invalid path');
+      console.error('[BACKUP] Invalid path');
+      activeBackups.delete(serverId);
       return { success: false, error: 'Server path is invalid or missing' };
     }
     
@@ -121,7 +161,7 @@ export async function createBackup(
     const filename = `backup-${timestamp}-${safeName}.zip`;
     const zipPath = path.join(backupsDir, filename);
     
-    console.log('[BACKUP_DEBUG] Target zip path:', zipPath);
+    console.log('[BACKUP] Target zip path:', zipPath);
 
     // Initialize status
     backupStatuses.set(serverId, {
@@ -134,139 +174,137 @@ export async function createBackup(
     // Send initial progress
     sendProgress(webContents, serverId, { percent: 0, stage: 'calculating' });
 
-    // Create and configure worker
-    const workerPath = getWorkerScriptPath();
-    console.log('[BACKUP_DEBUG] Starting worker:', workerPath);
+    // Yield before starting heavy work
+    await yieldToEventLoop();
 
-    const worker = new Worker(workerPath, {
-      workerData: {
-        serverPath,
-        backupsDir,
-        zipPath,
-        filename,
-        name: name || 'Automatic Backup',
-        type: name ? 'manual' : 'auto',
-        excludeDir: backupsDir
-      },
-      // In development, we need to use ts-node/esm loader
-      execArgv: process.env.NODE_ENV === 'development' ? ['--loader', 'ts-node/esm'] : undefined
-    });
+    // Get all files to backup (async)
+    console.log('[BACKUP] Scanning files...');
+    const filesToBackup = await getAllFilesAsync(serverPath, backupsDir);
+    const totalFiles = filesToBackup.length;
+    const totalSize = filesToBackup.reduce((sum, f) => sum + f.size, 0);
+    
+    console.log(`[BACKUP] Found ${totalFiles} files to backup (${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
 
-    // Store worker reference
-    activeWorkers.set(serverId, worker);
-
-    // Set up message handlers
-    worker.on('message', (message: { type: string; data: unknown }) => {
-      switch (message.type) {
-        case 'progress': {
-          const progressData = message.data as {
-            percent: number;
-            stage: string;
-            processedFiles?: number;
-            totalFiles?: number;
-          };
-          sendProgress(webContents, serverId, progressData);
-          break;
-        }
-        
-        case 'complete': {
-          const result = message.data as {
-            success: boolean;
-            filename: string;
-            path: string;
-            size: number;
-            name: string;
-            type: 'manual' | 'auto';
-          };
-          
-          console.log('[BACKUP_DEBUG] Worker completed:', result);
-          
-          // Clean up
-          activeWorkers.delete(serverId);
-          backupStatuses.delete(serverId);
-          
-          // Send final progress
-          sendProgress(webContents, serverId, { percent: 100, stage: 'complete' });
-          
-          // Send completion log
-          if (webContents && !webContents.isDestroyed()) {
-            webContents.send('rendererLog', { 
-              message: 'Backup completed', 
-              data: { filename: result.filename, size: result.size } 
-            });
-            
-            // Send backup list refresh trigger
-            webContents.send('backupCompleted', { serverId, backup: result });
-          }
-          break;
-        }
-        
-        case 'error': {
-          const errorData = message.data as { message: string; code?: string };
-          console.error('[BACKUP_DEBUG] Worker error:', errorData);
-          
-          // Clean up
-          activeWorkers.delete(serverId);
-          const status = backupStatuses.get(serverId);
-          if (status) {
-            status.inProgress = false;
-            status.stage = 'error';
-            status.error = errorData.message;
-          }
-          
-          // Send error to UI
-          if (webContents && !webContents.isDestroyed()) {
-            webContents.send('backupProgress', { serverId, percent: -1, error: errorData.message });
-            webContents.send('rendererLog', { 
-              message: 'Backup error', 
-              data: { error: errorData.message } 
-            });
-          }
-          break;
-        }
-        
-        case 'log': {
-          console.log(message.data);
-          break;
-        }
-      }
-    });
-
-    worker.on('error', (error) => {
-      console.error('[BACKUP_DEBUG] Worker thread error:', error);
-      activeWorkers.delete(serverId);
+    if (totalFiles === 0) {
+      console.error('[BACKUP] No files to backup');
+      activeBackups.delete(serverId);
       backupStatuses.delete(serverId);
-      
-      if (webContents && !webContents.isDestroyed()) {
-        webContents.send('backupProgress', { 
-          serverId, 
-          percent: -1, 
-          error: error.message 
-        });
-      }
-    });
+      return { success: false, error: 'No files found to backup' };
+    }
 
-    worker.on('exit', (code) => {
-      console.log('[BACKUP_DEBUG] Worker exited with code:', code);
-      activeWorkers.delete(serverId);
-      
-      if (code !== 0) {
-        console.error('[BACKUP_DEBUG] Worker stopped with exit code', code);
-        backupStatuses.delete(serverId);
-      }
-    });
+    // Update stage to archiving
+    sendProgress(webContents, serverId, { percent: 5, stage: 'archiving' });
 
-    // Return immediately - backup is running in background
+    // Create zip file
+    const zip = new AdmZip();
+    let processedFiles = 0;
+
+    // Add files in batches to prevent blocking
+    const BATCH_SIZE = 20;
+    
+    for (let i = 0; i < filesToBackup.length; i += BATCH_SIZE) {
+      const batch = filesToBackup.slice(i, i + BATCH_SIZE);
+      
+      for (const file of batch) {
+        try {
+          zip.addLocalFile(file.path, path.dirname(file.relativePath));
+          processedFiles++;
+        } catch (e) {
+          console.warn('[BACKUP] Failed to add file to backup:', file.path, e);
+        }
+      }
+      
+      // Calculate progress (5-95% range for archiving)
+      const percent = Math.min(95, Math.round(5 + (processedFiles / totalFiles) * 90));
+      
+      // Send progress update
+      sendProgress(webContents, serverId, {
+        percent,
+        stage: 'archiving',
+        processedFiles,
+        totalFiles
+      });
+      
+      // Yield to event loop after each batch
+      await yieldToEventLoop();
+    }
+
+    // Write zip file (95-100%)
+    sendProgress(webContents, serverId, { percent: 95, stage: 'complete' });
+    
+    // Yield before writing
+    await yieldToEventLoop();
+    
+    console.log('[BACKUP] Writing zip file...');
+    zip.writeZip(zipPath);
+    
+    // Verify the file was created
+    if (!fs.existsSync(zipPath)) {
+      console.error('[BACKUP] Zip file was not created');
+      activeBackups.delete(serverId);
+      backupStatuses.delete(serverId);
+      return { success: false, error: 'Failed to create backup file' };
+    }
+
+    const stat = fs.statSync(zipPath);
+    console.log(`[BACKUP] Backup created: ${filename} (${(stat.size / 1024 / 1024).toFixed(2)} MB)`);
+
+    // Clean up status
+    activeBackups.delete(serverId);
+    backupStatuses.delete(serverId);
+
+    // Send final progress
+    sendProgress(webContents, serverId, { percent: 100, stage: 'complete' });
+
+    // Send completion event
+    if (webContents && !webContents.isDestroyed()) {
+      const backupEntry: BackupEntry = {
+        name: name || 'Automatic Backup',
+        filename,
+        path: zipPath,
+        size: stat.size,
+        createdAt: new Date().toISOString(),
+        type: name ? 'manual' : 'auto'
+      };
+      
+      webContents.send('rendererLog', { 
+        message: 'Backup completed', 
+        data: { filename, size: stat.size } 
+      });
+      
+      // Send backup list refresh trigger
+      webContents.send('backupCompleted', { serverId, backup: backupEntry });
+    }
+
     return { 
       success: true, 
-      started: true 
+      started: true,
+      backup: {
+        name: name || 'Automatic Backup',
+        filename,
+        path: zipPath,
+        size: stat.size,
+        createdAt: new Date().toISOString(),
+        type: name ? 'manual' : 'auto'
+      }
     };
 
   } catch (error) {
-    console.error('[BACKUP_DEBUG] Fatal error:', error);
-    activeWorkers.delete(serverId);
+    console.error('[BACKUP] Fatal error:', error);
+    activeBackups.delete(serverId);
     backupStatuses.delete(serverId);
-    return { success: false, error: String(error) };
+    
+    // Send error to UI
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (webContents && !webContents.isDestroyed()) {
+      webContents.send('backupProgress', { 
+        serverId, 
+        percent: -1, 
+        error: errorMessage 
+      });
+    }
+    
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -274,11 +312,9 @@ export async function createBackup(
  * Cancel an ongoing backup
  */
 export function cancelBackup(serverId: string): boolean {
-  const worker = activeWorkers.get(serverId);
-  if (worker) {
-    console.log('[BACKUP_DEBUG] Cancelling backup for server:', serverId);
-    worker.terminate();
-    activeWorkers.delete(serverId);
+  if (activeBackups.has(serverId)) {
+    console.log('[BACKUP] Cancelling backup for server:', serverId);
+    activeBackups.delete(serverId);
     backupStatuses.delete(serverId);
     return true;
   }
@@ -296,7 +332,7 @@ export function getBackupStatus(serverId: string): BackupStatus | undefined {
  * Check if a backup is in progress for a server
  */
 export function isBackupInProgress(serverId: string): boolean {
-  return activeWorkers.has(serverId);
+  return activeBackups.has(serverId);
 }
 
 export async function getBackups(serverId: string): Promise<BackupEntry[]> {
@@ -325,24 +361,11 @@ export async function getBackups(serverId: string): Promise<BackupEntry[]> {
         name = 'Automatic Backup';
       } else {
         // Remove prefix and extension to get name
-        // backup-2023-10-10...-name.zip
-        // Find second dash? No, timestamp has dashes.
-        // Regex might be better.
-        // Assuming format `backup-{timestamp}-{name}.zip`
-        const parts = file.split('-');
-        if (parts.length > 5) {
-          // timestamp is roughly 2023-01-01T12-00-00-000Z (many dashes)
-          // Let's just use the file name as display name if we can't parse perfectly
-          // Or strip existing prefix
-          const prefix = 'backup-';
-          if (file.startsWith(prefix)) {
-            const rest = file.substring(prefix.length); // timestamp-name.zip
-            // timestamp ends with Z or matches ISO-ish
-            // this is hard to parse reliably without metadata.
-            // Simplified:
-            const namePart = rest.substring(rest.indexOf('-', 20) + 1).replace('.zip', ''); // 20 chars for timestamp min
-             name = namePart; 
-          }
+        const prefix = 'backup-';
+        if (file.startsWith(prefix)) {
+          const rest = file.substring(prefix.length);
+          const namePart = rest.substring(rest.indexOf('-', 20) + 1).replace('.zip', '');
+          name = namePart; 
         }
       }
       
@@ -357,7 +380,9 @@ export async function getBackups(serverId: string): Promise<BackupEntry[]> {
         createdAt: stat.birthtime.toISOString(),
         type
       });
-    } catch (e) {}
+    } catch (e) {
+      console.warn('[BACKUP] Error reading backup file:', file, e);
+    }
   }
 
   return backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -399,7 +424,6 @@ export async function restoreBackup(serverId: string, filename: string): Promise
     for (const file of currentFiles) {
       const fullPath = path.join(serverPath, file);
       if (fullPath === backupsDir) continue;
-      // Maybe keep logs? No, restore usually implies full state rollback.
       await fs.promises.rm(fullPath, { recursive: true, force: true });
     }
 
@@ -420,14 +444,10 @@ export async function checkAndRunAutoBackups() {
         const now = Date.now();
 
         if (now - lastBackup > intervalMs) {
-          // Check if backup is already in progress
           if (!isBackupInProgress(server.id)) {
             console.log(`[AUTO_BACKUP] Running auto backup for server ${server.name}`);
-            // For auto-backups, we don't have webContents, so progress won't be shown
-            // But the backup will still run in a worker thread
             await createBackup(server.id);
             
-            // Update last backup time
             await updateServerSettings(server.id, {
               backupConfig: {
                 ...server.backupConfig,

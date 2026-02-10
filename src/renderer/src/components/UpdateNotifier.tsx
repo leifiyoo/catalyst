@@ -52,22 +52,21 @@ export function UpdateNotifier() {
 
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
-            <AlertDialogContent className="bg-[#121218] border-white/10">
+            <AlertDialogContent className="bg-popover border-border">
                 <AlertDialogHeader>
-                    <AlertDialogTitle className="text-white">Update Available</AlertDialogTitle>
-                    <AlertDialogDescription className="text-white/70">
+                    <AlertDialogTitle>Update Available</AlertDialogTitle>
+                    <AlertDialogDescription className="text-muted-foreground">
                         A new version of Catalyst is available.<br/>
-                        Current: <span className="text-red-400">{updateInfo.currentVersion}</span> <br/> 
-                        Latest: <span className="text-green-400">{updateInfo.latestVersion}</span>
+                        Current: <span className="text-destructive">{updateInfo.currentVersion}</span> <br/> 
+                        Latest: <span className="text-primary">{updateInfo.latestVersion}</span>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                    <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
                         Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction 
                         onClick={handleUpdate}
-                        className="bg-cyan-500 text-black hover:bg-cyan-400"
                     >
                         View Release
                     </AlertDialogAction>

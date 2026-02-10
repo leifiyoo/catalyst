@@ -40,7 +40,7 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-zinc-800 rounded-full hover:bg-zinc-700;
+    @apply bg-zinc-700 rounded-full hover:bg-zinc-600;
   }
 
   ::-webkit-scrollbar-corner {
@@ -82,13 +82,13 @@ body {
 }
 
 :root {
-  --card-bg: rgba(15, 21, 37, 0.82);
-  --card-border: rgba(34, 211, 238, 0.08);
-  --card-glow: 0 18px 40px rgba(0, 0, 0, 0.3);
-  --accent: #22d3ee;
-  --accent-soft: rgba(34, 211, 238, 0.12);
-  --text-muted: rgba(237, 242, 247, 0.62);
-  --text-dim: rgba(237, 242, 247, 0.35);
+  --card-bg: rgba(20, 24, 28, 0.9);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-glow: 0 14px 24px rgba(0, 0, 0, 0.22);
+  --accent: #5aa469;
+  --accent-soft: rgba(90, 164, 105, 0.16);
+  --text-muted: rgba(210, 218, 225, 0.7);
+  --text-dim: rgba(210, 218, 225, 0.4);
 }
 
 #root {
@@ -103,36 +103,39 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 48px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 14px;
   z-index: 10000;
-  background: transparent;
+  background: rgba(16, 19, 22, 0.7);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .titlebar-title {
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: hsl(var(--muted-foreground));
 }
 
 .titlebar-controls {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .titlebar-button {
-  width: 36px;
+  width: 30px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: hsl(var(--muted));
-  transition: background 180ms ease, transform 180ms ease, opacity 180ms ease;
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
 
 .titlebar-button:hover {

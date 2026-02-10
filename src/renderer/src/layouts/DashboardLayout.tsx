@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { TitleBar } from "@/components/TitleBar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AnimatedOutlet } from "@/components/AnimatedOutlet"
+import { Badge } from "@/components/ui/badge"
 import { SidebarProvider } from "@/components/ui/sidebar"
 
 export function DashboardLayout() {
@@ -21,13 +22,25 @@ export function DashboardLayout() {
 
     return (
         <div className="relative h-screen w-full bg-background text-foreground dark" style={{ borderRadius: '12px', overflow: 'hidden' }}>
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.03),transparent_50%),radial-gradient(ellipse_at_bottom_right,rgba(255,255,255,0.03),transparent_50%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_60%),radial-gradient(circle_at_bottom,rgba(0,0,0,0.35),transparent_55%)]" />
             <TitleBar isMaximized={isMaximized} />
             <SidebarProvider>
                 <div className="flex h-full w-full">
                     <AppSidebar />
-                    <main className="flex-1 overflow-auto pt-12">
-                        <AnimatedOutlet />
+                    <main className="flex-1 overflow-hidden pt-11">
+                        <div className="flex h-full flex-col">
+                            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-8 py-4 backdrop-blur">
+                                <div className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">
+                                    Workspace
+                                </div>
+                                <Badge variant="outline" className="border-border text-muted-foreground">
+                                    Local runtime
+                                </Badge>
+                            </div>
+                            <div className="flex-1 overflow-auto">
+                                <AnimatedOutlet />
+                            </div>
+                        </div>
                     </main>
                 </div>
             </SidebarProvider>
