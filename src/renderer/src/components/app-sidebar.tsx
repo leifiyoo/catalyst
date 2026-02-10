@@ -17,6 +17,7 @@ import {
     SidebarMenuButton,
     SidebarRail,
 } from "@/components/ui/sidebar"
+import sidebarLogo from "@/assets/transparentlogo.png"
 
 const navItems = [
     { title: "Dashboard", icon: MonitorDot, path: "/" },
@@ -30,7 +31,21 @@ export function AppSidebar() {
     return (
         <Sidebar className="border-r border-border bg-sidebar/95 backdrop-blur">
             <SidebarHeader className="px-5 pt-14 pb-4 border-b border-border">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div
+                        className="h-8 w-8"
+                        style={{
+                            WebkitMaskImage: `url(${sidebarLogo})`,
+                            maskImage: `url(${sidebarLogo})`,
+                            WebkitMaskSize: 'contain',
+                            maskSize: 'contain',
+                            WebkitMaskRepeat: 'no-repeat',
+                            maskRepeat: 'no-repeat',
+                            WebkitMaskPosition: 'center',
+                            maskPosition: 'center',
+                            backgroundColor: 'hsl(var(--primary))',
+                        }}
+                    />
                     <div>
                         <div className="text-lg font-semibold tracking-[0.08em]">
                             Catalyst

@@ -1,25 +1,34 @@
 import { app } from 'electron';
 import https from 'https';
+import { ChangelogData, ChangelogEntry } from '@shared/types';
 
-// TODO: Update these values when you upload the project to GitHub!
-const REPO_OWNER = 'leifiyoo'; // Change this
-const REPO_NAME = 'catalyst';     // Change this
+const REPO_OWNER = 'leifiyoo';
+const REPO_NAME = 'catalyst';
+const BRANCH = 'main';
 
 export type UpdateCheckResult = {
     updateAvailable: boolean;
     latestVersion: string;
     currentVersion: string;
     releaseUrl: string;
+    changelog?: ChangelogEntry[];
     error?: string;
 };
 
+/**
+ * Fetches CHANGELOG.json from the GitHub repo and compares the latest
+ * version entry against the locally installed app version.
+ */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
     return new Promise((resolve) => {
         const currentVersion = app.getVersion();
-        
+
+        // Fetch the raw CHANGELOG.json from the repo
+        const url = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/CHANGELOG.json`;
+
         const options = {
-            hostname: 'api.github.com',
-            path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
+            hostname: 'raw.githubusercontent.com',
+            path: `/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/CHANGELOG.json`,
             headers: {
                 'User-Agent': 'Catalyst-Updater'
             }
@@ -28,68 +37,66 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
         https.get(options, (res) => {
             let data = '';
 
-            if (res.statusCode === 404) {
-                // Repo not found
-                resolve({ 
-                    updateAvailable: false, 
-                    latestVersion: "0.0.0", 
-                    currentVersion, 
-                    releaseUrl: "", 
-                    error: "Repository not found" 
-                });
-                return;
-            }
-
             if (res.statusCode !== 200) {
-                 resolve({ 
-                    updateAvailable: false, 
-                    latestVersion: "0.0.0", 
-                    currentVersion, 
-                    releaseUrl: "", 
-                    error: `GitHub API error: ${res.statusCode}` 
+                resolve({
+                    updateAvailable: false,
+                    latestVersion: '0.0.0',
+                    currentVersion,
+                    releaseUrl: '',
+                    error: `Failed to fetch changelog: HTTP ${res.statusCode}`
                 });
                 return;
             }
 
-            res.on('data', chunk => data += chunk);
+            res.on('data', (chunk) => (data += chunk));
             res.on('end', () => {
                 try {
-                    const release = JSON.parse(data);
-                    const tagName = release.tag_name || ''; // e.g. "v1.0.1"
-                    // Strip 'v' prefix if present
-                    const cleanLatest = tagName.startsWith('v') ? tagName.substring(1) : tagName;
-                    const cleanCurrent = currentVersion;
+                    const changelog: ChangelogData = JSON.parse(data);
+                    
+                    if (!changelog.versions || changelog.versions.length === 0) {
+                        resolve({
+                            updateAvailable: false,
+                            latestVersion: currentVersion,
+                            currentVersion,
+                            releaseUrl: ''
+                        });
+                        return;
+                    }
 
-                    // Simple version comparison (assuming semver)
-                    // If latest != current, and latest is likely newer.
-                    // For simplicity, we just check non-equality or implement simple semver check.
-                    
-                    const isNewer = compareVersions(cleanLatest, cleanCurrent) > 0;
-                    
+                    const latestEntry = changelog.versions[0];
+                    const latestVersion = latestEntry.version;
+
+                    const isNewer = compareVersions(latestVersion, currentVersion) > 0;
+
+                    // Collect all changelog entries that are newer than the current version
+                    const newChanges = changelog.versions.filter(
+                        (entry) => compareVersions(entry.version, currentVersion) > 0
+                    );
+
                     resolve({
                         updateAvailable: isNewer,
-                        latestVersion: cleanLatest,
-                        currentVersion: cleanCurrent,
-                        releaseUrl: release.html_url || `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`
+                        latestVersion,
+                        currentVersion,
+                        releaseUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
+                        changelog: isNewer ? newChanges : undefined
                     });
-
                 } catch (e) {
-                    resolve({ 
-                        updateAvailable: false, 
-                        latestVersion: "0.0.0", 
-                        currentVersion, 
-                        releaseUrl: "", 
-                        error: "Failed to parse release data" 
+                    resolve({
+                        updateAvailable: false,
+                        latestVersion: '0.0.0',
+                        currentVersion,
+                        releaseUrl: '',
+                        error: 'Failed to parse changelog data'
                     });
                 }
             });
         }).on('error', (err) => {
-            resolve({ 
-                updateAvailable: false, 
-                latestVersion: "0.0.0", 
-                currentVersion, 
-                releaseUrl: "", 
-                error: err.message 
+            resolve({
+                updateAvailable: false,
+                latestVersion: '0.0.0',
+                currentVersion,
+                releaseUrl: '',
+                error: err.message
             });
         });
     });

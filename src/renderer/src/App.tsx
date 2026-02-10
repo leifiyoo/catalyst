@@ -10,6 +10,7 @@ import { ServerDetailPage } from "@/pages/ServerDetailPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { UpdateNotifier } from "@/components/UpdateNotifier";
 import { ErrorPage } from "@/components/ErrorPage";
+import catalystLogo from "@/assets/catalystwithlogotransparent.png";
 
 const SplashScreen = ({ showSpinner }: { showSpinner: boolean }) => {
     return (
@@ -19,11 +20,15 @@ const SplashScreen = ({ showSpinner }: { showSpinner: boolean }) => {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
         >
-            <div className="flex flex-col items-center gap-2">
-                <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground">
-                    Catalyst
-                </p>
-                <h1 className="text-3xl font-semibold md:text-4xl">Server studio</h1>
+            <div className="flex flex-col items-center gap-4">
+                <motion.img
+                    src={catalystLogo}
+                    alt="Catalyst"
+                    className="h-20 object-contain"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                />
                 <p className="max-w-md text-sm text-muted-foreground">
                     Preparing your workspace and syncing server state.
                 </p>

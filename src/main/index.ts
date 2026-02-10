@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
-import icon from "../../resources/icon.png?asset";
+import icon from "../../resources/logoonly.png?asset";
 import {
   getVersions,
   triggerIPC,
@@ -84,7 +84,7 @@ function createWindow(): void {
     alwaysOnTop: true,
     backgroundColor: '#000000',
     vibrancy: "under-window",
-    ...(process.platform === "linux" ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: true,

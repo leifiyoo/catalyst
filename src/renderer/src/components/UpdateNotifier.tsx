@@ -9,6 +9,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import type { ChangelogEntry } from "@shared/types";
 
 export function UpdateNotifier() {
     const [open, setOpen] = useState(false);
@@ -16,6 +17,7 @@ export function UpdateNotifier() {
         latestVersion: string;
         currentVersion: string;
         releaseUrl: string;
+        changelog?: ChangelogEntry[];
     } | null>(null);
 
     useEffect(() => {
@@ -29,7 +31,8 @@ export function UpdateNotifier() {
                     setUpdateInfo({
                         latestVersion: result.latestVersion,
                         currentVersion: result.currentVersion,
-                        releaseUrl: result.releaseUrl
+                        releaseUrl: result.releaseUrl,
+                        changelog: result.changelog,
                     });
                     setOpen(true);
                 }
@@ -52,23 +55,48 @@ export function UpdateNotifier() {
 
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
-            <AlertDialogContent className="bg-popover border-border">
+            <AlertDialogContent className="bg-popover border-border max-h-[80vh] flex flex-col">
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Update Available</AlertDialogTitle>
-                    <AlertDialogDescription className="text-muted-foreground">
-                        A new version of Catalyst is available.<br/>
-                        Current: <span className="text-destructive">{updateInfo.currentVersion}</span> <br/> 
-                        Latest: <span className="text-primary">{updateInfo.latestVersion}</span>
+                    <AlertDialogTitle>Update verfügbar!</AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                        <div className="text-muted-foreground">
+                            <p>
+                                Eine neue Version von Catalyst ist verfügbar.<br/>
+                                Aktuell: <span className="text-destructive font-medium">{updateInfo.currentVersion}</span>
+                                {" → "}
+                                Neu: <span className="text-primary font-medium">{updateInfo.latestVersion}</span>
+                            </p>
+                        </div>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
+
+                {updateInfo.changelog && updateInfo.changelog.length > 0 && (
+                    <div className="overflow-y-auto max-h-[40vh] pr-1 -mr-1 space-y-4">
+                        {updateInfo.changelog.map((entry) => (
+                            <div key={entry.version} className="space-y-1.5">
+                                <h4 className="text-sm font-semibold text-foreground">
+                                    v{entry.version}
+                                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                        {entry.date}
+                                        {entry.title ? ` — ${entry.title}` : ""}
+                                    </span>
+                                </h4>
+                                <ul className="space-y-0.5 text-sm text-muted-foreground list-disc list-inside pl-1">
+                                    {entry.changes.map((change, i) => (
+                                        <li key={i}>{change}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 <AlertDialogFooter>
                     <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">
-                        Cancel
+                        Später
                     </AlertDialogCancel>
-                    <AlertDialogAction 
-                        onClick={handleUpdate}
-                    >
-                        View Release
+                    <AlertDialogAction onClick={handleUpdate}>
+                        Herunterladen
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

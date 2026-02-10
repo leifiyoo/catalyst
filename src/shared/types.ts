@@ -247,11 +247,23 @@ export type RemoveModrinthInstallFn = (serverId: string, projectId: string) => P
 export type GetModrinthProjectFn = (projectId: string) => Promise<ModrinthProjectDetails>;
 export type OpenExternalFn = (url: string) => Promise<void>;
 
+export type ChangelogEntry = {
+  version: string;
+  date: string;
+  title: string;
+  changes: string[];
+};
+
+export type ChangelogData = {
+  versions: ChangelogEntry[];
+};
+
 export type UpdateCheckResult = {
   updateAvailable: boolean;
   latestVersion: string;
   currentVersion: string;
   releaseUrl: string;
+  changelog?: ChangelogEntry[];
   error?: string;
 };
 
