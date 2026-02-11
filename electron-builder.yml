@@ -22,11 +22,12 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  language: 1033
   
   # Wenn du eigene Bilder hast, entkommentiere diese Zeilen und lege die Bilder ab:
   # installerIcon: build/icon.ico
-  # installerHeader: build/installerHeader.bmp
-  # installerSidebar: build/installerSidebar.bmp
+  installerHeader: build/installerHeader.bmp
+  installerSidebar: build/installerSidebar.bmp
   
   # Verhindert Skalierungsunschärfe
   deleteAppDataOnUninstall: false

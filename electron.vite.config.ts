@@ -7,7 +7,9 @@ const pkg = JSON.parse(readFileSync("package.json", "utf-8"));
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({
+      exclude: ['archiver', 'archiver-utils', 'zip-stream', 'compress-commons', 'crc-32', 'crc32-stream', 'readable-stream', 'lazystream']
+    })],
     resolve: {
       alias: {
         "@/lib": resolve("src/main/lib"),

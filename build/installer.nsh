@@ -16,8 +16,8 @@ XPStyle on
 ; (Wir definieren nur das Aussehen, Electron-Builder erstellt die Seiten selbst)
 
 ; Willkommensseite mit modernem Titel
-!define MUI_WELCOMEPAGE_TITLE "Willkommen beim Setup von ${PRODUCT_NAME}"
-!define MUI_WELCOMEPAGE_TEXT "Dieser Assistent wird Sie durch die Installation von ${PRODUCT_NAME} begleiten.$\r$\n$\r$\nEs wird empfohlen, alle anderen Programme zu schließen, bevor Sie fortfahren."
+!define MUI_WELCOMEPAGE_TITLE "Welcome to the ${PRODUCT_NAME} Setup"
+!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${PRODUCT_NAME}.$\r$\n$\r$\nIt is recommended that you close all other programs before continuing."
 
 ; Abschlussseite Konfiguration
 ; (Ueberschreibe Standardwerte sicher)
@@ -26,12 +26,12 @@ XPStyle on
 !ifdef MUI_FINISHPAGE_RUN_TEXT
   !undef MUI_FINISHPAGE_RUN_TEXT
 !endif
-!define MUI_FINISHPAGE_RUN_TEXT "Starte ${PRODUCT_NAME} jetzt"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_NAME} now"
 
 ; --- Callback Funktionen ---
 ; (Keine speziellen Callbacks mehr benötigt)
 
 !macro customUnInstall
-  MessageBox MB_YESNO|MB_ICONQUESTION "Möchten Sie auch alle gespeicherten Server und Einstellungen löschen?$\r$\n(Der Ordner wird unwiderruflich gelöscht)" /SD IDNO IDNO +2
+  MessageBox MB_YESNO|MB_ICONQUESTION "Do you also want to delete all saved servers and settings?$\r$\n(The folder will be permanently removed)" /SD IDNO IDNO +2
   RMDir /r "$APPDATA\Catalyst"
 !macroend

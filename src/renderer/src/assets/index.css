@@ -60,7 +60,7 @@
   }
 
   body {
-    @apply flex items-center justify-center min-h-dvh text-foreground bg-background;
+    @apply min-h-dvh text-foreground bg-background;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
@@ -95,11 +95,12 @@ body {
   border-radius: 12px;
   overflow: hidden;
   width: 100%;
+  min-height: 100vh;
   height: 100vh;
 }
 
 .titlebar {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;

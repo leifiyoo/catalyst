@@ -78,6 +78,7 @@ function createWindow(): void {
     height: 670,
     minWidth: 800,
     minHeight: 500,
+    title: "catalyst",
     frame: false,
     show: false,
     autoHideMenuBar: true,

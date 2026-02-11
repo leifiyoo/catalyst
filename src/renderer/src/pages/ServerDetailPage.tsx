@@ -80,7 +80,6 @@ import {
     Droplet,
     Wind,
     Zap,
-    Copy,
     Link,
 } from "lucide-react"
 import type {
@@ -502,12 +501,9 @@ export function ServerDetailPage() {
             if (ngrokEnabled && hasToken) {
                 // We have a saved token, use it directly and start server with ngrok
                 await doStartServer(true)
-            } else if (ngrokEnabled) {
-                // Ngrok enabled but no token, show dialog to enter it
-                setNgrokDialogOpen(true)
             } else {
-                // Ngrok not enabled, just start server
-                await doStartServer(false)
+                // First-time start: ask about ngrok after accepting the EULA
+                setNgrokDialogOpen(true)
             }
         } else {
             setError(result.error || "Failed to accept EULA")
@@ -1185,9 +1181,6 @@ export function ServerDetailPage() {
 
     const memoryMax = stats?.memoryMaxMB ?? server?.ramMB ?? null
     const memoryUsed = stats?.memoryUsedMB ?? null
-    const supportsInServerStats = server
-        ? ["Paper", "Purpur"].includes(server.framework)
-        : false
     const memoryPercent =
         memoryUsed != null && memoryMax
             ? Math.min(100, Math.max(0, Math.round((memoryUsed / memoryMax) * 100)))
@@ -1294,7 +1287,7 @@ export function ServerDetailPage() {
                             {server.status === "Online" && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
                                 <Badge
                                     variant="outline"
-                                    className="gap-1.5 font-normal text-primary cursor-pointer hover:text-primary/80 transition-colors border-primary/30"
+                                    className="gap-1.5 font-normal text-purple-400 cursor-pointer hover:text-purple-300 transition-colors border-purple-400/30"
                                     onClick={handleCopyNgrokUrl}
                                 >
                                     <Link className="h-3 w-3" />
@@ -3031,7 +3024,7 @@ export function ServerDetailPage() {
                 <AlertDialogContent className="border-border bg-[#121218] max-w-md">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
-                            <Globe className="h-5 w-5 text-primary" />
+                            <Globe className="h-5 w-5 text-purple-400" />
                             Enable External Access?
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-muted-foreground">
@@ -3062,7 +3055,7 @@ export function ServerDetailPage() {
                                 href="https://dashboard.ngrok.com/get-started/your-authtoken"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-primary hover:underline"
+                                className="text-purple-400 hover:underline"
                                 onClick={(e) => {
                                     e.preventDefault()
                                     window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
@@ -3080,7 +3073,7 @@ export function ServerDetailPage() {
                             No, local only
                         </AlertDialogCancel>
                         <Button
-                            className="bg-primary text-foreground hover:bg-primary/90"
+                            className="bg-purple-500 text-white hover:bg-purple-400"
                             onClick={(e) => {
                                 e.preventDefault()
                                 handleEnableNgrok()
@@ -3116,7 +3109,7 @@ export function ServerDetailPage() {
                                     <>
                                         <div className="h-2 w-full rounded-full bg-muted/50 overflow-hidden">
                                             <div
-                                                className="h-full bg-primary rounded-full transition-all duration-300"
+                                                className="h-full bg-purple-500 rounded-full transition-all duration-300"
                                                 style={{ width: `${ngrokInstallProgress}%` }}
                                             />
                                         </div>

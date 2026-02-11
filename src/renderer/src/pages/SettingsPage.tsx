@@ -122,9 +122,9 @@ export function SettingsPage() {
             </header>
             
             {tokenSuccess && (
-                <Alert className="border-primary/30 bg-primary/10">
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                    <AlertTitle className="text-primary">Success</AlertTitle>
+                <Alert className="border-purple-400/40 bg-purple-400/10">
+                    <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                    <AlertTitle className="text-purple-400">Success</AlertTitle>
                     <AlertDescription className="text-muted-foreground">
                         Ngrok authtoken has been updated successfully.
                     </AlertDescription>
@@ -133,7 +133,7 @@ export function SettingsPage() {
             
             {loading ? (
                 <div className="flex items-center justify-center py-8">
-                    <Spinner className="h-8 w-8 text-primary" />
+                    <Spinner className="h-8 w-8 text-purple-400" />
                 </div>
             ) : (
                 <div className="grid gap-6">
@@ -141,7 +141,7 @@ export function SettingsPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-purple-400">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                                 </svg>
                                 Ngrok Settings
@@ -162,6 +162,7 @@ export function SettingsPage() {
                                 <Switch
                                     checked={ngrokEnabled}
                                     onCheckedChange={handleToggleNgrok}
+                                    className="data-[state=checked]:bg-purple-500"
                                 />
                             </div>
                             
@@ -194,7 +195,7 @@ export function SettingsPage() {
                                     Get your free authtoken at{" "}
                                     <a
                                         href="#"
-                                        className="text-primary hover:underline"
+                                        className="text-purple-400 hover:underline"
                                         onClick={(e) => {
                                             e.preventDefault()
                                             window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
@@ -212,8 +213,8 @@ export function SettingsPage() {
                     <Card className="bg-card/70">
                         <CardContent className="pt-6">
                             <div className="flex gap-3">
-                                <div className="p-2 rounded-lg bg-primary/10">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-400/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-purple-400">
                                         <circle cx="12" cy="12" r="10"/>
                                         <path d="M12 16v-4"/>
                                         <path d="M12 8h.01"/>
@@ -223,7 +224,7 @@ export function SettingsPage() {
                                     <p className="font-medium text-foreground/80">About Ngrok</p>
                                     <p className="text-sm text-muted-foreground">
                                         Ngrok creates secure tunnels to your local servers, allowing players from anywhere in the world to connect to your Minecraft server. 
-                                        Each server can have its own ngrok tunnel, giving you a public address like <code className="text-primary bg-primary/10 px-1 rounded">0.tcp.ngrok.io:12345</code>.
+                                        Each server can have its own ngrok tunnel, giving you a public address like <code className="text-purple-300 bg-purple-400/10 px-1 rounded">0.tcp.ngrok.io:12345</code>.
                                     </p>
                                 </div>
                             </div>

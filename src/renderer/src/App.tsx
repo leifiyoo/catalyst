@@ -99,7 +99,7 @@ const App = () => {
     }, []);
 
     return (
-        <div className="relative w-full h-screen bg-background text-foreground" style={{ borderRadius: '12px', overflow: 'hidden' }}>
+        <div className="relative w-full h-full min-h-screen bg-background text-foreground" style={{ borderRadius: '12px', overflow: 'auto' }}>
             {showTitleBar && !showDashboard && <TitleBar isMaximized={isMaximized} />}
             {!showDashboard && (
                 <>
