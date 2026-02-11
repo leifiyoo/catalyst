@@ -19,6 +19,8 @@ import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
 
 const SERVERS_DIR = path.join(app.getPath("userData"), "servers");
 const SERVERS_JSON = path.join(app.getPath("userData"), "servers.json");
+const SERVERS_JSON_BAK = path.join(app.getPath("userData"), "servers.json.bak");
+const SERVERS_JSON_TMP = path.join(app.getPath("userData"), "servers.json.tmp");
 
 // ---- Framework Download Resolvers ----
 
@@ -171,13 +173,34 @@ async function loadServerList(): Promise<ServerRecord[]> {
   try {
     const data = await fs.readFile(SERVERS_JSON, "utf-8");
     return JSON.parse(data) as ServerRecord[];
-  } catch {
-    return [];
+  } catch (err) {
+    try {
+      const backup = await fs.readFile(SERVERS_JSON_BAK, "utf-8");
+      return JSON.parse(backup) as ServerRecord[];
+    } catch {
+      console.error("Failed to read servers.json:", err);
+      return [];
+    }
   }
 }
 
 async function saveServerList(servers: ServerRecord[]): Promise<void> {
-  await fs.writeFile(SERVERS_JSON, JSON.stringify(servers, null, 2), "utf-8");
+  const payload = JSON.stringify(servers, null, 2);
+  await fs.writeFile(SERVERS_JSON_TMP, payload, "utf-8");
+
+  try {
+    await fs.copyFile(SERVERS_JSON, SERVERS_JSON_BAK);
+  } catch {
+    // Ignore if there is no prior file
+  }
+
+  try {
+    await fs.rm(SERVERS_JSON, { force: true });
+  } catch {
+    // Ignore if the file is missing
+  }
+
+  await fs.rename(SERVERS_JSON_TMP, SERVERS_JSON);
 }
 
 function downloadFile(

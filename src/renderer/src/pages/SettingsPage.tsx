@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -22,8 +29,10 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { CheckCircle2, ExternalLink, Trash2 } from "lucide-react"
+import { getStoredTheme, setStoredTheme, type ThemeMode } from "@/utils/theme"
 
 export function SettingsPage() {
+    const [theme, setTheme] = useState<ThemeMode>("dark")
     // Ngrok settings state
     const [ngrokEnabled, setNgrokEnabledState] = useState(true)
     const [censoredToken, setCensoredToken] = useState<string | null>(null)
@@ -40,6 +49,7 @@ export function SettingsPage() {
     
     // Load ngrok settings on mount
     useEffect(() => {
+        setTheme(getStoredTheme())
         loadNgrokSettings()
     }, [])
     
@@ -63,6 +73,12 @@ export function SettingsPage() {
     const handleToggleNgrok = async (enabled: boolean) => {
         await window.context.setNgrokEnabled(enabled)
         setNgrokEnabledState(enabled)
+    }
+
+    const handleThemeChange = (value: string) => {
+        const nextTheme: ThemeMode = value === "light" ? "light" : "dark"
+        setTheme(nextTheme)
+        setStoredTheme(nextTheme)
     }
     
     const handleValidateAndSaveToken = async () => {
@@ -122,9 +138,9 @@ export function SettingsPage() {
             </header>
             
             {tokenSuccess && (
-                <Alert className="border-purple-400/40 bg-purple-400/10">
-                    <CheckCircle2 className="h-4 w-4 text-purple-400" />
-                    <AlertTitle className="text-purple-400">Success</AlertTitle>
+                <Alert className="border-primary/40 bg-primary/10">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <AlertTitle className="text-primary">Success</AlertTitle>
                     <AlertDescription className="text-muted-foreground">
                         Ngrok authtoken has been updated successfully.
                     </AlertDescription>
@@ -133,15 +149,50 @@ export function SettingsPage() {
             
             {loading ? (
                 <div className="flex items-center justify-center py-8">
-                    <Spinner className="h-8 w-8 text-purple-400" />
+                    <Spinner className="h-8 w-8 text-primary" />
                 </div>
             ) : (
                 <div className="grid gap-6">
+                    {/* Appearance Settings Card */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
+                                    <path d="M12 3a9 9 0 1 0 9 9" />
+                                    <path d="M12 3v9l6.75 6.75" />
+                                </svg>
+                                Appearance
+                            </CardTitle>
+                            <CardDescription>
+                                Choose how Catalyst looks on your device
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <p className="font-medium">Theme</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Choose light or dark mode for the app
+                                    </p>
+                                </div>
+                                <Select value={theme} onValueChange={handleThemeChange}>
+                                    <SelectTrigger className="w-44">
+                                        <SelectValue placeholder="Select theme" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="dark">Dark mode</SelectItem>
+                                        <SelectItem value="light">Light mode</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Ngrok Settings Card */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-purple-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                                 </svg>
                                 Ngrok Settings
@@ -162,7 +213,7 @@ export function SettingsPage() {
                                 <Switch
                                     checked={ngrokEnabled}
                                     onCheckedChange={handleToggleNgrok}
-                                    className="data-[state=checked]:bg-purple-500"
+                                    className="data-[state=checked]:bg-primary"
                                 />
                             </div>
                             
@@ -195,7 +246,7 @@ export function SettingsPage() {
                                     Get your free authtoken at{" "}
                                     <a
                                         href="#"
-                                        className="text-purple-400 hover:underline"
+                                        className="text-primary hover:underline"
                                         onClick={(e) => {
                                             e.preventDefault()
                                             window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
@@ -213,8 +264,8 @@ export function SettingsPage() {
                     <Card className="bg-card/70">
                         <CardContent className="pt-6">
                             <div className="flex gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-400/10">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-purple-400">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary">
                                         <circle cx="12" cy="12" r="10"/>
                                         <path d="M12 16v-4"/>
                                         <path d="M12 8h.01"/>
@@ -224,7 +275,7 @@ export function SettingsPage() {
                                     <p className="font-medium text-foreground/80">About Ngrok</p>
                                     <p className="text-sm text-muted-foreground">
                                         Ngrok creates secure tunnels to your local servers, allowing players from anywhere in the world to connect to your Minecraft server. 
-                                        Each server can have its own ngrok tunnel, giving you a public address like <code className="text-purple-300 bg-purple-400/10 px-1 rounded">0.tcp.ngrok.io:12345</code>.
+                                        Each server can have its own ngrok tunnel, giving you a public address like <code className="text-primary bg-primary/10 px-1 rounded">0.tcp.ngrok.io:12345</code>.
                                     </p>
                                 </div>
                             </div>
@@ -251,7 +302,7 @@ export function SettingsPage() {
                 <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Change Ngrok Authtoken</AlertDialogTitle>
-                        <AlertDialogDescription className="text-white/60">
+                        <AlertDialogDescription className="text-muted-foreground">
                             Enter your new ngrok authtoken. It will be validated before being saved.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -266,7 +317,7 @@ export function SettingsPage() {
                             }}
                         />
                         {tokenError && (
-                            <p className="text-sm text-red-400 mt-2">{tokenError}</p>
+                            <p className="text-sm text-destructive mt-2">{tokenError}</p>
                         )}
                     </div>
                     <AlertDialogFooter>
@@ -295,7 +346,7 @@ export function SettingsPage() {
                 <AlertDialogContent className="border-border bg-popover">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Remove Authtoken</AlertDialogTitle>
-                        <AlertDialogDescription className="text-white/60">
+                        <AlertDialogDescription className="text-muted-foreground">
                             Are you sure you want to remove your ngrok authtoken? You will need to enter a new token to use ngrok tunnels.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -304,7 +355,7 @@ export function SettingsPage() {
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-red-500 text-white hover:bg-red-400"
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             onClick={handleRemoveToken}
                         >
                             Remove

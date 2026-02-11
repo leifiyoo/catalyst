@@ -77,7 +77,6 @@ const App = () => {
         }, 5000);
 
         const unsubscribe = window.context?.onResizeStep?.(() => {
-            window.dispatchEvent(new Event("ballpit-resize-now"));
             window.dispatchEvent(new Event("resize"));
         });
 
@@ -103,7 +102,6 @@ const App = () => {
             {showTitleBar && !showDashboard && <TitleBar isMaximized={isMaximized} />}
             {!showDashboard && (
                 <>
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_55%),radial-gradient(circle_at_bottom,rgba(0,0,0,0.35),transparent_50%)]" />
                     <SplashScreen showSpinner={showSpinner} />
                 </>
             )}

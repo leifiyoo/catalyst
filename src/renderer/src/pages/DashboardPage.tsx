@@ -42,7 +42,21 @@ export function DashboardPage() {
     const [deleteTarget, setDeleteTarget] = useState<ServerRecord | null>(null)
 
     useEffect(() => {
-        window.context.getServers().then(setServers)
+        const refreshServers = () => {
+            window.context.getServers().then(setServers)
+        }
+        const handleVisibilityChange = () => {
+            if (!document.hidden) refreshServers()
+        }
+
+        refreshServers()
+        window.addEventListener("focus", refreshServers)
+        document.addEventListener("visibilitychange", handleVisibilityChange)
+
+        return () => {
+            window.removeEventListener("focus", refreshServers)
+            document.removeEventListener("visibilitychange", handleVisibilityChange)
+        }
     }, [])
 
     // Subscribe to real-time server status updates
@@ -289,7 +303,13 @@ export function DashboardPage() {
                                     </div>
                                     <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">Status</span>
-                                        <Badge className="bg-muted text-muted-foreground">
+                                        <Badge className={
+                                            lastCreated.status === "Online"
+                                                ? "bg-primary/15 text-primary"
+                                                : lastCreated.status === "Idle"
+                                                  ? "bg-muted text-muted-foreground"
+                                                  : "bg-destructive/15 text-destructive"
+                                        }>
                                             {lastCreated.status}
                                         </Badge>
                                     </div>
@@ -313,7 +333,7 @@ export function DashboardPage() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-red-500 hover:bg-red-600"
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             onClick={() => deleteTarget && handleDeleteServer(deleteTarget)}
                         >
                             Delete

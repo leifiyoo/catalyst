@@ -18,10 +18,10 @@ export function ErrorPage() {
   }
 
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-center bg-[#09090b] text-white p-4">
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-background text-foreground p-4">
       <div className="flex flex-col items-center gap-4 text-center max-w-md">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
-          <AlertCircle className="h-10 w-10 text-red-500" />
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
+          <AlertCircle className="h-10 w-10 text-destructive" />
         </div>
         <h1 className="text-2xl font-bold">Oops! Something went wrong</h1>
         <p className="text-muted-foreground">
@@ -35,8 +35,8 @@ export function ErrorPage() {
                 Reload Application
             </Button>
         </div>
-        <div className="mt-8 p-4 bg-black/30 rounded-lg text-left w-full overflow-auto max-h-[200px] border border-white/5">
-            <code className="text-xs font-mono text-white/50 whitespace-pre-wrap">
+        <div className="mt-8 p-4 bg-muted rounded-lg text-left w-full overflow-auto max-h-[200px] border border-border">
+            <code className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
                 {String(error)}
             </code>
         </div>

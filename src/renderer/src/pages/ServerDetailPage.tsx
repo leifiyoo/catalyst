@@ -172,20 +172,20 @@ export function ServerDetailPage() {
     // Helper for tag colors and icons
     const getTagConfig = (tag: string) => {
         const lower = tag.toLowerCase()
-        if (lower.includes("fabric")) return { color: "bg-stone-200/10 text-[#d6c2a3] border-stone-500/20 hover:bg-stone-500/20", icon: ScrollText }
-        if (lower.includes("forge")) return { color: "bg-indigo-500/10 text-indigo-300 border-indigo-500/20 hover:bg-indigo-500/20", icon: Anvil }
-        if (lower.includes("neoforge")) return { color: "bg-orange-500/10 text-orange-300 border-orange-500/20 hover:bg-orange-500/20", icon: Zap }
+        if (lower.includes("fabric")) return { color: "bg-stone-500/10 text-stone-600 dark:text-stone-400 border-stone-500/20 hover:bg-stone-500/15", icon: ScrollText }
+        if (lower.includes("forge")) return { color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/15", icon: Anvil }
+        if (lower.includes("neoforge")) return { color: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/15", icon: Zap }
         if (lower.includes("quilt")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/15", icon: Layers }
-        if (lower.includes("paper")) return { color: "bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20", icon: Send } 
-        if (lower.includes("spigot")) return { color: "bg-yellow-500/10 text-yellow-300 border-yellow-500/20 hover:bg-yellow-500/20", icon: Droplet }
-        if (lower.includes("velocity")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20", icon: Wind } 
-        if (lower.includes("folia")) return { color: "bg-green-500/10 text-green-300 border-green-500/20 hover:bg-green-500/20", icon: Leaf }
-        if (lower.includes("bukkit")) return { color: "bg-orange-700/10 text-orange-400 border-orange-700/20 hover:bg-orange-700/20", icon: Box }
-        if (lower.includes("bungeecord")) return { color: "bg-yellow-600/10 text-yellow-400 border-yellow-600/20 hover:bg-yellow-600/20", icon: Layers }
-        if (lower.includes("waterfall")) return { color: "bg-blue-600/10 text-blue-400 border-blue-600/20 hover:bg-blue-600/20", icon: Droplet }
-        if (lower.includes("sponge")) return { color: "bg-yellow-400/10 text-yellow-300 border-yellow-400/20 hover:bg-yellow-400/20", icon: Square }
-        if (lower.includes("purpur")) return { color: "bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/20 hover:bg-fuchsia-500/20", icon: Box }
-        return { color: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20 hover:bg-zinc-500/20", icon: Box }
+        if (lower.includes("paper")) return { color: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/15", icon: Send }
+        if (lower.includes("spigot")) return { color: "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100", icon: Droplet }
+        if (lower.includes("velocity")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20", icon: Wind }
+        if (lower.includes("folia")) return { color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 hover:bg-green-500/15", icon: Leaf }
+        if (lower.includes("bukkit")) return { color: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/15", icon: Box }
+        if (lower.includes("bungeecord")) return { color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/15", icon: Layers }
+        if (lower.includes("waterfall")) return { color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/15", icon: Droplet }
+        if (lower.includes("sponge")) return { color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/15", icon: Square }
+        if (lower.includes("purpur")) return { color: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20 hover:bg-fuchsia-500/15", icon: Box }
+        return { color: "bg-muted text-muted-foreground border-border hover:bg-muted/80", icon: Box }
     }
 
     // Files state
@@ -1287,7 +1287,7 @@ export function ServerDetailPage() {
                             {server.status === "Online" && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
                                 <Badge
                                     variant="outline"
-                                    className="gap-1.5 font-normal text-purple-400 cursor-pointer hover:text-purple-300 transition-colors border-purple-400/30"
+                                    className="gap-1.5 font-normal text-primary cursor-pointer hover:text-primary/80 transition-colors border-primary/30"
                                     onClick={handleCopyNgrokUrl}
                                 >
                                     <Link className="h-3 w-3" />
@@ -1412,7 +1412,7 @@ export function ServerDetailPage() {
                             <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-primary animate-pulse" : "bg-muted-foreground/40"}`} />
                         </div>
                         <div className="rounded-xl border border-border overflow-hidden">
-                            <div className="h-[420px] overflow-auto bg-black/80 font-mono text-xs text-zinc-300 select-text p-4">
+                            <div className="h-[420px] overflow-auto bg-[#2c2b28] font-mono text-xs text-[#e8e4df] select-text p-4">
                                 {consoleLines.length === 0 ? (
                                     <p className="text-muted-foreground">
                                         {isOnline ? "Waiting for output..." : "Start the server to see console output"}
@@ -1423,10 +1423,10 @@ export function ServerDetailPage() {
                                             key={i}
                                             className={
                                                 line.type === "stderr"
-                                                    ? "text-red-400"
+                                                    ? "text-destructive"
                                                     : line.type === "system"
                                                       ? "text-primary"
-                                                      : "text-zinc-300"
+                                                      : "text-[#e8e4df]"
                                             }
                                         >
                                             {renderAnsiText(line.text)}
@@ -1856,7 +1856,7 @@ export function ServerDetailPage() {
                                                         <div className="flex flex-wrap items-center gap-2 mt-2">
                                                             {/* Client/Server Tag */}
                                                             {(hit.clientSide !== 'unsupported' || hit.serverSide !== 'unsupported') && (
-                                                                <Badge variant="outline" className="flex items-center gap-1.5 border-border bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20 px-2 py-0.5 font-normal">
+                                                                <Badge variant="outline" className="flex items-center gap-1.5 border-border bg-muted text-muted-foreground hover:bg-muted/80 px-2 py-0.5 font-normal">
                                                                     <Globe className="h-3 w-3" />
                                                                     <span>
                                                                         {hit.clientSide === 'required' && hit.serverSide === 'required' ? 'Client & Server' :
@@ -1900,7 +1900,7 @@ export function ServerDetailPage() {
                                                                             <TooltipProvider>
                                                                                 <Tooltip>
                                                                                     <TooltipTrigger asChild>
-                                                                                        <Badge variant="outline" className="flex items-center gap-1 border-border bg-zinc-500/10 text-zinc-300 hover:bg-zinc-500/20 px-2 py-0.5 font-normal cursor-help">
+                                                                                        <Badge variant="outline" className="flex items-center gap-1 border-border bg-muted text-muted-foreground hover:bg-muted/80 px-2 py-0.5 font-normal cursor-help">
                                                                                             <Plus className="h-3 w-3" />
                                                                                             <span>{overflow.length}</span>
                                                                                         </Badge>
@@ -1949,7 +1949,7 @@ export function ServerDetailPage() {
                                                         {/* Action Button */}
                                                         <div onClick={e => e.stopPropagation()} className="my-1">
                                                              {installedProjectIds.has(hit.projectId) ? (
-                                                                <Button size="sm" className="h-7 text-xs bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/20 cursor-default" disabled>
+                                                                <Button size="sm" className="h-7 text-xs bg-primary/15 text-primary hover:bg-primary/15 cursor-default" disabled>
                                                                     Installed
                                                                 </Button>
                                                             ) : modrinthInstalling[hit.projectId] ? (
@@ -1958,7 +1958,7 @@ export function ServerDetailPage() {
                                                                     Downloading
                                                                 </Button>
                                                             ) : (
-                                                                <Button size="sm" className="h-7 text-xs bg-white text-black hover:bg-zinc-200" onClick={() => handleInstallModrinth(hit)}>
+                                                                <Button size="sm" className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => handleInstallModrinth(hit)}>
                                                                     <Download className="h-3.5 w-3.5 mr-1.5" />
                                                                     Install
                                                                 </Button>
@@ -2000,7 +2000,7 @@ export function ServerDetailPage() {
                                                         handleSearchModrinth(nextPage)
                                                     }}
                                                     disabled={modrinthPage === 0 || modrinthLoading}
-                                                    className="bg-zinc-800 border-border text-foreground hover:bg-zinc-700 h-8"
+                                                    className="border-border text-foreground hover:bg-secondary h-8"
                                                 >
                                                     <ChevronLeft className="h-4 w-4 mr-1" />
                                                     Prev
@@ -2013,7 +2013,7 @@ export function ServerDetailPage() {
                                                         handleSearchModrinth(nextPage)
                                                     }}
                                                     disabled={modrinthLoading || (modrinthPage + 1) * 20 >= modrinthTotalHits}
-                                                    className="bg-zinc-800 border-border text-foreground hover:bg-zinc-700 h-8"
+                                                    className="border-border text-foreground hover:bg-secondary h-8"
                                                 >
                                                     Next
                                                     <ChevronRight className="h-4 w-4 ml-1" />
@@ -2027,7 +2027,7 @@ export function ServerDetailPage() {
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between">
                                     <div>
-                                        <CardTitle className="text-white">Installed {modrinthContext.label}</CardTitle>
+                                        <CardTitle>Installed {modrinthContext.label}</CardTitle>
                                         <CardDescription className="text-muted-foreground">
                                             Manage installed {modrinthContext.label.toLowerCase()}
                                         </CardDescription>
@@ -2057,7 +2057,7 @@ export function ServerDetailPage() {
                                                 >
                                                     <div className="flex items-center gap-3 min-w-0">
                                                         <div className="relative h-10 w-10 shrink-0">
-                                                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400/30 via-slate-900/60 to-slate-950/80 text-xs font-semibold text-emerald-100">
+                                                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
                                                                 {entry.title.charAt(0).toUpperCase()}
                                                             </div>
                                                             {entry.iconUrl && (
@@ -2273,9 +2273,9 @@ export function ServerDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 {fileError && (
-                                    <Alert className="mb-4 border-red-400/30 bg-red-400/10">
-                                        <AlertTitle className="text-red-400">Editor error</AlertTitle>
-                                        <AlertDescription className="text-red-400/80">
+                                    <Alert className="mb-4 border-destructive/30 bg-destructive/10">
+                                        <AlertTitle className="text-destructive">Editor error</AlertTitle>
+                                        <AlertDescription className="text-destructive/80">
                                             {fileError}
                                         </AlertDescription>
                                     </Alert>
@@ -2295,7 +2295,7 @@ export function ServerDetailPage() {
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="rounded-xl border border-border bg-black/50">
+                                        <div className="rounded-xl border border-border bg-[#2c2b28]">
                                             {fileLoading ? (
                                                 <div className="flex items-center justify-center py-16">
                                                     <Spinner className="text-primary" />
@@ -2326,7 +2326,7 @@ export function ServerDetailPage() {
                     {/* File Context Menu & Modals */}
                     {contextMenu && (
                         <div
-                            className="fixed z-50 min-w-[160px] rounded-lg border border-border bg-[#1e1e24] p-1 shadow-xl animate-in fade-in zoom-in-95"
+                            className="fixed z-50 min-w-[160px] rounded-lg border border-border bg-card p-1 shadow-xl animate-in fade-in zoom-in-95"
                             style={{ top: contextMenu.y, left: contextMenu.x }}
                             onClick={(e) => e.stopPropagation()}
                         >
@@ -2334,20 +2334,20 @@ export function ServerDetailPage() {
                             <button onClick={handleRenameClick} className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-muted/50 rounded-md">Rename</button>
                             <button onClick={handleDuplicateClick} className="w-full text-left px-2 py-1.5 text-xs text-foreground hover:bg-muted/50 rounded-md">Duplicate</button>
                             <div className="h-[1px] bg-muted/50 my-1" />
-                            <button onClick={handleDeleteClick} className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-muted/50 rounded-md">Delete</button>
+                            <button onClick={handleDeleteClick} className="w-full text-left px-2 py-1.5 text-xs text-destructive hover:bg-muted/50 rounded-md">Delete</button>
                         </div>
                     )}
 
                     <Dialog open={fileRenameDialogOpen} onOpenChange={setFileRenameDialogOpen}>
-                        <DialogContent className="bg-[#121218] border-border">
+                        <DialogContent className="bg-card border-border">
                             <DialogHeader>
-                                <DialogTitle className="text-white">Rename File</DialogTitle>
+                                <DialogTitle>Rename File</DialogTitle>
                                 <DialogDescription>Enter a new name for the file.</DialogDescription>
                             </DialogHeader>
                             <Input 
                                 value={fileActionInput} 
                                 onChange={(e) => setFileActionInput(e.target.value)} 
-                                className="bg-black/20 border-border text-white font-mono" 
+                                className="border-border font-mono" 
                             />
                             <div className="flex justify-end gap-2 mt-4">
                                 <Button variant="ghost" onClick={() => setFileRenameDialogOpen(false)}>Cancel</Button>
@@ -2357,15 +2357,15 @@ export function ServerDetailPage() {
                     </Dialog>
 
                     <Dialog open={fileDuplicateDialogOpen} onOpenChange={setFileDuplicateDialogOpen}>
-                        <DialogContent className="bg-[#121218] border-border">
+                        <DialogContent className="bg-card border-border">
                             <DialogHeader>
-                                <DialogTitle className="text-white">Duplicate File</DialogTitle>
+                                <DialogTitle>Duplicate File</DialogTitle>
                                 <DialogDescription>Enter a name for the copy.</DialogDescription>
                             </DialogHeader>
                             <Input 
                                 value={fileActionInput} 
                                 onChange={(e) => setFileActionInput(e.target.value)} 
-                                className="bg-black/20 border-border text-white font-mono" 
+                                className="border-border font-mono" 
                             />
                             <div className="flex justify-end gap-2 mt-4">
                                 <Button variant="ghost" onClick={() => setFileDuplicateDialogOpen(false)}>Cancel</Button>
@@ -2375,17 +2375,17 @@ export function ServerDetailPage() {
                     </Dialog>
 
                     <AlertDialog open={fileDeleteDialogOpen} onOpenChange={setFileDeleteDialogOpen}>
-                        <AlertDialogContent className="bg-[#121218] border-border">
+                        <AlertDialogContent className="bg-card border-border">
                             <AlertDialogHeader>
-                                <AlertDialogTitle className="text-white">Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                                 <AlertDialogDescription>
                                     This action cannot be undone. This will permanently delete 
                                     <span className="text-primary font-mono mx-1">{targetEntry?.name}</span>.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                                <AlertDialogCancel className="border-border bg-muted/50 text-foreground hover:bg-muted/50 hover:text-white">Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={confirmDelete} className="bg-red-500 hover:bg-red-600">Delete</AlertDialogAction>
+                                <AlertDialogCancel className="border-border bg-muted/50 text-foreground hover:bg-muted/50 hover:text-foreground">Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
@@ -2417,7 +2417,7 @@ export function ServerDetailPage() {
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button variant="ghost" onClick={() => setCreateBackupDialogOpen(false)}>Cancel</Button>
-                            <Button onClick={handleCreateBackup} disabled={creatingBackup} className="bg-indigo-500 hover:bg-indigo-600">
+                            <Button onClick={handleCreateBackup} disabled={creatingBackup} className="bg-primary hover:bg-primary/90">
                                 {creatingBackup && <Spinner className="mr-2" />}
                                 Create
                             </Button>
@@ -2431,7 +2431,7 @@ export function ServerDetailPage() {
                     {/* Fixed Success Alert */}
                     {settingsSuccess && (
                         <div className="fixed bottom-6 right-6 z-50 w-[380px] animate-in slide-in-from-bottom-5 fade-in duration-300">
-                             <Alert className="border-primary/40 bg-[#0e1324] text-primary shadow-xl">
+                             <Alert className="border-primary/40 bg-primary/10 text-primary shadow-xl">
                                 <CheckCircle2 className="h-4 w-4" />
                                 <AlertTitle>Success</AlertTitle>
                                 <AlertDescription>Settings have been saved successfully.</AlertDescription>
@@ -2464,7 +2464,7 @@ export function ServerDetailPage() {
                                             <span className="text-muted-foreground">Platform</span>
                                             <span className="font-medium flex items-center gap-2">
                                                 {server.framework}
-                                                <Badge variant="outline" className="text-[10px] py-0 h-5 bg-black/20">{server.version}</Badge>
+                                                <Badge variant="outline" className="text-[10px] py-0 h-5 bg-muted">{server.version}</Badge>
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
@@ -2520,7 +2520,7 @@ export function ServerDetailPage() {
                     {/* Section: Performance */}
                     <div className="space-y-4">
                          <div className="flex items-center gap-2 pb-2 border-b border-border/50">
-                            <Gauge className="h-5 w-5 text-indigo-400" />
+                            <Gauge className="h-5 w-5 text-primary" />
                             <h3 className="text-lg font-semibold tracking-tight">Performance</h3>
                         </div>
                         <div className="grid gap-4 xl:grid-cols-2">
@@ -2597,7 +2597,7 @@ export function ServerDetailPage() {
                                         />
                                     </div>
                                     <Button
-                                        className="w-full bg-indigo-500 text-foreground hover:bg-indigo-600"
+                                        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                                         onClick={handleSaveSettings}
                                         disabled={settingsSaving}
                                     >
@@ -2686,19 +2686,19 @@ export function ServerDetailPage() {
                                 </CardHeader>
                                 <CardContent className="flex flex-col justify-center gap-4">
                                     {/* Work in Progress Warning */}
-                                    <div className="bg-amber-500/20 border border-amber-500/40 rounded-lg p-3 mb-2">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
                                         <div className="flex items-start gap-2">
-                                            <Info className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                                            <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                                             <div className="text-sm">
-                                                <span className="font-semibold text-amber-300">Work in Progress:</span>
-                                                <span className="text-amber-200/80 ml-1">Backup functionality is currently under development and may not work correctly.</span>
+                                                <span className="font-semibold text-amber-800">Work in Progress:</span>
+                                                <span className="text-amber-700/80 ml-1">Backup functionality is currently under development and may not work correctly.</span>
                                             </div>
                                         </div>
                                     </div>
                                     {creatingBackup ? (
                                         <div className="space-y-3">
                                             {/* Progress Bar */}
-                                            <div className="w-full bg-slate-700 rounded-full h-2.5">
+                                            <div className="w-full bg-muted rounded-full h-2.5">
                                                 <div
                                                     className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
                                                     style={{ width: `${Math.max(0, backupPercent)}%` }}
@@ -2725,7 +2725,7 @@ export function ServerDetailPage() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="w-full h-8 border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                                                className="w-full h-8 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                 onClick={handleCancelBackup}
                                             >
                                                 <X className="h-3 w-3 mr-1" />
@@ -2734,7 +2734,7 @@ export function ServerDetailPage() {
                                         </div>
                                     ) : (
                                         <Button
-                                            className="w-full h-12 bg-amber-600/80 hover:bg-amber-600 text-white"
+                                            className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
                                             onClick={() => setCreateBackupDialogOpen(true)}
                                         >
                                             <Plus className="h-4 w-4 mr-2" />
@@ -2802,7 +2802,7 @@ export function ServerDetailPage() {
                                                     <TooltipProvider>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400/70 hover:text-red-400 hover:bg-red-400/10" onClick={() => handleDeleteBackup(backup.filename)}>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteBackup(backup.filename)}>
                                                                     <Trash2 className="h-3.5 w-3.5" />
                                                                 </Button>
                                                             </TooltipTrigger>
@@ -2821,12 +2821,12 @@ export function ServerDetailPage() {
                     {/* Section: Danger Zone */}
                     <div className="space-y-4 pt-4 border-t border-border/50">
                         <div className="flex items-center gap-2 pb-2">
-                             <h3 className="text-lg font-semibold tracking-tight text-red-500/80">Danger Zone</h3>
+                             <h3 className="text-lg font-semibold tracking-tight text-destructive">Danger Zone</h3>
                         </div>
-                        <Card className="border-red-500/10 bg-red-500/5">
+                        <Card className="border-destructive/20 bg-destructive/5">
                             <CardContent className="flex items-center justify-between p-6">
                                 <div className="space-y-1">
-                                    <h4 className="text-sm font-medium text-white">Delete Server</h4>
+                                    <h4 className="text-sm font-medium text-foreground">Delete Server</h4>
                                     <p className="text-xs text-muted-foreground max-w-[400px]">
                                         This action will permanently delete this server and all associated files, logs, and backups. This action cannot be undone.
                                     </p>
@@ -2845,7 +2845,7 @@ export function ServerDetailPage() {
             </Tabs>
 
             <Dialog open={modrinthDetailOpen} onOpenChange={setModrinthDetailOpen}>
-                <DialogContent className="max-w-[800px] border-border bg-[#0e1324] max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <DialogContent className="max-w-[800px] border-border bg-card max-h-[85vh] overflow-y-auto custom-scrollbar">
                     <DialogHeader>
                         <DialogTitle>Modrinth Overview</DialogTitle>
                         <DialogDescription className="text-muted-foreground">
@@ -2866,14 +2866,14 @@ export function ServerDetailPage() {
                             {/* Header Section */}
                             <div className="flex items-start gap-4">
                                 <div className="relative h-20 w-20 shrink-0">
-                                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[#1c1c1c] text-2xl font-bold text-muted-foreground/20 border border-border/50">
+                                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-muted text-2xl font-bold text-muted-foreground/20 border border-border/50">
                                         {modrinthDetail.title.charAt(0).toUpperCase()}
                                     </div>
                                     {modrinthDetail.iconUrl && (
                                         <img
                                             src={modrinthDetail.iconUrl}
                                             alt={modrinthDetail.title}
-                                            className="relative h-20 w-20 rounded-2xl object-contain bg-[#1c1c1c] border border-border/50"
+                                            className="relative h-20 w-20 rounded-2xl object-contain bg-muted border border-border/50"
                                             onError={(e) => {
                                                 e.currentTarget.style.opacity = "0"
                                             }}
@@ -2881,7 +2881,7 @@ export function ServerDetailPage() {
                                     )}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <h2 className="text-2xl font-bold text-white truncate">
+                                    <h2 className="text-2xl font-bold text-foreground truncate">
                                         {modrinthDetail.title}
                                     </h2>
                                     <p className="text-base text-muted-foreground mt-1">
@@ -2910,7 +2910,7 @@ export function ServerDetailPage() {
                                 <div className="flex flex-col gap-2 shrink-0">
                                      {installedProjectIds.has(modrinthDetail.projectId) ? (
                                         <Button
-                                            className="bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/20 cursor-default w-full"
+                                            className="bg-primary/15 text-primary hover:bg-primary/15 cursor-default w-full"
                                             disabled
                                         >
                                             <Check className="h-4 w-4 mr-2" />
@@ -2923,7 +2923,7 @@ export function ServerDetailPage() {
                                         </Button>
                                     ) : (
                                         <Button
-                                            className="bg-white text-black hover:bg-zinc-200 w-full"
+                                            className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
                                             onClick={() =>
                                                 handleInstallModrinth({
                                                     projectId: modrinthDetail.projectId,
@@ -2945,7 +2945,7 @@ export function ServerDetailPage() {
                                     {modrinthDetail.slug && (
                                         <Button
                                             variant="ghost"
-                                            className="w-full justify-start text-muted-foreground hover:text-white"
+                                            className="w-full justify-start text-muted-foreground hover:text-foreground"
                                             onClick={() => handleOpenModrinth({ slug: modrinthDetail.slug, projectType: modrinthContext?.projectType ?? "plugin" })}
                                         >
                                             <ExternalLink className="h-4 w-4 mr-2" />
@@ -2964,7 +2964,7 @@ export function ServerDetailPage() {
                                                 key={image.url}
                                                 src={image.url}
                                                 alt={image.title || modrinthDetail.title}
-                                                className="h-48 rounded-lg object-cover border border-border bg-black/20 snap-start"
+                                                className="h-48 rounded-lg object-cover border border-border bg-muted snap-start"
                                                 loading="lazy"
                                             />
                                         ))}
@@ -2974,7 +2974,7 @@ export function ServerDetailPage() {
 
                             <div className="space-y-2">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">About</h3>
-                                <div className="rounded-xl border border-border bg-card p-6 text-sm text-foreground/80 leading-relaxed font-sans prose prose-invert max-w-none">
+                                <div className="rounded-xl border border-border bg-card p-6 text-sm text-foreground/80 leading-relaxed font-sans prose max-w-none">
                                     {/* Rudimentary markdown support (converting newlines and links) would go here ideally */}
                                     {/* For now, preserving whitespace and basic structure */}
                                     <div className="whitespace-pre-wrap font-sans">
@@ -2989,7 +2989,7 @@ export function ServerDetailPage() {
 
             {/* EULA Dialog */}
             <AlertDialog open={eulaDialogOpen} onOpenChange={setEulaDialogOpen}>
-                <AlertDialogContent className="border-border bg-[#121218]">
+                <AlertDialogContent className="border-border bg-card">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Minecraft EULA</AlertDialogTitle>
                         <AlertDialogDescription className="text-muted-foreground">
@@ -3021,10 +3021,10 @@ export function ServerDetailPage() {
 
             {/* Ngrok Dialog */}
             <AlertDialog open={ngrokDialogOpen} onOpenChange={setNgrokDialogOpen}>
-                <AlertDialogContent className="border-border bg-[#121218] max-w-md">
+                <AlertDialogContent className="border-border bg-card max-w-md">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
-                            <Globe className="h-5 w-5 text-purple-400" />
+                            <Globe className="h-5 w-5 text-primary" />
                             Enable External Access?
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-muted-foreground">
@@ -3034,7 +3034,7 @@ export function ServerDetailPage() {
                     </AlertDialogHeader>
                     <div className="space-y-3 py-4">
                         <label className="text-sm font-medium text-foreground/80">
-                            Ngrok Authtoken <span className="text-red-400">*</span>
+                            Ngrok Authtoken <span className="text-destructive">*</span>
                         </label>
                         <Input
                             type="password"
@@ -3044,10 +3044,10 @@ export function ServerDetailPage() {
                                 setNgrokAuthtoken(e.target.value)
                                 setNgrokAuthtokenError(null)
                             }}
-                            className="bg-muted/50 border-border text-white placeholder:text-muted-foreground/40"
+                            className="bg-muted/50 border-border placeholder:text-muted-foreground/40"
                         />
                         {ngrokAuthtokenError && (
-                            <p className="text-sm text-red-400">{ngrokAuthtokenError}</p>
+                            <p className="text-sm text-destructive">{ngrokAuthtokenError}</p>
                         )}
                         <p className="text-xs text-muted-foreground/60">
                             Get your free authtoken at{" "}
@@ -3055,7 +3055,7 @@ export function ServerDetailPage() {
                                 href="https://dashboard.ngrok.com/get-started/your-authtoken"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-purple-400 hover:underline"
+                                className="text-primary hover:underline"
                                 onClick={(e) => {
                                     e.preventDefault()
                                     window.context.openExternal("https://dashboard.ngrok.com/get-started/your-authtoken")
@@ -3073,7 +3073,7 @@ export function ServerDetailPage() {
                             No, local only
                         </AlertDialogCancel>
                         <Button
-                            className="bg-purple-500 text-white hover:bg-purple-400"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90"
                             onClick={(e) => {
                                 e.preventDefault()
                                 handleEnableNgrok()
@@ -3095,7 +3095,7 @@ export function ServerDetailPage() {
 
             {/* Ngrok Installing Dialog */}
             <AlertDialog open={ngrokInstalling}>
-                <AlertDialogContent className="border-border bg-[#121218]">
+                <AlertDialogContent className="border-border bg-card">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2">
                             <Spinner className="h-5 w-5" />
@@ -3109,7 +3109,7 @@ export function ServerDetailPage() {
                                     <>
                                         <div className="h-2 w-full rounded-full bg-muted/50 overflow-hidden">
                                             <div
-                                                className="h-full bg-purple-500 rounded-full transition-all duration-300"
+                                                className="h-full bg-primary rounded-full transition-all duration-300"
                                                 style={{ width: `${ngrokInstallProgress}%` }}
                                             />
                                         </div>
@@ -3124,7 +3124,7 @@ export function ServerDetailPage() {
 
             {/* Delete Dialog */}
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                <AlertDialogContent className="border-border bg-[#121218]">
+                <AlertDialogContent className="border-border bg-card">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete server "{server.name}"?</AlertDialogTitle>
                         <AlertDialogDescription className="text-muted-foreground">
@@ -3137,7 +3137,7 @@ export function ServerDetailPage() {
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-red-500 text-foreground hover:bg-red-600"
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             onClick={handleDeleteServer}
                         >
                             Delete server

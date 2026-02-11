@@ -21,8 +21,7 @@ export function DashboardLayout() {
     }, [])
 
     return (
-        <div className="relative h-full min-h-screen w-full bg-background text-foreground dark" style={{ borderRadius: '12px', overflow: 'auto' }}>
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.05),transparent_60%),radial-gradient(circle_at_bottom,rgba(0,0,0,0.35),transparent_55%)]" />
+        <div className="relative h-full min-h-screen w-full bg-background text-foreground" style={{ borderRadius: '12px', overflow: 'auto' }}>
             <TitleBar isMaximized={isMaximized} />
             <SidebarProvider>
                 <div className="flex h-full w-full min-h-0">

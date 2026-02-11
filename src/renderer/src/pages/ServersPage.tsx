@@ -103,7 +103,21 @@ export function ServersPage() {
 
     // Load servers on mount
     useEffect(() => {
-        window.context.getServers().then(setServers)
+        const refreshServers = () => {
+            window.context.getServers().then(setServers)
+        }
+        const handleVisibilityChange = () => {
+            if (!document.hidden) refreshServers()
+        }
+
+        refreshServers()
+        window.addEventListener("focus", refreshServers)
+        document.addEventListener("visibilitychange", handleVisibilityChange)
+
+        return () => {
+            window.removeEventListener("focus", refreshServers)
+            document.removeEventListener("visibilitychange", handleVisibilityChange)
+        }
     }, [])
 
     // Subscribe to creation progress
@@ -632,7 +646,7 @@ export function ServersPage() {
                             Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-red-500 text-white hover:bg-red-600"
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             onClick={() =>
                                 deleteTarget &&
                                 handleDeleteServer(deleteTarget)
@@ -673,7 +687,7 @@ export function ServersPage() {
                             disabled={isImporting}
                         />
                         {importError && (
-                            <p className="mt-2 text-sm text-red-400">{importError}</p>
+                            <p className="mt-2 text-sm text-destructive">{importError}</p>
                         )}
                     </div>
                     <AlertDialogFooter>
