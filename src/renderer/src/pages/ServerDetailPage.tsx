@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
+// @ts-ignore - AnalyticsTab import
+import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { useParams, useNavigate } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1321,6 +1323,7 @@ export function ServerDetailPage() {
                         <TabsTrigger value="files" onClick={() => handleLoadFiles(currentPath)} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Files</TabsTrigger>
                         <TabsTrigger value="settings" onClick={loadBackups} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Settings</TabsTrigger>
                         <TabsTrigger value="properties" onClick={() => { handleLoadProperties(); handleLoadWhitelist(); handleLoadBanlist(); }} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Properties</TabsTrigger>
+                        <TabsTrigger value="analytics" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Analytics</TabsTrigger>
                     </TabsList>
                 </div>
 
@@ -2841,6 +2844,11 @@ export function ServerDetailPage() {
                             </CardContent>
                         </Card>
                     </div>
+                </TabsContent>
+
+                {/* Analytics Tab */}
+                <TabsContent value="analytics" className="mt-0 px-10 pt-6 max-h-[75vh] overflow-y-auto pr-2">
+                    <AnalyticsTab serverId={id || ""} />
                 </TabsContent>
             </Tabs>
 
