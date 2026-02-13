@@ -136,6 +136,10 @@ dist
 Thumbs.db
 
 # Electron build output
+
+# Gradle build artifacts (catalyst-plugin)
+catalyst-plugin/.gradle/
+catalyst-plugin/build/
 release/
 *.exe
 *.dmg

@@ -161,6 +161,7 @@ export function ServersPage() {
             framework,
             version,
             ramMB: effectiveRamMB,
+            enableAnalytics: enableAnalytics && (framework === "Paper" || framework === "Purpur"),
         })
 
         if (result.success && result.server) {
