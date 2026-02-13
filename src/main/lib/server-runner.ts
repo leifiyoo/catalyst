@@ -1,7 +1,7 @@
 import { BrowserWindow } from "electron";
 import { spawn, ChildProcess, execFile } from "child_process";
 import { ConsoleLine, ServerStats, ServerStatusUpdate } from "@shared/types";
-import { getServer, getServers, updateServerStatus, updateServerSettings } from "./server-manager";
+import { getServer, getServers, updateServerStatus, updateServerSettings, installCatalystPlugin } from "./server-manager";
 import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
 import { startNgrokTunnel, isNgrokEnabled, isAuthtokenConfigured } from "./ngrok-manager";
 
@@ -401,6 +401,18 @@ export async function startServer(
       }
     } else {
         sendConsoleLine(mainWindow, serverId, `Using custom Java path: ${javaExecutable}`, "system");
+    }
+
+    // Ensure CatalystAnalytics plugin is installed if analytics is enabled
+    if (server.analyticsEnabled) {
+      try {
+        const installed = await installCatalystPlugin(server.serverPath);
+        if (installed) {
+          sendConsoleLine(mainWindow, serverId, "CatalystAnalytics plugin verified.", "system");
+        }
+      } catch (err) {
+        console.error("Failed to install CatalystAnalytics plugin on start:", err);
+      }
     }
 
     const child = spawn(javaExecutable || "java", args, {

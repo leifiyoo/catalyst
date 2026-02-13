@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog } from "electron";
 import path from "path";
 import fs from "fs/promises";
-import { createWriteStream } from "fs";
+import { createWriteStream, existsSync } from "fs";
 import https from "https";
 import http from "http";
 import crypto from "crypto";
@@ -16,6 +16,55 @@ import {
   ServerRecord,
 } from "@shared/types";
 import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
+
+// ---- CatalystAnalytics Plugin Helper ----
+
+/**
+ * Returns the path to the bundled CatalystAnalytics.jar.
+ * In production the file lives inside the unpacked asar resources folder;
+ * in development it sits at <project>/resources/plugins/.
+ */
+function getCatalystPluginJarPath(): string {
+  // In production: process.resourcesPath points to <app>/resources
+  // The JAR is in the asarUnpack'd resources/plugins/ folder.
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "plugins", "CatalystAnalytics.jar");
+  }
+  // In development: app.getAppPath() points to the project root
+  return path.join(app.getAppPath(), "resources", "plugins", "CatalystAnalytics.jar");
+}
+
+/**
+ * Copies the CatalystAnalytics plugin JAR into the server's plugins/ directory.
+ * Only installs for plugin-compatible frameworks (Paper, Purpur).
+ * Returns true if the plugin was installed, false otherwise.
+ */
+export async function installCatalystPlugin(serverPath: string): Promise<boolean> {
+  const srcJar = getCatalystPluginJarPath();
+  if (!existsSync(srcJar)) {
+    console.warn("CatalystAnalytics JAR not found at", srcJar);
+    return false;
+  }
+
+  const pluginsDir = path.join(serverPath, "plugins");
+  await fs.mkdir(pluginsDir, { recursive: true });
+
+  const destJar = path.join(pluginsDir, "CatalystAnalytics.jar");
+  await fs.copyFile(srcJar, destJar);
+  return true;
+}
+
+/**
+ * Removes the CatalystAnalytics plugin JAR from the server's plugins/ directory.
+ */
+export async function uninstallCatalystPlugin(serverPath: string): Promise<void> {
+  const destJar = path.join(serverPath, "plugins", "CatalystAnalytics.jar");
+  try {
+    await fs.unlink(destJar);
+  } catch {
+    // Ignore if not present
+  }
+}
 
 const SERVERS_DIR = path.join(app.getPath("userData"), "servers");
 const SERVERS_JSON = path.join(app.getPath("userData"), "servers.json");
@@ -389,6 +438,19 @@ export async function createServer(
     );
 
     // 5. Create server record (EULA not yet accepted)
+    // 5b. Install CatalystAnalytics plugin if requested and framework supports plugins
+    const pluginCompatible = params.framework === "Paper" || params.framework === "Purpur";
+    const analyticsEnabled = !!(params.enableAnalytics && pluginCompatible);
+    if (analyticsEnabled) {
+      sendProgress({ stage: "writing-files", message: "Installing CatalystAnalytics plugin...", percent: 90 });
+      try {
+        await installCatalystPlugin(finalDir);
+      } catch (err) {
+        console.error("Failed to install CatalystAnalytics plugin:", err);
+        // Non-fatal: server still works without the plugin
+      }
+    }
+
     const serverRecord: ServerRecord = {
       id: crypto.randomUUID(),
       name: params.name,
@@ -401,6 +463,7 @@ export async function createServer(
       serverPath: finalDir,
       eulaAccepted: false,
       jarFile: downloadInfo.jarFile,
+      analyticsEnabled,
     };
 
     // 7. Persist
@@ -579,7 +642,7 @@ export async function saveBanlist(
 
 export async function updateServerSettings(
   id: string,
-  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig']; useNgrok?: boolean; ngrokUrl?: string; name?: string }
+  settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig']; useNgrok?: boolean; ngrokUrl?: string; name?: string; analyticsEnabled?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const servers = await loadServerList();
@@ -613,6 +676,15 @@ export async function updateServerSettings(
 
     if (settings.name !== undefined) {
       server.name = settings.name;
+    }
+
+    if (settings.analyticsEnabled !== undefined) {
+      server.analyticsEnabled = settings.analyticsEnabled;
+      if (settings.analyticsEnabled) {
+        await installCatalystPlugin(server.serverPath);
+      } else {
+        await uninstallCatalystPlugin(server.serverPath);
+      }
     }
 
     await saveServerList(servers);
