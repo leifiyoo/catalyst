@@ -305,3 +305,54 @@ export type StopNgrokFn = (serverId: string) => Promise<{ success: boolean; erro
 export type GetNgrokStatusFn = (serverId: string) => Promise<NgrokStatus>;
 export type OnNgrokUrlChangedFn = (handler: (info: NgrokTunnelInfo) => void) => () => void;
 export type GetLocalIpFn = () => Promise<string>;
+
+// ---- Analytics Types ----
+
+export type AnalyticsData = {
+  overview: {
+    currentOnline: number;
+    peakOnline: number;
+    uniquePlayers: number;
+    totalJoins: number;
+    newPlayers: number;
+    returningPlayers: number;
+    averagePlayTimeSeconds: number;
+    totalChatMessages: number;
+    totalCommandsExecuted: number;
+    totalBlocksPlaced: number;
+    totalBlocksBroken: number;
+    totalDeaths: number;
+    totalKills: number;
+    currentTps?: number;
+    memoryUsedMB?: number;
+    memoryMaxMB?: number;
+    hourlyJoins?: Record<string, number>;
+    serverStartTime?: string;
+  };
+  players: {
+    uuid: string;
+    name: string;
+    online: boolean;
+    firstJoin: string;
+    lastJoin: string;
+    joinCount: number;
+    totalPlayTimeSeconds: number;
+    country?: string;
+    region?: string;
+    clientVersion?: string;
+    clientBrand?: string;
+    chatMessages: number;
+    deaths: number;
+    kills: number;
+    blocksPlaced: number;
+    blocksBroken: number;
+    commandsExecuted: number;
+  }[];
+  tps: { timestamp: string; tps: number }[];
+  memory: { timestamp: string; usedMB: number; maxMB: number }[];
+  timeline: { timestamp: string; players: number }[];
+  geo: { country: string; count: number }[];
+  lastUpdated: string;
+};
+
+export type GetAnalyticsDataFn = (serverId: string) => Promise<{ success: boolean; data?: AnalyticsData; error?: string }>;

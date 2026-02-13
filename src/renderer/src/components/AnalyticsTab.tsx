@@ -1,15 +1,11 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import {
     Users,
@@ -24,8 +20,10 @@ import {
     Box,
     RefreshCw,
     TrendingUp,
-    BarChart3,
     Activity,
+    ServerOff,
+    BarChart3,
+    Timer,
 } from "lucide-react"
 import {
     LineChart,
@@ -41,138 +39,70 @@ import {
     Bar,
     Cell,
 } from "recharts"
-
-// Types for analytics API responses
-interface AnalyticsOverview {
-    currentOnline: number
-    peakOnline: number
-    uniquePlayers: number
-    totalJoins: number
-    newPlayers: number
-    returningPlayers: number
-    averagePlayTimeSeconds: number
-    totalChatMessages: number
-    totalCommandsExecuted: number
-    totalBlocksPlaced: number
-    totalBlocksBroken: number
-    totalDeaths: number
-    totalKills: number
-    currentTps?: number
-    memoryUsedMB?: number
-    memoryMaxMB?: number
-    hourlyJoins?: Record<string, number>
-}
-
-interface AnalyticsPlayer {
-    uuid: string
-    name: string
-    online: boolean
-    firstJoin: string
-    lastJoin: string
-    joinCount: number
-    totalPlayTimeSeconds: number
-    country?: string
-    region?: string
-    clientVersion?: string
-    clientBrand?: string
-    chatMessages: number
-    deaths: number
-    kills: number
-    blocksPlaced: number
-    blocksBroken: number
-    commandsExecuted: number
-}
-
-interface TpsEntry {
-    timestamp: string
-    tps: number
-}
-
-interface MemoryEntry {
-    timestamp: string
-    usedMB: number
-    maxMB: number
-}
-
-interface GeoEntry {
-    country: string
-    count: number
-}
-
-interface TimelineEntry {
-    timestamp: string
-    players: number
-}
+import type { AnalyticsData } from "@shared/types"
 
 interface AnalyticsTabProps {
     serverId: string
-    serverPort?: number
 }
 
-const ANALYTICS_PORT = 7845
-const ANALYTICS_KEY = "change-me-to-a-secure-key" // Default key; user should configure
+const POLL_INTERVAL = 7000 // 7 seconds
 
 /**
- * Analytics tab component for the server detail page.
- * Fetches data from the CatalystAnalytics plugin REST API.
+ * Analytics tab component — reads data directly from the filesystem.
+ * No API, no connect button, no configuration needed.
+ * The CatalystAnalytics plugin writes analytics.json which the Electron
+ * main process reads and passes to this component via IPC.
  */
 export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
-    const [apiPort, setApiPort] = useState(ANALYTICS_PORT)
-    const [apiKey, setApiKey] = useState(ANALYTICS_KEY)
-    const [configured, setConfigured] = useState(false)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [data, setData] = useState<AnalyticsData | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [noData, setNoData] = useState(false)
+    const [serverOffline, setServerOffline] = useState(false)
+    const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const lastDataRef = useRef<AnalyticsData | null>(null)
 
-    // Data states
-    const [overview, setOverview] = useState<AnalyticsOverview | null>(null)
-    const [players, setPlayers] = useState<AnalyticsPlayer[]>([])
-    const [tpsData, setTpsData] = useState<TpsEntry[]>([])
-    const [memoryData, setMemoryData] = useState<MemoryEntry[]>([])
-    const [geoData, setGeoData] = useState<GeoEntry[]>([])
-    const [timelineData, setTimelineData] = useState<TimelineEntry[]>([])
-
-    const fetchApi = useCallback(async (endpoint: string) => {
-        const res = await fetch(`http://localhost:${apiPort}${endpoint}`, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-        })
-        if (!res.ok) {
-            throw new Error(`API error: ${res.status} ${res.statusText}`)
-        }
-        return res.json()
-    }, [apiPort, apiKey])
-
-    const loadAllData = useCallback(async () => {
-        setLoading(true)
-        setError(null)
+    const loadData = useCallback(async () => {
         try {
-            const [overviewRes, playersRes, tpsRes, memRes, geoRes, timelineRes] = await Promise.all([
-                fetchApi("/api/analytics/overview"),
-                fetchApi("/api/analytics/players"),
-                fetchApi("/api/analytics/tps"),
-                fetchApi("/api/analytics/memory"),
-                fetchApi("/api/analytics/geo"),
-                fetchApi("/api/analytics/timeline"),
-            ])
-            setOverview(overviewRes)
-            setPlayers(playersRes.players || [])
-            setTpsData(tpsRes.tps || [])
-            setMemoryData(memRes.memory || [])
-            setGeoData(geoRes.geo || [])
-            setTimelineData(timelineRes.timeline || [])
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Failed to connect to CatalystAnalytics plugin")
+            const result = await window.context.getAnalyticsData(serverId)
+            if (result.success && result.data) {
+                setData(result.data)
+                lastDataRef.current = result.data
+                setNoData(false)
+                setServerOffline(false)
+                setLastUpdated(result.data.lastUpdated)
+            } else if (result.error === "no-data") {
+                // No analytics file yet — show empty state
+                if (lastDataRef.current) {
+                    // We had data before, server might have stopped
+                    setServerOffline(true)
+                } else {
+                    setNoData(true)
+                }
+            }
+        } catch {
+            // Silent fail — keep showing last known data
+            if (lastDataRef.current) {
+                setServerOffline(true)
+            }
         } finally {
             setLoading(false)
         }
-    }, [fetchApi])
+    }, [serverId])
 
     useEffect(() => {
-        if (configured) {
-            loadAllData()
-            const interval = setInterval(loadAllData, 30000) // Refresh every 30s
-            return () => clearInterval(interval)
+        setLoading(true)
+        setData(null)
+        setNoData(false)
+        setServerOffline(false)
+        lastDataRef.current = null
+        loadData()
+
+        pollRef.current = setInterval(loadData, POLL_INTERVAL)
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current)
         }
-    }, [configured, loadAllData])
+    }, [serverId, loadData])
 
     const formatPlayTime = (seconds: number) => {
         const hours = Math.floor(seconds / 3600)
@@ -190,75 +120,58 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
         }
     }
 
-    // Configuration screen
-    if (!configured) {
+    const formatUptime = (startTime?: string) => {
+        if (!startTime) return "N/A"
+        try {
+            const start = new Date(startTime).getTime()
+            const now = Date.now()
+            const diff = Math.floor((now - start) / 1000)
+            const hours = Math.floor(diff / 3600)
+            const minutes = Math.floor((diff % 3600) / 60)
+            if (hours > 24) {
+                const days = Math.floor(hours / 24)
+                return `${days}d ${hours % 24}h ${minutes}m`
+            }
+            if (hours > 0) return `${hours}h ${minutes}m`
+            return `${minutes}m`
+        } catch {
+            return "N/A"
+        }
+    }
+
+    // Loading state
+    if (loading && !data) {
         return (
-            <div className="max-w-md mx-auto mt-8">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <BarChart3 className="h-5 w-5" />
-                            CatalystAnalytics
-                        </CardTitle>
-                        <CardDescription>
-                            Connect to the CatalystAnalytics plugin running on your server.
-                            Make sure the plugin is installed and the server is running.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid gap-2">
-                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                                API Port
-                            </label>
-                            <Input
-                                type="number"
-                                value={apiPort}
-                                onChange={(e) => setApiPort(Number(e.target.value))}
-                                placeholder="7845"
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                                API Key
-                            </label>
-                            <Input
-                                type="password"
-                                value={apiKey}
-                                onChange={(e) => setApiKey(e.target.value)}
-                                placeholder="Your API key from config.yml"
-                            />
-                        </div>
-                        <Button onClick={() => setConfigured(true)} className="w-full">
-                            Connect
-                        </Button>
-                    </CardContent>
-                </Card>
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Spinner className="text-primary h-6 w-6" />
+                <span className="text-muted-foreground text-sm">Loading analytics...</span>
             </div>
         )
     }
 
-    if (loading && !overview) {
+    // No data yet — friendly empty state
+    if (noData && !data) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <Spinner className="text-primary" />
-                <span className="ml-3 text-muted-foreground">Loading analytics...</span>
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <div className="rounded-full bg-muted p-4">
+                    <BarChart3 className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <div className="text-center space-y-2">
+                    <h3 className="text-lg font-semibold">Waiting for analytics data...</h3>
+                    <p className="text-sm text-muted-foreground max-w-md">
+                        Start your server to begin collecting analytics. The CatalystAnalytics
+                        plugin will automatically gather statistics and display them here.
+                    </p>
+                </div>
             </div>
         )
     }
 
-    if (error && !overview) {
-        return (
-            <div className="max-w-md mx-auto mt-8 space-y-4">
-                <Alert variant="destructive">
-                    <AlertTitle>Connection Failed</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-                <Button variant="outline" onClick={() => setConfigured(false)}>
-                    Reconfigure
-                </Button>
-            </div>
-        )
-    }
+    // Use current data or last known data
+    const displayData = data || lastDataRef.current
+    if (!displayData) return null
+
+    const { overview, players, tps, memory, timeline, geo } = displayData
 
     // Prepare hourly joins chart data
     const hourlyData = overview?.hourlyJoins
@@ -272,54 +185,59 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
 
     return (
         <div className="space-y-6 pb-8">
-            {/* Header with refresh */}
+            {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Activity className="h-5 w-5 text-primary" />
                     <h3 className="text-lg font-semibold">Server Analytics</h3>
-                    {loading && <Spinner className="h-4 w-4 text-muted-foreground" />}
+                    {serverOffline && (
+                        <Badge variant="secondary" className="gap-1 text-amber-500 border-amber-500/20 bg-amber-500/10">
+                            <ServerOff className="h-3 w-3" />
+                            Server Offline
+                        </Badge>
+                    )}
+                    {!serverOffline && data && (
+                        <Badge variant="secondary" className="gap-1 text-green-500 border-green-500/20 bg-green-500/10">
+                            <Activity className="h-3 w-3" />
+                            Live
+                        </Badge>
+                    )}
                 </div>
-                <Button variant="ghost" size="sm" onClick={loadAllData} disabled={loading}>
-                    <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-                    Refresh
-                </Button>
+                {lastUpdated && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3" />
+                        Updated {formatTimestamp(lastUpdated)}
+                    </span>
+                )}
             </div>
 
-            {error && (
-                <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            )}
-
             {/* Stats Cards */}
-            {overview && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
-                    <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
-                    <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
-                    <StatCard icon={Clock} label="Avg Play Time" value={formatPlayTime(overview.averagePlayTimeSeconds)} accent="text-amber-500" />
-                    <StatCard icon={Gauge} label="Current TPS" value={overview.currentTps?.toFixed(1) ?? "N/A"} accent="text-emerald-500" />
-                    <StatCard icon={MemoryStick} label="Memory" value={overview.memoryUsedMB ? `${overview.memoryUsedMB.toFixed(0)} / ${overview.memoryMaxMB?.toFixed(0)} MB` : "N/A"} accent="text-cyan-500" />
-                    <StatCard icon={Skull} label="Deaths" value={overview.totalDeaths} accent="text-red-500" />
-                    <StatCard icon={Sword} label="Kills" value={overview.totalKills} accent="text-orange-500" />
-                    <StatCard icon={MessageSquare} label="Chat Messages" value={overview.totalChatMessages} accent="text-indigo-500" />
-                    <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
-                    <StatCard icon={Box} label="Blocks Placed" value={overview.totalBlocksPlaced} accent="text-lime-500" />
-                    <StatCard icon={Box} label="Blocks Broken" value={overview.totalBlocksBroken} accent="text-rose-500" />
-                </div>
-            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
+                <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
+                <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
+                <StatCard icon={Timer} label="Uptime" value={formatUptime(overview.serverStartTime)} accent="text-teal-500" />
+                <StatCard icon={Gauge} label="Current TPS" value={overview.currentTps?.toFixed(1) ?? "N/A"} accent="text-emerald-500" />
+                <StatCard icon={MemoryStick} label="Memory" value={overview.memoryUsedMB ? `${overview.memoryUsedMB.toFixed(0)} / ${overview.memoryMaxMB?.toFixed(0)} MB` : "N/A"} accent="text-cyan-500" />
+                <StatCard icon={Clock} label="Avg Play Time" value={formatPlayTime(overview.averagePlayTimeSeconds)} accent="text-amber-500" />
+                <StatCard icon={Skull} label="Deaths" value={overview.totalDeaths} accent="text-red-500" />
+                <StatCard icon={Sword} label="Kills" value={overview.totalKills} accent="text-orange-500" />
+                <StatCard icon={MessageSquare} label="Chat Messages" value={overview.totalChatMessages} accent="text-indigo-500" />
+                <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
+                <StatCard icon={Box} label="Blocks Placed" value={overview.totalBlocksPlaced} accent="text-lime-500" />
+            </div>
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Player Count Timeline */}
-                {timelineData.length > 0 && (
+                {timeline.length > 0 && (
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium">Player Count Over Time</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <ResponsiveContainer width="100%" height={200}>
-                                <AreaChart data={timelineData}>
+                                <AreaChart data={timeline}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                     <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
@@ -332,14 +250,14 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                 )}
 
                 {/* TPS Chart */}
-                {tpsData.length > 0 && (
+                {tps.length > 0 && (
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium">TPS History</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <ResponsiveContainer width="100%" height={200}>
-                                <LineChart data={tpsData}>
+                                <LineChart data={tps}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                     <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                     <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
@@ -352,14 +270,14 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                 )}
 
                 {/* Memory Chart */}
-                {memoryData.length > 0 && (
+                {memory.length > 0 && (
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <ResponsiveContainer width="100%" height={200}>
-                                <AreaChart data={memoryData}>
+                                <AreaChart data={memory}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                     <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                     <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
@@ -397,10 +315,10 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                 )}
             </div>
 
-            {/* Geo Distribution & Top Players */}
+            {/* Players & Geo */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Geo Distribution */}
-                {geoData.length > 0 && (
+                {geo.length > 0 && (
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -410,7 +328,7 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {geoData.map((g) => (
+                                {geo.map((g) => (
                                     <div key={g.country} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
                                         <span className="text-sm">{g.country}</span>
                                         <Badge variant="secondary">{g.count}</Badge>
@@ -427,49 +345,34 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <Users className="h-4 w-4" />
-                                Top Players by Playtime
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {players.slice(0, 15).map((p, i) => (
-                                    <div key={p.uuid} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground w-5">#{i + 1}</span>
-                                            <span className="text-sm font-medium">{p.name}</span>
-                                            {p.online && <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">Online</Badge>}
-                                        </div>
-                                        <span className="text-sm text-muted-foreground">{formatPlayTime(p.totalPlayTimeSeconds)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
-
-            {/* Deaths/Kills Leaderboard & Version/OS Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Deaths/Kills Leaderboard */}
-                {players.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <Skull className="h-4 w-4" />
-                                Deaths & Kills Leaderboard
+                                Players
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-2 max-h-[300px] overflow-y-auto">
                                 {[...players]
-                                    .sort((a, b) => b.kills - a.kills)
-                                    .slice(0, 10)
-                                    .map((p) => (
+                                    .sort((a, b) => b.totalPlayTimeSeconds - a.totalPlayTimeSeconds)
+                                    .slice(0, 20)
+                                    .map((p, i) => (
                                         <div key={p.uuid} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
-                                            <span className="text-sm font-medium">{p.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-muted-foreground w-5">#{i + 1}</span>
+                                                <span className="text-sm font-medium">{p.name}</span>
+                                                {p.online && (
+                                                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">
+                                                        Online
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <div className="flex items-center gap-3">
-                                                <span className="text-xs text-red-500">{p.deaths} deaths</span>
-                                                <span className="text-xs text-orange-500">{p.kills} kills</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {formatPlayTime(p.totalPlayTimeSeconds)}
+                                                </span>
+                                                {p.lastJoin && (
+                                                    <span className="text-xs text-muted-foreground/60">
+                                                        Last: {formatTimestamp(p.lastJoin)}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -477,78 +380,15 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                         </CardContent>
                     </Card>
                 )}
-
-                {/* Client Version Breakdown */}
-                {players.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Client Version & OS Breakdown</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                {/* Versions */}
-                                <div>
-                                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Versions</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {Object.entries(
-                                            players.reduce<Record<string, number>>((acc, p) => {
-                                                const v = p.clientVersion || "Unknown"
-                                                acc[v] = (acc[v] || 0) + 1
-                                                return acc
-                                            }, {})
-                                        )
-                                            .sort((a, b) => b[1] - a[1])
-                                            .map(([version, count]) => (
-                                                <Badge key={version} variant="secondary">
-                                                    {version}: {count}
-                                                </Badge>
-                                            ))}
-                                    </div>
-                                </div>
-                                {/* Client Brands (OS proxy) */}
-                                <div>
-                                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Client Brands</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {Object.entries(
-                                            players.reduce<Record<string, number>>((acc, p) => {
-                                                const b = p.clientBrand || "Unknown"
-                                                acc[b] = (acc[b] || 0) + 1
-                                                return acc
-                                            }, {})
-                                        )
-                                            .sort((a, b) => b[1] - a[1])
-                                            .map(([brand, count]) => (
-                                                <Badge key={brand} variant="outline">
-                                                    {brand}: {count}
-                                                </Badge>
-                                            ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
             </div>
 
-            {/* New vs Returning */}
-            {overview && (
+            {/* No charts/players yet but have overview */}
+            {timeline.length === 0 && tps.length === 0 && memory.length === 0 && players.length === 0 && (
                 <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium">New vs Returning Players</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                                <div className="h-3 w-3 rounded-full bg-green-500" />
-                                <span className="text-sm">New: {overview.newPlayers}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="h-3 w-3 rounded-full bg-blue-500" />
-                                <span className="text-sm">Returning: {overview.returningPlayers}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground">Total Joins: {overview.totalJoins}</span>
-                            </div>
+                    <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground text-sm">
+                            <p>Charts and player details will appear once the server has been running for a while.</p>
+                            <p className="text-xs mt-1">Data is collected every 30-60 seconds.</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -557,15 +397,29 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     )
 }
 
-// Stat card helper component
-function StatCard({ icon: Icon, label, value, accent }: { icon: React.ElementType; label: string; value: string | number; accent: string }) {
+// Stat card component
+function StatCard({
+    icon: Icon,
+    label,
+    value,
+    accent,
+}: {
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    value: string | number
+    accent?: string
+}) {
     return (
-        <Card>
-            <CardContent className="flex items-center gap-3 py-4 px-4">
-                <Icon className={`h-5 w-5 ${accent}`} />
-                <div>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="text-lg font-semibold">{value}</p>
+        <Card className="relative overflow-hidden">
+            <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                    <div className={`rounded-md bg-muted p-2 ${accent || ""}`}>
+                        <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
+                        <p className="text-lg font-bold truncate">{value}</p>
+                    </div>
                 </div>
             </CardContent>
         </Card>

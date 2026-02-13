@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
-// @ts-ignore - AnalyticsTab import
 import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { useParams, useNavigate } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"

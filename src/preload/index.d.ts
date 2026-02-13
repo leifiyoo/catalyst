@@ -60,6 +60,7 @@ import {
   GetNgrokStatusFn,
   OnNgrokUrlChangedFn,
   GetLocalIpFn,
+  GetAnalyticsDataFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -138,6 +139,7 @@ declare global {
       isNgrokEnabled: () => Promise<boolean>;
       setNgrokEnabled: (enabled: boolean) => Promise<void>;
       removeNgrokAuthtoken: () => Promise<{ success: boolean; error?: string }>;
+      getAnalyticsData: GetAnalyticsDataFn;
     };
   }
 }
