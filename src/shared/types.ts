@@ -28,6 +28,7 @@ export type ServerRecord = {
   backupConfig?: BackupConfig;
   useNgrok?: boolean;
   ngrokUrl?: string;
+  analyticsEnabled?: boolean;
 };
 
 export type BackupConfig = {
@@ -57,6 +58,7 @@ export type CreateServerParams = {
   framework: string;
   version: string;
   ramMB: number;
+  enableAnalytics?: boolean;
 };
 
 export type ServerCreationProgress = {

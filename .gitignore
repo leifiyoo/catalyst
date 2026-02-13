@@ -153,3 +153,7 @@ pnpm-lock.yaml
 # App Data
 servers/
 servers.json
+
+# Catalyst Plugin build artifacts
+catalyst-plugin/.gradle/
+catalyst-plugin/build/

@@ -161,6 +161,7 @@ export function ServersPage() {
             framework,
             version,
             ramMB: effectiveRamMB,
+            enableAnalytics,
         })
 
         if (result.success && result.server) {

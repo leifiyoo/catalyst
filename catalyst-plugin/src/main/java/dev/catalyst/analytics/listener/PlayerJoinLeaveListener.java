@@ -44,12 +44,12 @@ public class PlayerJoinLeaveListener implements Listener {
 
         // Try to get client brand (available on Paper/newer Spigot)
         try {
-            String brand = player.getClientBrandName();
-            if (brand != null) {
-                dm.setPlayerClientBrand(uuid, brand);
-                // Infer OS from brand string if possible
+            java.lang.reflect.Method brandMethod = player.getClass().getMethod("getClientBrandName");
+            Object brand = brandMethod.invoke(player);
+            if (brand instanceof String) {
+                dm.setPlayerClientBrand(uuid, (String) brand);
             }
-        } catch (NoSuchMethodError ignored) {
+        } catch (Exception ignored) {
             // getClientBrandName() not available on older versions
         }
 

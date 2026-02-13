@@ -274,6 +274,33 @@ function downloadFile(
   });
 }
 
+/**
+ * Resolves the path to the bundled CatalystAnalytics plugin JAR.
+ * In production, the JAR is in the app's resources/plugins/ directory (asar-unpacked).
+ * In development, it's in the project's resources/plugins/ directory.
+ */
+function getAnalyticsPluginJarPath(): string {
+  // In production: app.getAppPath() points to the asar, resources are unpacked
+  // In development: app.getAppPath() points to the project root
+  const appPath = app.getAppPath();
+  // Try the unpacked resources path first (production)
+  const unpackedPath = path.join(path.dirname(appPath), "app.asar.unpacked", "resources", "plugins", "CatalystAnalytics.jar");
+  const devPath = path.join(appPath, "resources", "plugins", "CatalystAnalytics.jar");
+  // Return the unpacked path for production, dev path for development
+  return appPath.includes("app.asar") ? unpackedPath : devPath;
+}
+
+/**
+ * Copies the CatalystAnalytics plugin JAR into the server's plugins/ directory.
+ */
+async function installAnalyticsPlugin(serverDir: string): Promise<void> {
+  const pluginJarPath = getAnalyticsPluginJarPath();
+  const pluginsDir = path.join(serverDir, "plugins");
+  await fs.mkdir(pluginsDir, { recursive: true });
+  const destPath = path.join(pluginsDir, "CatalystAnalytics.jar");
+  await fs.copyFile(pluginJarPath, destPath);
+}
+
 function generateStartBat(ramMB: number, jarFile: string = "server.jar"): string {
   // Sanitize jarFile to prevent command injection in batch file
   const safeJarFile = jarFile.replace(/[^a-zA-Z0-9._\-]/g, "");
@@ -388,6 +415,17 @@ export async function createServer(
       "utf-8"
     );
 
+    // 4.5. Install CatalystAnalytics plugin if enabled
+    if (params.enableAnalytics) {
+      sendProgress({ stage: "writing-files", message: "Installing CatalystAnalytics plugin...", percent: 90 });
+      try {
+        await installAnalyticsPlugin(finalDir);
+      } catch (err) {
+        console.error("Failed to install CatalystAnalytics plugin:", err);
+        // Non-fatal: continue server creation even if plugin install fails
+      }
+    }
+
     // 5. Create server record (EULA not yet accepted)
     const serverRecord: ServerRecord = {
       id: crypto.randomUUID(),
@@ -401,6 +439,7 @@ export async function createServer(
       serverPath: finalDir,
       eulaAccepted: false,
       jarFile: downloadInfo.jarFile,
+      analyticsEnabled: params.enableAnalytics || false,
     };
 
     // 7. Persist

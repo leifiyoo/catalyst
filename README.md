@@ -51,6 +51,12 @@ npm run build:linux
 
 The build artifacts will be stored in the `dist` or `release` directory (depending on your configuration).
 
+## CatalystAnalytics Plugin
+
+Catalyst ships with a built-in analytics plugin for Minecraft servers. When creating a new Paper or Purpur server, toggle **"Enable CatalystAnalytics"** to auto-install the plugin. It collects player stats, TPS, memory usage, and more — all viewable in the **Analytics** tab of the server detail page.
+
+See [`catalyst-plugin/README.md`](catalyst-plugin/README.md) for full documentation.
+
 ### Tech Stack
 
 | Category                  | Technology                                                                                  |
