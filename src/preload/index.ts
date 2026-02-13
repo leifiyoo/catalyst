@@ -112,6 +112,8 @@ try {
       ipcRenderer.invoke("openImportDialog"),
     getServerDiskUsage: (serverId: string) =>
       ipcRenderer.invoke("getServerDiskUsage", serverId),
+    readAnalyticsData: (serverId: string): Promise<{ success: boolean; data?: unknown; error?: string }> =>
+      ipcRenderer.invoke("readAnalyticsData", serverId),
     onServerStats: (handler: (stats: ServerStats) => void) => {
       const listener = (_event: unknown, stats: ServerStats) =>
         handler(stats);

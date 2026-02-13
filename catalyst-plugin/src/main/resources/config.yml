@@ -1,21 +1,18 @@
 # CatalystAnalytics Configuration
 # ================================
 
-# REST API settings
-api:
-  # Port for the built-in HTTP server
-  port: 7845
-  # API key for authentication (change this!)
-  key: "change-me-to-a-secure-key"
-  # Allowed CORS origins (use * for all)
-  cors-origin: "*"
-
 # Data retention settings
 data:
   # How many days to keep detailed data
   retention-days: 30
   # Auto-save interval in minutes
   save-interval-minutes: 5
+
+# Analytics JSON export settings
+# The Catalyst app reads this file directly from the filesystem
+export:
+  # How often to write analytics.json (in seconds)
+  interval-seconds: 5
 
 # Collection intervals (in seconds)
 collection:

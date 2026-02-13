@@ -33,6 +33,7 @@ import {
   exportServer,
   importServer,
   getServerDiskUsage,
+  readAnalyticsData,
   searchModrinthProjects,
   getModrinthProjectDetails,
   listModrinthInstalls,
@@ -339,6 +340,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle("getServerDiskUsage", async (_event, serverId: string) => {
     return getServerDiskUsage(serverId);
+  });
+
+  ipcMain.handle("readAnalyticsData", async (_event, serverId: string) => {
+    return readAnalyticsData(serverId);
   });
 
   ipcMain.handle("acceptEula", async (_event, serverId: string) => {

@@ -66,6 +66,39 @@ export async function uninstallCatalystPlugin(serverPath: string): Promise<void>
   }
 }
 
+/**
+ * Reads the analytics.json file from the server's CatalystAnalytics plugin data directory.
+ * Returns the parsed JSON data or null if the file doesn't exist.
+ */
+export async function readAnalyticsData(serverId: string): Promise<{ success: boolean; data?: unknown; error?: string }> {
+  try {
+    const servers = await loadServerList();
+    const server = servers.find((s) => s.id === serverId);
+    if (!server) {
+      return { success: false, error: "Server not found" };
+    }
+
+    const analyticsPath = path.join(
+      server.serverPath,
+      "plugins",
+      "CatalystAnalytics",
+      "data",
+      "analytics.json"
+    );
+
+    if (!existsSync(analyticsPath)) {
+      return { success: false, error: "no-data-file" };
+    }
+
+    const content = await fs.readFile(analyticsPath, "utf-8");
+    const data = JSON.parse(content);
+    return { success: true, data };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: msg };
+  }
+}
+
 const SERVERS_DIR = path.join(app.getPath("userData"), "servers");
 const SERVERS_JSON = path.join(app.getPath("userData"), "servers.json");
 const SERVERS_JSON_BAK = path.join(app.getPath("userData"), "servers.json.bak");

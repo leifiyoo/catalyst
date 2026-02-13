@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import dev.catalyst.analytics.CatalystAnalyticsPlugin;
+import org.bukkit.Bukkit;
 
 import java.io.*;
 import java.lang.reflect.Type;
@@ -15,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * Manages all analytics data with JSON file persistence.
@@ -24,6 +26,7 @@ public class DataManager {
 
     private final CatalystAnalyticsPlugin plugin;
     private final File dataFolder;
+    private final File analyticsJsonFile;
     private final Gson gson;
 
     // --- Player tracking ---
@@ -58,13 +61,22 @@ public class DataManager {
     private volatile long totalDeaths = 0;
     private volatile long totalKills = 0;
 
+    // --- Server start time for uptime tracking ---
+    private final long serverStartTime = System.currentTimeMillis();
+
     public DataManager(CatalystAnalyticsPlugin plugin) {
         this.plugin = plugin;
         this.dataFolder = new File(plugin.getDataFolder(), "data");
         if (!dataFolder.exists()) {
             dataFolder.mkdirs();
         }
+        // The analytics.json file is written to the plugin's data folder root
+        this.analyticsJsonFile = new File(plugin.getDataFolder(), "data/analytics.json");
         this.gson = new GsonBuilder().setPrettyPrinting().create();
+    }
+
+    public String getAnalyticsJsonPath() {
+        return analyticsJsonFile.getAbsolutePath();
     }
 
     // ========== Player Data ==========
@@ -256,6 +268,126 @@ public class DataManager {
 
     public long getReturningPlayerCount() {
         return players.values().stream().filter(p -> !p.isNew && p.joinCount > 1).count();
+    }
+
+    // ========== Analytics JSON Export ==========
+
+    /**
+     * Exports a consolidated analytics.json file that the Catalyst Electron app
+     * reads directly via the filesystem. This is called every few seconds asynchronously.
+     */
+    public void exportAnalyticsJson() {
+        try {
+            Map<String, Object> root = new LinkedHashMap<>();
+
+            // Server info
+            Map<String, Object> server = new LinkedHashMap<>();
+            server.put("uptimeMs", System.currentTimeMillis() - serverStartTime);
+            server.put("currentOnline", getCurrentOnline());
+            server.put("peakOnline", peakOnline);
+            server.put("maxPlayers", Bukkit.getMaxPlayers());
+            server.put("uniquePlayers", getUniquePlayerCount());
+            server.put("totalJoins", totalJoins);
+
+            // Latest TPS
+            List<TimestampedValue> tps = getTpsHistory();
+            if (!tps.isEmpty()) {
+                server.put("currentTps", Math.round(tps.get(tps.size() - 1).value * 10.0) / 10.0);
+            } else {
+                server.put("currentTps", null);
+            }
+
+            // Latest memory
+            List<TimestampedValue> mem = getMemoryHistory();
+            if (!mem.isEmpty()) {
+                TimestampedValue latest = mem.get(mem.size() - 1);
+                server.put("memoryUsedMB", Math.round(latest.value));
+                server.put("memoryMaxMB", Math.round(latest.value2));
+            } else {
+                Runtime rt = Runtime.getRuntime();
+                server.put("memoryUsedMB", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024));
+                server.put("memoryMaxMB", rt.maxMemory() / (1024 * 1024));
+            }
+
+            root.put("server", server);
+
+            // Players list (sorted by playtime desc, limited to top 50)
+            List<Map<String, Object>> playerList = players.values().stream()
+                    .sorted((a, b) -> Long.compare(b.totalPlayTimeSeconds, a.totalPlayTimeSeconds))
+                    .limit(50)
+                    .map(p -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("uuid", p.uuid);
+                        m.put("name", p.name);
+                        m.put("online", p.online);
+                        m.put("firstJoin", p.firstJoin);
+                        m.put("lastJoin", p.lastJoin);
+                        m.put("joinCount", p.joinCount);
+                        m.put("totalPlayTimeSeconds", p.totalPlayTimeSeconds);
+                        m.put("country", p.country);
+                        m.put("clientVersion", p.clientVersion);
+                        m.put("deaths", p.deaths);
+                        m.put("kills", p.kills);
+                        return m;
+                    })
+                    .collect(Collectors.toList());
+            root.put("players", playerList);
+
+            // TPS history (last 60 entries)
+            List<Map<String, Object>> tpsData = tps.stream()
+                    .skip(Math.max(0, tps.size() - 60))
+                    .map(v -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("timestamp", v.timestamp);
+                        m.put("tps", Math.round(v.value * 10.0) / 10.0);
+                        return m;
+                    })
+                    .collect(Collectors.toList());
+            root.put("tpsHistory", tpsData);
+
+            // Memory history (last 60 entries)
+            List<Map<String, Object>> memData = mem.stream()
+                    .skip(Math.max(0, mem.size() - 60))
+                    .map(v -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("timestamp", v.timestamp);
+                        m.put("usedMB", Math.round(v.value));
+                        m.put("maxMB", Math.round(v.value2));
+                        return m;
+                    })
+                    .collect(Collectors.toList());
+            root.put("memoryHistory", memData);
+
+            // Player count timeline (last 60 entries)
+            List<TimestampedValue> timeline = getPlayerCountTimeline();
+            List<Map<String, Object>> timelineData = timeline.stream()
+                    .skip(Math.max(0, timeline.size() - 60))
+                    .map(v -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("timestamp", v.timestamp);
+                        m.put("players", (int) v.value);
+                        return m;
+                    })
+                    .collect(Collectors.toList());
+            root.put("playerCountTimeline", timelineData);
+
+            // Timestamp of this export
+            root.put("exportedAt", Instant.now().toString());
+
+            // Write atomically: write to temp file then rename
+            File tmpFile = new File(analyticsJsonFile.getParentFile(), "analytics.json.tmp");
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(tmpFile), StandardCharsets.UTF_8)) {
+                gson.toJson(root, writer);
+            }
+            // Atomic rename (on same filesystem)
+            if (!tmpFile.renameTo(analyticsJsonFile)) {
+                // Fallback: copy content
+                Files.copy(tmpFile.toPath(), analyticsJsonFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                tmpFile.delete();
+            }
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to export analytics.json", e);
+        }
     }
 
     // ========== Persistence ==========
