@@ -410,6 +410,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("openExternal", async (_event, url: string) => {
+    // Only allow http(s) URLs to prevent arbitrary protocol execution
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+      return;
+    }
     await shell.openExternal(url);
   });
 

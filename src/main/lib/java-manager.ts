@@ -100,25 +100,33 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
 
 function extractZip(zipPath: string, destDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    let proc: ReturnType<typeof spawn>;
+
     // Determine extraction command based on OS
     if (process.platform === "win32") {
-        const powershell = spawn("powershell", [
+        // Use Expand-Archive via encoded command to avoid shell injection
+        // Build the PowerShell script and encode it as Base64 UTF-16LE
+        const psScript = `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
+        const encoded = Buffer.from(psScript, "utf16le").toString("base64");
+        proc = spawn("powershell", [
             "-NoProfile",
-            "-Command",
-            `Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force`
+            "-NonInteractive",
+            "-EncodedCommand",
+            encoded
         ]);
-        powershell.on("close", (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`Extraction failed with code ${code}`));
-        });
     } else {
-        // Unix (tar)
-        const tar = spawn("tar", ["-xf", zipPath, "-C", destDir]);
-        tar.on("close", (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`Extraction failed with code ${code}`));
-        });
+        // Unix (tar) - arguments passed as array, no shell interpolation
+        proc = spawn("tar", ["-xf", zipPath, "-C", destDir]);
     }
+
+    proc.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Extraction failed with code ${code}`));
+    });
+
+    proc.on("error", (err) => {
+        reject(new Error(`Failed to run extraction: ${err.message}`));
+    });
   });
 }
 

@@ -392,8 +392,20 @@ export async function deleteBackup(serverId: string, filename: string): Promise<
   const server = await getServer(serverId);
   if (!server) return { success: false, error: 'Server not found' };
 
+  // Validate filename to prevent path traversal
+  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return { success: false, error: 'Invalid filename' };
+  }
+
   const backupsDir = path.join(server.serverPath, BACKUP_DIR_NAME);
   const filePath = path.join(backupsDir, filename);
+
+  // Double-check resolved path is within backups directory
+  const resolvedPath = path.resolve(filePath);
+  const resolvedBackupsDir = path.resolve(backupsDir);
+  if (!resolvedPath.startsWith(resolvedBackupsDir + path.sep)) {
+    return { success: false, error: 'Access denied' };
+  }
 
   try {
     if (fs.existsSync(filePath)) {
@@ -410,15 +422,36 @@ export async function restoreBackup(serverId: string, filename: string): Promise
   const server = await getServer(serverId);
   if (!server) return { success: false, error: 'Server not found' };
 
+  // Validate filename to prevent path traversal
+  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    return { success: false, error: 'Invalid filename' };
+  }
+
   const backupsDir = path.join(server.serverPath, BACKUP_DIR_NAME);
   const zipPath = path.join(backupsDir, filename);
   const serverPath = server.serverPath;
+
+  // Double-check resolved path is within backups directory
+  const resolvedZipPath = path.resolve(zipPath);
+  const resolvedBackupsDir = path.resolve(backupsDir);
+  if (!resolvedZipPath.startsWith(resolvedBackupsDir + path.sep)) {
+    return { success: false, error: 'Access denied' };
+  }
 
   if (!fs.existsSync(zipPath)) return { success: false, error: 'Backup file not found' };
 
   try {
     const zip = new AdmZip(zipPath);
     
+    // Validate zip entries for path traversal (zip slip protection)
+    const resolvedServerPath = path.resolve(serverPath);
+    for (const entry of zip.getEntries()) {
+      const entryPath = path.resolve(serverPath, entry.entryName);
+      if (!entryPath.startsWith(resolvedServerPath + path.sep) && entryPath !== resolvedServerPath) {
+        return { success: false, error: `Malicious zip entry detected: ${entry.entryName}` };
+      }
+    }
+
     // Careful deletion
     const currentFiles = fs.readdirSync(serverPath);
     for (const file of currentFiles) {

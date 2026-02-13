@@ -228,6 +228,11 @@ function parseStatsFromLine(serverId: string, line: string): void {
  * Works on Windows (tasklist) and Unix (ps).
  */
 function getProcessMemoryMB(pid: number): Promise<number | null> {
+  // Validate PID is a positive integer to prevent injection
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return Promise.resolve(null);
+  }
+
   return new Promise((resolve) => {
     if (process.platform === "win32") {
       execFile(

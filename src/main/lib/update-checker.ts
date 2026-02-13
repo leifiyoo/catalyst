@@ -65,13 +65,13 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
             releaseUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
             changelog: isNewer ? newChanges : undefined
         };
-    } catch (e: any) {
+    } catch (e: unknown) {
         return {
             updateAvailable: false,
             latestVersion: '0.0.0',
             currentVersion,
             releaseUrl: '',
-            error: e?.message || 'Unknown error checking for updates'
+            error: e instanceof Error ? e.message : 'Unknown error checking for updates'
         };
     }
 }

@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import { createWriteStream, existsSync, mkdirSync } from "fs";
 import https from "https";
 import http from "http";
+import os from "os";
 import { spawn, ChildProcess } from "child_process";
 import { NgrokStatus, InstallNgrokResult, StartNgrokResult } from "@shared/types";
 
@@ -221,23 +222,22 @@ async function extractZip(
     const platform = process.platform;
     
     return new Promise((resolve) => {
-      let cmd: string;
-      let args: string[];
+      let proc: ReturnType<typeof spawn>;
 
       if (platform === "win32") {
-        // Use PowerShell to extract
-        cmd = "powershell";
-        args = [
-          "-Command",
-          `Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`
-        ];
+        // Use Expand-Archive via encoded command to avoid shell injection
+        const psScript = `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
+        const encoded = Buffer.from(psScript, "utf16le").toString("base64");
+        proc = spawn("powershell", [
+          "-NoProfile",
+          "-NonInteractive",
+          "-EncodedCommand",
+          encoded
+        ]);
       } else {
-        // Use unzip on Unix
-        cmd = "unzip";
-        args = ["-o", zipPath, "-d", destDir];
+        // Use unzip on Unix - arguments passed as array, no shell interpolation
+        proc = spawn("unzip", ["-o", zipPath, "-d", destDir]);
       }
-
-      const proc = spawn(cmd, args);
       let stderr = "";
 
       proc.stderr.on("data", (data) => {
@@ -267,6 +267,11 @@ async function extractZip(
  */
 export async function configureNgrokAuthtoken(authtoken: string): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validate authtoken format (alphanumeric + underscores/hyphens only)
+    if (!authtoken || !/^[a-zA-Z0-9_\-]+$/.test(authtoken.trim())) {
+      return { success: false, error: "Invalid authtoken format" };
+    }
+
     // Ensure ngrok is installed
     if (!(await isNgrokInstalled())) {
       const installResult = await installNgrok(null as any, () => {});
@@ -349,6 +354,11 @@ export async function startNgrokTunnel(
   port: number
 ): Promise<StartNgrokResult> {
   try {
+    // Validate port number
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return { success: false, error: "Invalid port number" };
+    }
+
     // Check if tunnel already exists for this server
     const existingTunnel = activeTunnels.get(serverId);
     if (existingTunnel) {
@@ -543,7 +553,6 @@ export async function stopAllTunnels(): Promise<void> {
  * Get local IP address
  */
 export function getLocalIp(): string {
-  const os = require("os");
   const interfaces = os.networkInterfaces();
 
   // Look for IPv4 address on common interfaces
@@ -588,6 +597,11 @@ export async function validateNgrokAuthtoken(authtoken: string): Promise<{ valid
 
     const token = authtoken.trim();
     
+    // Validate authtoken format (alphanumeric + underscores/hyphens only)
+    if (!/^[a-zA-Z0-9_\-]+$/.test(token)) {
+      return { valid: false, error: "Invalid authtoken format. Only alphanumeric characters, underscores and hyphens are allowed." };
+    }
+
     // Ngrok tokens typically are 30+ characters
     if (token.length < 20) {
       return { valid: false, error: "Authtoken is too short. Please check your token at dashboard.ngrok.com" };
