@@ -166,7 +166,17 @@ function sanitizeServerName(name: string): string {
 function validateServerPath(serverPath: string): boolean {
   const resolved = path.resolve(serverPath);
   const serversResolved = path.resolve(SERVERS_DIR);
-  return resolved.startsWith(serversResolved + path.sep);
+  return resolved.startsWith(serversResolved + path.sep) || resolved === serversResolved;
+}
+
+/**
+ * Validate that a resolved path is within the given root directory.
+ * Prevents path traversal attacks.
+ */
+function isPathWithin(targetPath: string, rootPath: string): boolean {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(rootPath);
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
 async function loadServerList(): Promise<ServerRecord[]> {
@@ -265,7 +275,10 @@ function downloadFile(
 }
 
 function generateStartBat(ramMB: number, jarFile: string = "server.jar"): string {
-  return `@echo off\r\njava -Xms${ramMB}M -Xmx${ramMB}M -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar ${jarFile} nogui\r\npause\r\n`;
+  // Sanitize jarFile to prevent command injection in batch file
+  const safeJarFile = jarFile.replace(/[^a-zA-Z0-9._\-]/g, "");
+  const safeRam = Math.max(256, Math.min(65536, Math.floor(Number(ramMB) || 1024)));
+  return `@echo off\r\njava -Xms${safeRam}M -Xmx${safeRam}M -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar ${safeJarFile} nogui\r\npause\r\n`;
 }
 
 // ---- Exports ----
@@ -645,7 +658,7 @@ export async function listServerFiles(
   const targetPath = path.resolve(serverRoot, relativePath);
 
   // Security: prevent path traversal
-  if (!targetPath.startsWith(serverRoot)) {
+  if (!isPathWithin(targetPath, serverRoot)) {
     return [];
   }
 
@@ -690,7 +703,7 @@ export async function readServerFile(
   const serverRoot = path.resolve(server.serverPath);
   const targetPath = path.resolve(serverRoot, relativePath);
 
-  if (!targetPath.startsWith(serverRoot)) {
+  if (!isPathWithin(targetPath, serverRoot)) {
     return { success: false, error: "Access denied" };
   }
 
@@ -722,8 +735,8 @@ export async function writeServerFile(
   const serverRoot = path.resolve(server.serverPath);
   const targetPath = path.resolve(serverRoot, relativePath);
 
-  if (!targetPath.startsWith(serverRoot)) {
-    return { success: false, error: "Access denied" };
+  if (!isPathWithin(targetPath, serverRoot)) {
+      return { success: false, error: "Access denied" };
   }
 
   try {
@@ -745,9 +758,9 @@ export async function deleteServerFile(
 
     const serverRoot = path.resolve(server.serverPath);
     const targetPath = path.resolve(serverRoot, relativePath);
-
-    if (!targetPath.startsWith(serverRoot)) {
-        return { success: false, error: "Access denied" };
+  
+    if (!isPathWithin(targetPath, serverRoot)) {
+      return { success: false, error: "Access denied" };
     }
 
     try {
@@ -768,6 +781,11 @@ export async function renameServerFile(
     const server = servers.find((s) => s.id === serverId);
     if (!server) return { success: false, error: "Server not found" };
 
+    // Validate newName doesn't contain path separators or traversal
+    if (!newName || newName.includes('/') || newName.includes('\\') || newName.includes('..') || newName.includes('\0')) {
+        return { success: false, error: "Invalid file name" };
+    }
+
     const serverRoot = path.resolve(server.serverPath);
     const oldPath = path.resolve(serverRoot, relativePath);
     
@@ -775,7 +793,7 @@ export async function renameServerFile(
     const dir = path.dirname(oldPath);
     const newPath = path.join(dir, newName);
 
-    if (!oldPath.startsWith(serverRoot) || !newPath.startsWith(serverRoot)) {
+    if (!isPathWithin(oldPath, serverRoot) || !isPathWithin(newPath, serverRoot)) {
         return { success: false, error: "Access denied" };
     }
 
@@ -797,6 +815,11 @@ export async function copyServerFile(
     const server = servers.find((s) => s.id === serverId);
     if (!server) return { success: false, error: "Server not found" };
 
+    // Validate newName doesn't contain path separators or traversal
+    if (!newName || newName.includes('/') || newName.includes('\\') || newName.includes('..') || newName.includes('\0')) {
+        return { success: false, error: "Invalid file name" };
+    }
+
     const serverRoot = path.resolve(server.serverPath);
     const sourcePath = path.resolve(serverRoot, relativePath);
     
@@ -804,7 +827,7 @@ export async function copyServerFile(
     const dir = path.dirname(sourcePath);
     const destPath = path.join(dir, newName);
 
-    if (!sourcePath.startsWith(serverRoot) || !destPath.startsWith(serverRoot)) {
+    if (!isPathWithin(sourcePath, serverRoot) || !isPathWithin(destPath, serverRoot)) {
         return { success: false, error: "Access denied" };
     }
 
@@ -929,12 +952,20 @@ export async function importServer(
     // Create server directory
     await fs.mkdir(serverPath, { recursive: true });
 
-    // Extract all files except manifest
+    // Extract all files except manifest (with zip slip protection)
+    const resolvedServerPath = path.resolve(serverPath);
     for (const entry of zipEntries) {
       if (entry.entryName === "manifest.json") continue;
       if (entry.isDirectory) continue;
 
-      const outputPath = path.join(serverPath, entry.entryName);
+      const outputPath = path.resolve(serverPath, entry.entryName);
+
+      // Zip slip protection: ensure extracted path is within server directory
+      if (!isPathWithin(outputPath, resolvedServerPath)) {
+        console.warn(`[IMPORT] Skipping malicious zip entry: ${entry.entryName}`);
+        continue;
+      }
+
       const outputDir = path.dirname(outputPath);
 
       // Create directory if needed
