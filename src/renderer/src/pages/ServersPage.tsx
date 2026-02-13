@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import {
     Card,
     CardContent,
@@ -69,6 +70,8 @@ export function ServersPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [creationProgress, setCreationProgress] = useState<ServerCreationProgress | null>(null)
     const [creationError, setCreationError] = useState<string | null>(null)
+    // Analytics toggle
+    const [enableAnalytics, setEnableAnalytics] = useState(false)
     // Import state
     const [showImportDialog, setShowImportDialog] = useState(false)
     const [importZipPath, setImportZipPath] = useState<string | null>(null)
@@ -461,6 +464,23 @@ export function ServersPage() {
                                 </div>
                             )}
                         </div>
+
+                        {/* CatalystAnalytics toggle — shown for plugin-compatible platforms */}
+                        {(framework === "Paper" || framework === "Purpur") && (
+                            <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                                <div>
+                                    <p className="text-sm font-medium">Enable CatalystAnalytics</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Auto-install the analytics plugin for server statistics
+                                    </p>
+                                </div>
+                                <Switch
+                                    checked={enableAnalytics}
+                                    onCheckedChange={setEnableAnalytics}
+                                    disabled={isCreating}
+                                />
+                            </div>
+                        )}
 
                         {isCreating && creationProgress && (
                             <div className="flex flex-col gap-2">
