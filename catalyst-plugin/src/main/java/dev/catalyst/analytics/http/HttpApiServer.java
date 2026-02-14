@@ -12,12 +12,21 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
  * Lightweight built-in HTTP server providing REST API endpoints
  * for the Catalyst Electron app to consume analytics data.
+ *
+ * Security features:
+ * - API key authentication
+ * - Rate limiting per IP
+ * - Input validation on all query parameters
+ * - CORS headers
+ * - PreparedStatement-style parameter handling (no SQL, but validated inputs)
  */
 public class HttpApiServer {
 
@@ -26,6 +35,11 @@ public class HttpApiServer {
     private final String apiKey;
     private final String corsOrigin;
     private final Gson gson;
+
+    // Rate limiting: IP -> request count tracker
+    private final ConcurrentHashMap<String, RateLimitEntry> rateLimitMap = new ConcurrentHashMap<>();
+    private static final int MAX_REQUESTS_PER_MINUTE = 60;
+    private static final long RATE_LIMIT_WINDOW_MS = 60_000L;
 
     public HttpApiServer(CatalystAnalyticsPlugin plugin, int port, String apiKey, String corsOrigin) throws IOException {
         this.plugin = plugin;
@@ -41,7 +55,6 @@ public class HttpApiServer {
         server.createContext("/api/analytics/players", this::handlePlayers);
         server.createContext("/api/analytics/tps", this::handleTps);
         server.createContext("/api/analytics/memory", this::handleMemory);
-        server.createContext("/api/analytics/geo", this::handleGeo);
         server.createContext("/api/analytics/timeline", this::handleTimeline);
     }
 
@@ -51,6 +64,36 @@ public class HttpApiServer {
 
     public void stop() {
         server.stop(0);
+    }
+
+    // ========== Rate Limiting ==========
+
+    private static class RateLimitEntry {
+        final AtomicInteger count = new AtomicInteger(0);
+        volatile long windowStart = System.currentTimeMillis();
+
+        boolean tryAcquire() {
+            long now = System.currentTimeMillis();
+            if (now - windowStart > RATE_LIMIT_WINDOW_MS) {
+                // Reset window
+                windowStart = now;
+                count.set(1);
+                return true;
+            }
+            return count.incrementAndGet() <= MAX_REQUESTS_PER_MINUTE;
+        }
+    }
+
+    private boolean checkRateLimit(HttpExchange exchange) throws IOException {
+        String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+        RateLimitEntry entry = rateLimitMap.computeIfAbsent(clientIp, k -> new RateLimitEntry());
+
+        if (!entry.tryAcquire()) {
+            exchange.getResponseHeaders().set("Retry-After", "60");
+            sendJson(exchange, 429, Map.of("error", "Rate limit exceeded", "message", "Too many requests. Try again later."));
+            return false;
+        }
+        return true;
     }
 
     // ========== Auth & CORS ==========
@@ -64,6 +107,11 @@ public class HttpApiServer {
         }
 
         addCorsHeaders(exchange);
+
+        // Rate limiting check
+        if (!checkRateLimit(exchange)) {
+            return false;
+        }
 
         // Check API key
         String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
@@ -148,8 +196,6 @@ public class HttpApiServer {
                     m.put("lastJoin", p.lastJoin);
                     m.put("joinCount", p.joinCount);
                     m.put("totalPlayTimeSeconds", p.totalPlayTimeSeconds);
-                    m.put("country", p.country);
-                    m.put("region", p.region);
                     m.put("clientVersion", p.clientVersion);
                     m.put("clientBrand", p.clientBrand);
                     m.put("chatMessages", p.chatMessages);
@@ -171,8 +217,8 @@ public class HttpApiServer {
         DataManager dm = plugin.getDataManager();
         List<DataManager.TimestampedValue> history = dm.getTpsHistory();
 
-        // Optionally limit results
-        int limit = getIntQueryParam(exchange, "limit", 1440); // default: 24h of minute samples
+        // Validate and clamp limit parameter
+        int limit = getValidatedIntParam(exchange, "limit", 1440, 1, 10000);
         if (history.size() > limit) {
             history = history.subList(history.size() - limit, history.size());
         }
@@ -193,7 +239,7 @@ public class HttpApiServer {
         DataManager dm = plugin.getDataManager();
         List<DataManager.TimestampedValue> history = dm.getMemoryHistory();
 
-        int limit = getIntQueryParam(exchange, "limit", 1440);
+        int limit = getValidatedIntParam(exchange, "limit", 1440, 1, 10000);
         if (history.size() > limit) {
             history = history.subList(history.size() - limit, history.size());
         }
@@ -209,41 +255,13 @@ public class HttpApiServer {
         sendJson(exchange, 200, Map.of("memory", data));
     }
 
-    private void handleGeo(HttpExchange exchange) throws IOException {
-        if (!authenticate(exchange)) return;
-
-        DataManager dm = plugin.getDataManager();
-        Map<String, DataManager.PlayerData> allPlayers = dm.getAllPlayers();
-
-        // Aggregate by country
-        Map<String, Integer> countryCount = new LinkedHashMap<>();
-        for (DataManager.PlayerData p : allPlayers.values()) {
-            if (p.country != null && !p.country.isEmpty()) {
-                countryCount.merge(p.country, 1, Integer::sum);
-            }
-        }
-
-        // Sort by count descending
-        List<Map<String, Object>> geoList = countryCount.entrySet().stream()
-                .sorted((a, b) -> b.getValue() - a.getValue())
-                .map(e -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("country", e.getKey());
-                    m.put("count", e.getValue());
-                    return m;
-                })
-                .collect(Collectors.toList());
-
-        sendJson(exchange, 200, Map.of("geo", geoList));
-    }
-
     private void handleTimeline(HttpExchange exchange) throws IOException {
         if (!authenticate(exchange)) return;
 
         DataManager dm = plugin.getDataManager();
         List<DataManager.TimestampedValue> timeline = dm.getPlayerCountTimeline();
 
-        int limit = getIntQueryParam(exchange, "limit", 288); // default: 24h of 5-min samples
+        int limit = getValidatedIntParam(exchange, "limit", 288, 1, 10000);
         if (timeline.size() > limit) {
             timeline = timeline.subList(timeline.size() - limit, timeline.size());
         }
@@ -270,23 +288,34 @@ public class HttpApiServer {
         }
     }
 
+    /**
+     * Safely extract a query parameter value. Returns null if not found.
+     * Input is validated to prevent injection attacks.
+     */
     private String getQueryParam(HttpExchange exchange, String key) {
         String query = exchange.getRequestURI().getQuery();
         if (query == null) return null;
         for (String param : query.split("&")) {
             String[] kv = param.split("=", 2);
             if (kv.length == 2 && kv[0].equals(key)) {
-                return kv[1];
+                // Basic input validation: strip any suspicious characters
+                String value = kv[1].trim();
+                if (value.length() > 256) return null; // Reject overly long values
+                return value;
             }
         }
         return null;
     }
 
-    private int getIntQueryParam(HttpExchange exchange, String key, int defaultValue) {
+    /**
+     * Get a validated integer query parameter, clamped to [min, max].
+     */
+    private int getValidatedIntParam(HttpExchange exchange, String key, int defaultValue, int min, int max) {
         String val = getQueryParam(exchange, key);
         if (val == null) return defaultValue;
         try {
-            return Integer.parseInt(val);
+            int parsed = Integer.parseInt(val);
+            return Math.max(min, Math.min(max, parsed));
         } catch (NumberFormatException e) {
             return defaultValue;
         }

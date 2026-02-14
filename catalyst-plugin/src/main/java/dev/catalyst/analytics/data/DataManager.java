@@ -179,7 +179,19 @@ public class DataManager {
         PlayerData pd = players.get(uuid);
         if (pd != null) {
             pd.protocolVersion = protocolVersion;
-            pd.clientVersion = ProtocolVersionMapper.map(protocolVersion);
+            pd.clientVersion = String.valueOf(protocolVersion);
+            dirty = true;
+        }
+    }
+
+    /**
+     * Set the player's client version as a human-readable string (e.g. "1.21.4").
+     * Preferred over setPlayerClientVersion(int) — avoids unreliable protocol mappings.
+     */
+    public void setPlayerClientVersionString(String uuid, String version) {
+        PlayerData pd = players.get(uuid);
+        if (pd != null) {
+            pd.clientVersion = version;
             dirty = true;
         }
     }
@@ -392,8 +404,6 @@ public class DataManager {
                 pm.put("lastJoin", pd.lastJoin);
                 pm.put("joinCount", pd.joinCount);
                 pm.put("totalPlayTimeSeconds", pd.totalPlayTimeSeconds);
-                pm.put("country", pd.country);
-                pm.put("region", pd.region);
                 pm.put("os", pd.os);
                 pm.put("clientVersion", pd.clientVersion);
                 pm.put("clientBrand", pd.clientBrand);
@@ -437,9 +447,6 @@ public class DataManager {
                 timelineList.add(m);
             }
             combined.put("timeline", timelineList);
-
-            // Geo distribution
-            combined.put("geo", buildAggregation(players.values(), pd -> pd.country, "country"));
 
             // Version distribution
             combined.put("versions", buildAggregation(players.values(), pd -> pd.clientVersion, "version"));
