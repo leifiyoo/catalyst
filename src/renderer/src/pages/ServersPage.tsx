@@ -70,8 +70,8 @@ export function ServersPage() {
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const [creationProgress, setCreationProgress] = useState<ServerCreationProgress | null>(null)
     const [creationError, setCreationError] = useState<string | null>(null)
-    // Analytics toggle
-    const [enableAnalytics, setEnableAnalytics] = useState(false)
+    // Analytics toggle — enabled by default for plugin-compatible platforms
+    const [enableAnalytics, setEnableAnalytics] = useState(true)
     // Import state
     const [showImportDialog, setShowImportDialog] = useState(false)
     const [importZipPath, setImportZipPath] = useState<string | null>(null)

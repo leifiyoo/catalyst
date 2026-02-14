@@ -98,7 +98,7 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
   });
 }
 
-function extractZip(zipPath: string, destDir: string): Promise<void> {
+function extractArchive(archivePath: string, destDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
     let proc: ReturnType<typeof spawn>;
 
@@ -106,7 +106,7 @@ function extractZip(zipPath: string, destDir: string): Promise<void> {
     if (process.platform === "win32") {
         // Use Expand-Archive via encoded command to avoid shell injection
         // Build the PowerShell script and encode it as Base64 UTF-16LE
-        const psScript = `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
+        const psScript = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
         const encoded = Buffer.from(psScript, "utf16le").toString("base64");
         proc = spawn("powershell", [
             "-NoProfile",
@@ -115,8 +115,8 @@ function extractZip(zipPath: string, destDir: string): Promise<void> {
             encoded
         ]);
     } else {
-        // Unix (tar) - arguments passed as array, no shell interpolation
-        proc = spawn("tar", ["-xf", zipPath, "-C", destDir]);
+        // Unix (tar) - use -xzf for .tar.gz archives (Adoptium delivers tar.gz on Linux/macOS)
+        proc = spawn("tar", ["-xzf", archivePath, "-C", destDir]);
     }
 
     proc.on("close", (code) => {
@@ -131,13 +131,40 @@ function extractZip(zipPath: string, destDir: string): Promise<void> {
 }
 
 /**
+ * Find the JDK home directory (the directory containing bin/, lib/, etc.)
+ * by looking for the bin/ directory with the java executable.
+ */
+async function findJdkHome(dir: string): Promise<string | null> {
+  const executableName = process.platform === "win32" ? "java.exe" : "java";
+  try {
+    const binDir = path.join(dir, "bin");
+    const candidate = path.join(binDir, executableName);
+    try {
+      await fs.access(candidate);
+      return dir; // This directory IS the JDK home
+    } catch {}
+
+    // Check subdirectories (Adoptium extracts into a nested folder like jdk-21.0.10+7)
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const found = await findJdkHome(path.join(dir, entry.name));
+        if (found) return found;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Downloads and sets up the required Java runtime.
  * Returns the path to the java executable.
+ * Sets JAVA_HOME-relative paths correctly so jvm.cfg can be found.
  * @param version Java version (e.g. 8, 11, 17)
  * @param onProgress Callback used to report download/extraction progress
  */
 export async function ensureJavaInstalled(
-    version: number, 
+    version: number,
     onProgress?: (stage: 'downloading' | 'extracting', percent: number, downloaded?: number, total?: number) => void
 ): Promise<string> {
   // Ensure runtimes directory exists
@@ -148,40 +175,18 @@ export async function ensureJavaInstalled(
   const runtimeName = `java-${version}`;
   const runtimePath = path.join(RUNTIMES_DIR, runtimeName);
   
-  // Check if already installed
-  // We assume if the folder exists, it's valid. Ideally we verify the binary.
   const executableName = process.platform === "win32" ? "java.exe" : "java";
-  
-  // Search for binary recursively because extracted folder structure varies
-  // e.g. java-17/jdk-17.0.1/bin/java.exe
-  async function findJavaBinary(dir: string): Promise<string | null> {
-    try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                // Heuristic: if bin folder, look inside
-                if (entry.name === "bin") {
-                    const candidate = path.join(fullPath, executableName);
-                    try {
-                        await fs.access(candidate);
-                        return candidate;
-                    } catch {}
-                }
-                const found = await findJavaBinary(fullPath);
-                if (found) return found;
-            }
-        }
-    } catch { return null; }
-    return null;
-  }
 
   // Double check if existing installation is valid
   try {
-      const existingBin = await findJavaBinary(runtimePath);
-      if (existingBin) {
-          if (onProgress) onProgress('downloading', 100); // Already done
-          return existingBin;
+      const jdkHome = await findJdkHome(runtimePath);
+      if (jdkHome) {
+          const existingBin = path.join(jdkHome, "bin", executableName);
+          try {
+              await fs.access(existingBin);
+              if (onProgress) onProgress('downloading', 100); // Already done
+              return existingBin;
+          } catch {}
       }
   } catch {}
 
@@ -193,7 +198,9 @@ export async function ensureJavaInstalled(
   const arch = getArchString();
   const url = `https://api.adoptium.net/v3/binary/latest/${version}/ga/${platform}/${arch}/jdk/hotspot/normal/eclipse`;
 
-  const archiveName = `java-${version}.zip`; // treating as zip for simplicity, tar for unix
+  // Adoptium delivers .zip on Windows, .tar.gz on Linux/macOS
+  const archiveExt = process.platform === "win32" ? ".zip" : ".tar.gz";
+  const archiveName = `java-${version}${archiveExt}`;
   const archivePath = path.join(RUNTIMES_DIR, archiveName);
 
   await downloadFile(url, archivePath, (downloaded, total) => {
@@ -204,16 +211,34 @@ export async function ensureJavaInstalled(
   
   // Extract
   if (onProgress) onProgress('extracting', 0);
+  
+  // Remove old runtime directory if it exists (clean install)
+  try { await fs.rm(runtimePath, { recursive: true, force: true }); } catch {}
   await fs.mkdir(runtimePath, { recursive: true });
   
-  await extractZip(archivePath, runtimePath);
+  await extractArchive(archivePath, runtimePath);
   
-  // Clean up
+  // Clean up archive
   await fs.unlink(archivePath);
 
-  // Find the binary again
-  const bin = await findJavaBinary(runtimePath);
-  if (!bin) throw new Error(`Java ${version} installed but binary not found.`);
+  // Find the JDK home (handles nested directory from extraction)
+  const jdkHome = await findJdkHome(runtimePath);
+  if (!jdkHome) throw new Error(`Java ${version} installed but JDK home not found.`);
+
+  const bin = path.join(jdkHome, "bin", executableName);
+  try {
+    await fs.access(bin);
+  } catch {
+    throw new Error(`Java ${version} installed but binary not found at ${bin}`);
+  }
+  
+  // Verify lib/jvm.cfg exists (critical for Java to start)
+  const jvmCfg = path.join(jdkHome, "lib", "jvm.cfg");
+  try {
+    await fs.access(jvmCfg);
+  } catch {
+    throw new Error(`Java ${version} extraction incomplete: lib/jvm.cfg not found at ${jvmCfg}`);
+  }
   
   // Set executable permissions on Unix
   if (process.platform !== "win32") {
@@ -222,4 +247,13 @@ export async function ensureJavaInstalled(
 
   if (onProgress) onProgress('extracting', 100);
   return bin;
+}
+
+/**
+ * Derives JAVA_HOME from a java binary path.
+ * e.g. /path/to/jdk-21/bin/java -> /path/to/jdk-21
+ */
+export function getJavaHome(javaBinaryPath: string): string {
+  // java binary is at <JAVA_HOME>/bin/java
+  return path.dirname(path.dirname(javaBinaryPath));
 }

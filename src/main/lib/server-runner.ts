@@ -2,7 +2,7 @@ import { BrowserWindow } from "electron";
 import { spawn, ChildProcess, execFile } from "child_process";
 import { ConsoleLine, ServerStats, ServerStatusUpdate } from "@shared/types";
 import { getServer, getServers, updateServerStatus, updateServerSettings, installCatalystPlugin } from "./server-manager";
-import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
+import { getRequiredJavaVersion, ensureJavaInstalled, getJavaHome } from "./java-manager";
 import { startNgrokTunnel, isNgrokEnabled, isAuthtokenConfigured } from "./ngrok-manager";
 
 const runningServers = new Map<string, ChildProcess>();
@@ -415,9 +415,16 @@ export async function startServer(
       }
     }
 
+    // Set JAVA_HOME so the JVM can find lib/jvm.cfg and other internal files
+    const spawnEnv = { ...process.env };
+    if (javaExecutable && javaExecutable !== "java") {
+      spawnEnv.JAVA_HOME = getJavaHome(javaExecutable);
+    }
+
     const child = spawn(javaExecutable || "java", args, {
       cwd: server.serverPath,
       stdio: ["pipe", "pipe", "pipe"],
+      env: spawnEnv,
     });
 
     runningServers.set(serverId, child);
