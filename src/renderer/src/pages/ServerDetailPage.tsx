@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { ConsoleTab } from "@/components/ConsoleTab"
 import { useParams, useNavigate } from "react-router-dom"
