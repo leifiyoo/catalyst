@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react"
 import {
     Card,
     CardContent,
@@ -148,7 +148,8 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
         return `${minutes}m`
     }
 
-    const formatTimestamp = (ts: string) => {
+    const formatTimestamp = (label: ReactNode): string => {
+        const ts = String(label)
         try {
             const d = new Date(ts)
             return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -243,10 +244,10 @@ function AnalyticsContent({
     showSettings: boolean
     setShowSettings: (v: boolean) => void
     formatPlayTime: (s: number) => string
-    formatTimestamp: (ts: string) => string
+    formatTimestamp: (label: ReactNode) => string
     formatUptime: (s?: string) => string
 }) {
-    const { overview, players, tps, mspt, memory, timeline, versions, clients } = data
+    const { overview, players, tps, mspt, memory, timeline, clients } = data
 
     // Prepare hourly joins chart data
     const hourlyData = useMemo(() => {
@@ -468,7 +469,7 @@ function AnalyticsContent({
                                             outerRadius={75}
                                             innerRadius={40}
                                             paddingAngle={2}
-                                            label={({ client, percent }) => `${client} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                                             labelLine={false}
                                             isAnimationActive={false}
                                         >
