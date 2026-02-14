@@ -28,7 +28,6 @@ import {
     Cpu,
     Settings,
     Gamepad2,
-    Layers,
 } from "lucide-react"
 import {
     LineChart,
@@ -260,18 +259,6 @@ function AnalyticsContent({
             .sort((a, b) => a.hour.localeCompare(b.hour))
     }, [overview?.hourlyJoins])
 
-    // Version data — use top-level versions or aggregate from players
-    const versionData = useMemo(() => {
-        if (versions && versions.length > 0) return versions
-        const vMap: Record<string, number> = {}
-        players.forEach(p => {
-            if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
-        })
-        return Object.entries(vMap)
-            .map(([version, count]) => ({ version, count }))
-            .sort((a, b) => b.count - a.count)
-    }, [versions, players])
-
     // Client data — use top-level clients or aggregate from players
     const clientData = useMemo(() => {
         if (clients && clients.length > 0) return clients
@@ -459,34 +446,6 @@ function AnalyticsContent({
             <section>
                 <SectionHeader icon={Gamepad2} title="Players" />
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Minecraft Versions — Bar Chart */}
-                    {versionData.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                    <Layers className="h-4 w-4" />
-                                    Minecraft Versions
-                                </CardTitle>
-                                <CardDescription className="text-xs">Player client versions</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={220}>
-                                    <BarChart data={versionData.slice(0, 10)} layout="vertical" style={{ cursor: "default" }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <YAxis type="category" dataKey="version" width={90} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip content={<BarChartTooltip />} cursor={false} />
-                                        <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]}>
-                                            {versionData.slice(0, 10).map((_, index) => (
-                                                <Cell key={`v-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} fillOpacity={0.8} />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-
                     {/* Client Brands — Pie Chart */}
                     {clientData.length > 0 && (
                         <Card>

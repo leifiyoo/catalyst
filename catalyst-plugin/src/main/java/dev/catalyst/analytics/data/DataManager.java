@@ -309,6 +309,28 @@ public class DataManager {
         return players.values().stream().filter(p -> !p.isNew && p.joinCount > 1).count();
     }
 
+    // ========== Live Playtime Updates ==========
+
+    /**
+     * Updates playtime for all currently online players.
+     * Called periodically so playtime is visible in real-time, not only on disconnect.
+     */
+    public void updateOnlinePlaytimes() {
+        for (PlayerData pd : players.values()) {
+            if (pd.online && pd.lastJoin != null) {
+                try {
+                    Instant joinTime = Instant.parse(pd.lastJoin);
+                    long elapsed = Instant.now().getEpochSecond() - joinTime.getEpochSecond();
+                    if (elapsed > 0) {
+                        pd.totalPlayTimeSeconds += elapsed;
+                        pd.lastJoin = Instant.now().toString();
+                        dirty = true;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
     // ========== Persistence (Batched) ==========
 
     public synchronized void saveAll() {

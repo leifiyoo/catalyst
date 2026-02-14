@@ -87,6 +87,9 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         long saveIntervalTicks = saveIntervalSeconds * 20L;
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.saveAll(), saveIntervalTicks, saveIntervalTicks);
 
+        // Schedule live playtime updates every 30 seconds (600 ticks)
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.updateOnlinePlaytimes(), 600L, 600L);
+
         // Schedule data cleanup (every hour)
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.cleanupOldData(), 20L * 60, 20L * 60 * 60);
 
