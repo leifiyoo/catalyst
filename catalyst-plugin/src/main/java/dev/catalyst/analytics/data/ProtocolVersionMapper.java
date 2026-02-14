@@ -12,6 +12,8 @@ public class ProtocolVersionMapper {
 
     static {
         // 1.21.x
+        PROTOCOL_MAP.put(774, "1.21.4");
+        PROTOCOL_MAP.put(769, "1.21.2/1.21.3");
         PROTOCOL_MAP.put(768, "1.21.1");
         PROTOCOL_MAP.put(767, "1.21");
         // 1.20.x
