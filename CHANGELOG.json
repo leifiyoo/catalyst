@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "1.1.0",
+      "date": "2026-02-14",
+      "title": "Bug fixes, live playtime, UI polish",
+      "changes": [
+        "Removed non-functional Minecraft Versions chart from Analytics page",
+        "Removed unused ProtocolVersionMapper dead code from plugin",
+        "Live playtime tracking: player playtime now updates every 30 seconds while online, instead of only on disconnect",
+        "Properties tab now auto-refreshes data when selected (no full page reload needed)",
+        "RAM setting changes now show clear feedback that a server restart is needed to apply",
+        "Spigot platform badge had broken styling in dark mode",
+        "Platform badge colors updated to match brand identities (Paper→blue, Velocity→teal, Purpur→purple, Sponge→lime)",
+        "Version bumped to 1.1.0"
+      ]
+    },
+    {
       "version": "1.0.2",
       "date": "2026-02-10",
       "title": "Initial Release",
