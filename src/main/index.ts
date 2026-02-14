@@ -1,10 +1,16 @@
+// Linux SUID sandbox fix — must be set before Electron initializes
+if (process.platform === 'linux') {
+  process.env.ELECTRON_DISABLE_SANDBOX = '1'
+}
+
 import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
 
-// Disable Chromium sandbox on Linux to avoid SUID sandbox helper errors
+// Disable Chromium sandbox on Linux to avoid SUID sandbox helper errors (FATAL:setuid_sandbox_host.cc)
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("no-sandbox");
+  app.commandLine.appendSwitch("disable-gpu-sandbox");
 }
 import icon from "../../resources/logoonly.png?asset";
 import {
