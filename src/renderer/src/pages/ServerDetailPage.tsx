@@ -126,7 +126,7 @@ export function ServerDetailPage() {
 
     // Properties state
     const [properties, setProperties] = useState<ServerProperty[]>([])
-    const [propsLoaded, setPropsLoaded] = useState(false)
+    const [, setPropsLoaded] = useState(false)
     const [propsSaving, setPropsSaving] = useState(false)
     const [propsSuccess, setPropsSuccess] = useState(false)
     const [propsFilter, setPropsFilter] = useState("")
@@ -134,13 +134,13 @@ export function ServerDetailPage() {
     // Whitelist state
     const [whitelist, setWhitelist] = useState<string[]>([])
     const [whitelistInput, setWhitelistInput] = useState("")
-    const [whitelistLoaded, setWhitelistLoaded] = useState(false)
+    const [, setWhitelistLoaded] = useState(false)
     const [whitelistSaving, setWhitelistSaving] = useState(false)
 
     // Banlist state
     const [banlist, setBanlist] = useState<string[]>([])
     const [banlistInput, setBanlistInput] = useState("")
-    const [banlistLoaded, setBanlistLoaded] = useState(false)
+    const [, setBanlistLoaded] = useState(false)
     const [banlistSaving, setBanlistSaving] = useState(false)
 
     // Settings state
