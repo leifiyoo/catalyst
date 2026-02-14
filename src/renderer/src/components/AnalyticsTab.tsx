@@ -49,77 +49,6 @@ import {
 } from "recharts"
 import type { AnalyticsData } from "@shared/types"
 
-/**
- * Minecraft protocol version to game version mapping.
- * Used to display friendly version names instead of raw protocol numbers.
- */
-const PROTOCOL_VERSION_MAP: Record<number, string> = {
-    774: "1.21.4",
-    769: "1.21.2/1.21.3",
-    768: "1.21.1",
-    767: "1.21",
-    766: "1.20.6",
-    765: "1.20.5",
-    764: "1.20.3/1.20.4",
-    763: "1.20.2",
-    762: "1.20/1.20.1",
-    761: "1.19.4",
-    760: "1.19.3",
-    759: "1.19/1.19.1/1.19.2",
-    758: "1.18.2",
-    757: "1.18/1.18.1",
-    756: "1.17.1",
-    755: "1.17",
-    754: "1.16.4/1.16.5",
-    753: "1.16.3",
-    751: "1.16.2",
-    736: "1.16.1",
-    735: "1.16",
-    578: "1.15.2",
-    575: "1.15.1",
-    573: "1.15",
-    498: "1.14.4",
-    490: "1.14.3",
-    485: "1.14.2",
-    480: "1.14.1",
-    477: "1.14",
-    404: "1.13.2",
-    401: "1.13.1",
-    393: "1.13",
-    340: "1.12.2",
-    338: "1.12.1",
-    335: "1.12",
-    316: "1.11.2",
-    315: "1.11",
-    210: "1.10/1.10.1/1.10.2",
-    110: "1.9.4",
-    109: "1.9.2",
-    108: "1.9.1",
-    107: "1.9",
-    47: "1.8/1.8.9",
-    5: "1.7.10",
-    4: "1.7.5",
-}
-
-/**
- * Resolve a version string that may be a raw protocol number like "Unknown (774)"
- * into a friendly Minecraft version string.
- */
-function resolveVersion(version: string): string {
-    // Match patterns like "Unknown (774)" or just raw numbers
-    const unknownMatch = version.match(/^Unknown\s*\((\d+)\)$/i)
-    if (unknownMatch) {
-        const proto = parseInt(unknownMatch[1], 10)
-        return PROTOCOL_VERSION_MAP[proto] || version
-    }
-    // If it's just a plain number, try to map it
-    const num = parseInt(version, 10)
-    if (!isNaN(num) && String(num) === version.trim()) {
-        return PROTOCOL_VERSION_MAP[num] || version
-    }
-    return version
-}
-
 interface AnalyticsTabProps {
     serverId: string
 }
@@ -132,12 +61,32 @@ const PIE_COLORS = [
     "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#2563eb",
 ]
 
-const CHART_TOOLTIP_STYLE = {
+/**
+ * Tooltip style for all charts — white text, dark background, no white hover.
+ */
+const CHART_TOOLTIP_STYLE: React.CSSProperties = {
     background: "hsl(var(--card))",
     border: "1px solid hsl(var(--border))",
     borderRadius: 8,
     fontSize: 12,
     color: "#ffffff",
+}
+
+/**
+ * Custom tooltip for bar charts to prevent white hover background.
+ */
+function BarChartTooltip({ active, payload, label }: any) {
+    if (!active || !payload || !payload.length) return null
+    return (
+        <div style={CHART_TOOLTIP_STYLE} className="px-3 py-2 shadow-lg">
+            <p className="text-xs font-medium" style={{ color: "#ffffff" }}>{label}</p>
+            {payload.map((entry: any, i: number) => (
+                <p key={i} className="text-xs" style={{ color: entry.color || "#ffffff" }}>
+                    {entry.name}: {entry.value}
+                </p>
+            ))}
+        </div>
+    )
 }
 
 /**
@@ -274,7 +223,9 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     )
 }
 
-// Separate content component to keep things organized
+// ═══════════════════════════════════════════════════════════
+// Main Content Component
+// ═══════════════════════════════════════════════════════════
 function AnalyticsContent({
     data,
     serverOffline,
@@ -296,7 +247,7 @@ function AnalyticsContent({
     formatTimestamp: (ts: string) => string
     formatUptime: (s?: string) => string
 }) {
-    const { overview, players, tps, mspt, memory, timeline, versions, clients, operatingSystems } = data
+    const { overview, players, tps, mspt, memory, timeline, versions, clients } = data
 
     // Prepare hourly joins chart data
     const hourlyData = useMemo(() => {
@@ -309,33 +260,19 @@ function AnalyticsContent({
             .sort((a, b) => a.hour.localeCompare(b.hour))
     }, [overview?.hourlyJoins])
 
-    // Aggregate version data from players if not provided at top level,
-    // resolving protocol numbers to friendly version names
+    // Version data — use top-level versions or aggregate from players
     const versionData = useMemo(() => {
-        const raw = (versions && versions.length > 0)
-            ? versions
-            : (() => {
-                const vMap: Record<string, number> = {}
-                players.forEach(p => {
-                    if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
-                })
-                return Object.entries(vMap)
-                    .map(([version, count]) => ({ version, count }))
-                    .sort((a, b) => b.count - a.count)
-            })()
-
-        // Resolve protocol numbers and merge duplicates
-        const merged: Record<string, number> = {}
-        raw.forEach(({ version, count }) => {
-            const resolved = resolveVersion(version)
-            merged[resolved] = (merged[resolved] || 0) + count
+        if (versions && versions.length > 0) return versions
+        const vMap: Record<string, number> = {}
+        players.forEach(p => {
+            if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
         })
-        return Object.entries(merged)
+        return Object.entries(vMap)
             .map(([version, count]) => ({ version, count }))
             .sort((a, b) => b.count - a.count)
     }, [versions, players])
 
-    // Aggregate client data from players if not provided at top level
+    // Client data — use top-level clients or aggregate from players
     const clientData = useMemo(() => {
         if (clients && clients.length > 0) return clients
         const cMap: Record<string, number> = {}
@@ -347,18 +284,6 @@ function AnalyticsContent({
             .map(([client, count]) => ({ client, count }))
             .sort((a, b) => b.count - a.count)
     }, [clients, players])
-
-    // Aggregate OS data from players if not provided at top level
-    const osData = useMemo(() => {
-        if (operatingSystems && operatingSystems.length > 0) return operatingSystems
-        const oMap: Record<string, number> = {}
-        players.forEach(p => {
-            if (p.os) oMap[p.os] = (oMap[p.os] || 0) + 1
-        })
-        return Object.entries(oMap)
-            .map(([os, count]) => ({ os, count }))
-            .sort((a, b) => b.count - a.count)
-    }, [operatingSystems, players])
 
     return (
         <div className="space-y-6 pb-8">
@@ -413,7 +338,7 @@ function AnalyticsContent({
             )}
 
             {/* ═══════════════════════════════════════════════════════════ */}
-            {/* SECTION 1: Overview */}
+            {/* SECTION 1: Overview — Players, Playtime, Peak Players     */}
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={TrendingUp} title="Overview" />
@@ -421,16 +346,37 @@ function AnalyticsContent({
                     <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
                     <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
                     <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
-                    <StatCard icon={Timer} label="Uptime" value={formatUptime(overview.serverStartTime)} accent="text-teal-500" />
                     <StatCard icon={Clock} label="Avg Play Time" value={formatPlayTime(overview.averagePlayTimeSeconds)} accent="text-amber-500" />
+                    <StatCard icon={Timer} label="Uptime" value={formatUptime(overview.serverStartTime)} accent="text-teal-500" />
+                    <StatCard icon={TrendingUp} label="Total Joins" value={overview.totalJoins} accent="text-violet-500" />
+                    <StatCard icon={Users} label="New Players" value={overview.newPlayers} accent="text-pink-500" />
                     <StatCard icon={Skull} label="Deaths" value={overview.totalDeaths} accent="text-red-500" />
-                    <StatCard icon={Sword} label="Kills" value={overview.totalKills} accent="text-orange-500" />
-                    <StatCard icon={MessageSquare} label="Chat Messages" value={overview.totalChatMessages} accent="text-indigo-500" />
                 </div>
+
+                {/* Player Count Timeline — Area Chart */}
+                {timeline && timeline.length > 0 && (
+                    <Card className="mt-4">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium">Player Count Over Time</CardTitle>
+                            <CardDescription className="text-xs">Online players timeline</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={200}>
+                                <AreaChart data={timeline}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                    <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                    <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                    <Area type="monotone" dataKey="players" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={2} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                )}
             </section>
 
             {/* ═══════════════════════════════════════════════════════════ */}
-            {/* SECTION 2: Performance */}
+            {/* SECTION 2: Performance — TPS, RAM, MSPT                   */}
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={Cpu} title="Performance" />
@@ -441,7 +387,7 @@ function AnalyticsContent({
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* TPS Chart */}
+                    {/* TPS Chart — Line Chart */}
                     {tps && tps.length > 0 && (
                         <Card>
                             <CardHeader className="pb-2">
@@ -454,7 +400,7 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
                                         <Line type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} dot={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
@@ -462,7 +408,7 @@ function AnalyticsContent({
                         </Card>
                     )}
 
-                    {/* Memory Chart */}
+                    {/* Memory Chart — Area Chart */}
                     {memory && memory.length > 0 && (
                         <Card>
                             <CardHeader className="pb-2">
@@ -475,7 +421,7 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
                                         <Area type="monotone" dataKey="usedMB" name="Used MB" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} strokeWidth={2} />
                                         <Area type="monotone" dataKey="maxMB" name="Max MB" stroke="#94a3b8" fill="none" strokeWidth={1} strokeDasharray="5 5" />
                                     </AreaChart>
@@ -484,7 +430,7 @@ function AnalyticsContent({
                         </Card>
                     )}
 
-                    {/* MSPT Chart */}
+                    {/* MSPT Chart — Area Chart */}
                     {mspt && mspt.length > 0 && (
                         <Card>
                             <CardHeader className="pb-2">
@@ -497,29 +443,8 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
                                         <Area type="monotone" dataKey="mspt" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.15} strokeWidth={2} />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Player Count Timeline */}
-                    {timeline && timeline.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium">Player Count Over Time</CardTitle>
-                                <CardDescription className="text-xs">Online players timeline</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={200}>
-                                    <AreaChart data={timeline}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                        <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Area type="monotone" dataKey="players" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={2} />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </CardContent>
@@ -529,7 +454,7 @@ function AnalyticsContent({
             </section>
 
             {/* ═══════════════════════════════════════════════════════════ */}
-            {/* SECTION 3: Players */}
+            {/* SECTION 3: Players — Versions (Bar), Clients (Pie)        */}
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={Gamepad2} title="Players" />
@@ -550,7 +475,7 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis type="category" dataKey="version" width={90} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={false} />
+                                        <Tooltip content={<BarChartTooltip />} cursor={false} />
                                         <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]}>
                                             {versionData.slice(0, 10).map((_, index) => (
                                                 <Cell key={`v-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} fillOpacity={0.8} />
@@ -592,80 +517,9 @@ function AnalyticsContent({
                                                 <Cell key={`c-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                             ))}
                                         </Pie>
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                        <Legend wrapperStyle={{ fontSize: 11, color: "#ffffff" }} />
                                     </PieChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Operating Systems — Pie Chart */}
-                    {osData.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                    <Monitor className="h-4 w-4" />
-                                    Operating Systems
-                                </CardTitle>
-                                <CardDescription className="text-xs">Windows, macOS, Linux</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={220}>
-                                    <PieChart>
-                                        <Pie
-                                            data={osData}
-                                            dataKey="count"
-                                            nameKey="os"
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={75}
-                                            innerRadius={40}
-                                            paddingAngle={2}
-                                            label={({ os, percent }) => `${os} ${(percent * 100).toFixed(0)}%`}
-                                            labelLine={false}
-                                            isAnimationActive={false}
-                                        >
-                                            {osData.map((_, index) => (
-                                                <Cell key={`o-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-                </div>
-            </section>
-
-            {/* ═══════════════════════════════════════════════════════════ */}
-            {/* SECTION 4: Sessions */}
-            {/* ═══════════════════════════════════════════════════════════ */}
-            <section>
-                <SectionHeader icon={Clock} title="Sessions & Activity" />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Peak Hours Chart */}
-                    {hourlyData.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium">Most Active Hours (UTC)</CardTitle>
-                                <CardDescription className="text-xs">Join distribution by hour of day</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={200}>
-                                    <BarChart data={hourlyData} style={{ cursor: "default" }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={false} />
-                                        <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
-                                            {hourlyData.map((_, index) => (
-                                                <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
                                 </ResponsiveContainer>
                             </CardContent>
                         </Card>
@@ -673,7 +527,7 @@ function AnalyticsContent({
 
                     {/* Top Players by Playtime */}
                     {players.length > 0 && (
-                        <Card>
+                        <Card className="lg:col-span-2">
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                                     <Users className="h-4 w-4" />
@@ -707,7 +561,7 @@ function AnalyticsContent({
                                                 <div className="flex items-center gap-3">
                                                     {p.clientVersion && (
                                                         <Badge variant="outline" className="text-[10px] px-1.5">
-                                                            {resolveVersion(p.clientVersion)}
+                                                            {p.clientVersion}
                                                         </Badge>
                                                     )}
                                                     <span className="text-xs text-muted-foreground font-mono">
@@ -721,12 +575,46 @@ function AnalyticsContent({
                         </Card>
                     )}
                 </div>
+            </section>
 
-                {/* Additional stats row */}
-                <div className="grid grid-cols-3 gap-3 mt-4">
-                    <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
-                    <StatCard icon={TrendingUp} label="Total Joins" value={overview.totalJoins} accent="text-violet-500" />
-                    <StatCard icon={Users} label="New Players" value={overview.newPlayers} accent="text-pink-500" />
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 4: Most Active Hours                              */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section>
+                <SectionHeader icon={Clock} title="Most Active Hours" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Peak Hours — Bar Chart */}
+                    {hourlyData.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">Hourly Join Distribution (UTC)</CardTitle>
+                                <CardDescription className="text-xs">When players are most active</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <BarChart data={hourlyData} style={{ cursor: "default" }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip content={<BarChartTooltip />} cursor={false} />
+                                        <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
+                                            {hourlyData.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Additional stats */}
+                    <div className="grid grid-cols-2 gap-3 content-start">
+                        <StatCard icon={Sword} label="Kills" value={overview.totalKills} accent="text-orange-500" />
+                        <StatCard icon={MessageSquare} label="Chat Messages" value={overview.totalChatMessages} accent="text-indigo-500" />
+                        <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
+                        <StatCard icon={TrendingUp} label="Returning" value={overview.returningPlayers} accent="text-emerald-500" />
+                    </div>
                 </div>
             </section>
 

@@ -338,8 +338,6 @@ export type AnalyticsData = {
     lastJoin: string;
     joinCount: number;
     totalPlayTimeSeconds: number;
-    country?: string;
-    region?: string;
     os?: string;
     clientVersion?: string;
     clientBrand?: string;
@@ -354,7 +352,6 @@ export type AnalyticsData = {
   mspt: { timestamp: string; mspt: number }[];
   memory: { timestamp: string; usedMB: number; maxMB: number }[];
   timeline: { timestamp: string; players: number }[];
-  geo: { country: string; count: number }[];
   versions: { version: string; count: number }[];
   clients: { client: string; count: number }[];
   operatingSystems: { os: string; count: number }[];
