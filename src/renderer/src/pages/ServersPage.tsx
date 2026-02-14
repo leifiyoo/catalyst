@@ -71,7 +71,7 @@ export function ServersPage() {
     const [creationProgress, setCreationProgress] = useState<ServerCreationProgress | null>(null)
     const [creationError, setCreationError] = useState<string | null>(null)
     // Analytics toggle
-    const [enableAnalytics, setEnableAnalytics] = useState(false)
+    const [enableAnalytics, setEnableAnalytics] = useState(true)
     // Import state
     const [showImportDialog, setShowImportDialog] = useState(false)
     const [importZipPath, setImportZipPath] = useState<string | null>(null)

@@ -21,6 +21,14 @@
     "test": "npm run test:unit",
     "coverage": "vitest run --coverage"
   },
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  },
+  "overrides": {
+    "rimraf": "^5.0.0",
+    "glob": "^10.4.0"
+  },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
@@ -36,16 +44,13 @@
     "@react-three/cannon": "^6.6.0",
     "@react-three/drei": "^9.118.3",
     "@react-three/fiber": "^8.17.10",
-    "@types/adm-zip": "^0.5.7",
-    "@types/archiver": "^7.0.0",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.33.0",
     "lucide-react": "^0.468.0",
-    "motion": "^12.33.0",
-    "react-router-dom": "^7.13.0",
+    "react-router-dom": "^6.28.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
@@ -53,6 +58,8 @@
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^2.0.0",
+    "@types/adm-zip": "^0.5.7",
+    "@types/archiver": "^7.0.0",
     "@electron-toolkit/eslint-config-ts": "^2.0.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@testing-library/dom": "^10.4.0",

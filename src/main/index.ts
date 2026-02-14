@@ -4,7 +4,7 @@ import { electronApp, is } from "@electron-toolkit/utils";
 
 // Issue 3: Disable Chromium sandbox on Linux to avoid common sandbox errors
 if (process.platform === "linux") {
-  app.commandLine.appendSwitch("--no-sandbox");
+  app.commandLine.appendSwitch("no-sandbox");
 }
 import icon from "../../resources/logoonly.png?asset";
 import {
@@ -95,7 +95,7 @@ function createWindow(): void {
     icon,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
-      sandbox: true,
+      sandbox: process.platform !== "linux",
       contextIsolation: true,
       devTools: false,
     },

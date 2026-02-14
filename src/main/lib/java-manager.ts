@@ -193,7 +193,8 @@ export async function ensureJavaInstalled(
   const arch = getArchString();
   const url = `https://api.adoptium.net/v3/binary/latest/${version}/ga/${platform}/${arch}/jdk/hotspot/normal/eclipse`;
 
-  const archiveName = `java-${version}.zip`; // treating as zip for simplicity, tar for unix
+  const archiveExt = process.platform === "win32" ? "zip" : "tar.gz";
+  const archiveName = `java-${version}.${archiveExt}`;
   const archivePath = path.join(RUNTIMES_DIR, archiveName);
 
   await downloadFile(url, archivePath, (downloaded, total) => {
@@ -207,7 +208,27 @@ export async function ensureJavaInstalled(
   await fs.mkdir(runtimePath, { recursive: true });
   
   await extractZip(archivePath, runtimePath);
-  
+
+  // Flatten nested JDK directory structure
+  // Adoptium extracts to e.g. java-21/jdk-21.0.10+7/ — move contents up
+  try {
+    const entries = await fs.readdir(runtimePath, { withFileTypes: true });
+    const dirs = entries.filter(e => e.isDirectory());
+    if (dirs.length === 1 && dirs[0].name.startsWith("jdk")) {
+      const nestedDir = path.join(runtimePath, dirs[0].name);
+      const nestedEntries = await fs.readdir(nestedDir);
+      for (const entry of nestedEntries) {
+        const src = path.join(nestedDir, entry);
+        const dest = path.join(runtimePath, entry);
+        await fs.rename(src, dest);
+      }
+      await fs.rmdir(nestedDir);
+      console.log(`Flattened JDK directory: ${dirs[0].name}`);
+    }
+  } catch (flattenErr) {
+    console.warn("Failed to flatten JDK directory:", flattenErr);
+  }
+
   // Clean up
   await fs.unlink(archivePath);
 
