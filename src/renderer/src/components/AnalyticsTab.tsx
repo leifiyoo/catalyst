@@ -49,6 +49,12 @@ import {
     Pie,
     Legend,
 } from "recharts"
+import {
+    ComposableMap,
+    Geographies,
+    Geography,
+    ZoomableGroup,
+} from "react-simple-maps"
 import type { AnalyticsData } from "@shared/types"
 
 interface AnalyticsTabProps {
@@ -68,6 +74,73 @@ const CHART_TOOLTIP_STYLE = {
     border: "1px solid hsl(var(--border))",
     borderRadius: 8,
     fontSize: 12,
+    color: "#ffffff",
+}
+
+/** Protocol number to Minecraft version mapping */
+const PROTOCOL_VERSION_MAP: Record<number, string> = {
+    47: "1.8.9", 107: "1.9", 110: "1.9.4", 210: "1.10.x",
+    315: "1.11", 340: "1.12.2", 393: "1.13", 404: "1.13.2",
+    498: "1.14.4", 578: "1.15.2", 754: "1.16.5", 756: "1.17.1",
+    757: "1.18", 758: "1.18.2", 759: "1.19", 760: "1.19.2",
+    761: "1.19.3", 762: "1.19.4", 763: "1.20", 764: "1.20.2",
+    765: "1.20.3", 766: "1.20.4", 767: "1.20.5", 768: "1.21",
+    769: "1.21.1", 770: "1.21.2", 771: "1.21.3", 772: "1.21.4",
+    773: "1.21.5", 774: "1.21.6",
+}
+
+/** Resolve a version string that may be "Unknown (protocol#)" to a friendly name */
+function resolveVersion(version: string): string {
+    const match = version.match(/^Unknown\s*\((\d+)\)$/i)
+    if (match) {
+        const protocol = parseInt(match[1], 10)
+        return PROTOCOL_VERSION_MAP[protocol] || `Unknown (${protocol})`
+    }
+    // Also check if the version is just a raw protocol number
+    const num = parseInt(version, 10)
+    if (!isNaN(num) && String(num) === version.trim()) {
+        return PROTOCOL_VERSION_MAP[num] || `Unknown (${num})`
+    }
+    return version
+}
+
+/** World map GeoJSON URL */
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
+
+/** Country name to ISO 3166-1 alpha-2 mapping (common names used by ip-api.com) */
+const COUNTRY_NAME_TO_ISO: Record<string, string> = {
+    "Afghanistan": "AF", "Albania": "AL", "Algeria": "DZ", "Argentina": "AR",
+    "Armenia": "AM", "Australia": "AU", "Austria": "AT", "Azerbaijan": "AZ",
+    "Bangladesh": "BD", "Belarus": "BY", "Belgium": "BE", "Bolivia": "BO",
+    "Bosnia and Herzegovina": "BA", "Brazil": "BR", "Bulgaria": "BG",
+    "Cambodia": "KH", "Cameroon": "CM", "Canada": "CA", "Chile": "CL",
+    "China": "CN", "Colombia": "CO", "Costa Rica": "CR", "Croatia": "HR",
+    "Cuba": "CU", "Cyprus": "CY", "Czech Republic": "CZ", "Czechia": "CZ",
+    "Denmark": "DK", "Dominican Republic": "DO", "Ecuador": "EC", "Egypt": "EG",
+    "El Salvador": "SV", "Estonia": "EE", "Ethiopia": "ET", "Finland": "FI",
+    "France": "FR", "Georgia": "GE", "Germany": "DE", "Ghana": "GH",
+    "Greece": "GR", "Guatemala": "GT", "Honduras": "HN", "Hong Kong": "HK",
+    "Hungary": "HU", "Iceland": "IS", "India": "IN", "Indonesia": "ID",
+    "Iran": "IR", "Iraq": "IQ", "Ireland": "IE", "Israel": "IL",
+    "Italy": "IT", "Jamaica": "JM", "Japan": "JP", "Jordan": "JO",
+    "Kazakhstan": "KZ", "Kenya": "KE", "Kuwait": "KW", "Latvia": "LV",
+    "Lebanon": "LB", "Libya": "LY", "Lithuania": "LT", "Luxembourg": "LU",
+    "Malaysia": "MY", "Mexico": "MX", "Moldova": "MD", "Mongolia": "MN",
+    "Montenegro": "ME", "Morocco": "MA", "Mozambique": "MZ", "Myanmar": "MM",
+    "Nepal": "NP", "Netherlands": "NL", "New Zealand": "NZ", "Nicaragua": "NI",
+    "Nigeria": "NG", "North Korea": "KP", "North Macedonia": "MK", "Norway": "NO",
+    "Oman": "OM", "Pakistan": "PK", "Palestine": "PS", "Panama": "PA",
+    "Paraguay": "PY", "Peru": "PE", "Philippines": "PH", "Poland": "PL",
+    "Portugal": "PT", "Qatar": "QA", "Romania": "RO", "Russia": "RU",
+    "Saudi Arabia": "SA", "Senegal": "SN", "Serbia": "RS", "Singapore": "SG",
+    "Slovakia": "SK", "Slovenia": "SI", "South Africa": "ZA", "South Korea": "KR",
+    "Spain": "ES", "Sri Lanka": "LK", "Sudan": "SD", "Sweden": "SE",
+    "Switzerland": "CH", "Syria": "SY", "Taiwan": "TW", "Tanzania": "TZ",
+    "Thailand": "TH", "Tunisia": "TN", "Turkey": "TR", "Türkiye": "TR",
+    "Ukraine": "UA", "United Arab Emirates": "AE", "United Kingdom": "GB",
+    "United States": "US", "Uruguay": "UY", "Uzbekistan": "UZ",
+    "Venezuela": "VE", "Vietnam": "VN", "Yemen": "YE", "Zambia": "ZM",
+    "Zimbabwe": "ZW",
 }
 
 /**
@@ -239,16 +312,21 @@ function AnalyticsContent({
             .sort((a, b) => a.hour.localeCompare(b.hour))
     }, [overview?.hourlyJoins])
 
-    // Aggregate version data from players if not provided at top level
+    // Aggregate version data from players if not provided at top level, with protocol resolution
     const versionData = useMemo(() => {
-        if (versions && versions.length > 0) return versions
-        const vMap: Record<string, number> = {}
-        players.forEach(p => {
-            if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
-        })
-        return Object.entries(vMap)
-            .map(([version, count]) => ({ version, count }))
-            .sort((a, b) => b.count - a.count)
+        const raw = versions && versions.length > 0
+            ? versions
+            : (() => {
+                const vMap: Record<string, number> = {}
+                players.forEach(p => {
+                    if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
+                })
+                return Object.entries(vMap)
+                    .map(([version, count]) => ({ version, count }))
+                    .sort((a, b) => b.count - a.count)
+            })()
+        // Resolve protocol numbers to friendly version names
+        return raw.map(v => ({ ...v, version: resolveVersion(v.version) }))
     }, [versions, players])
 
     // Aggregate client data from players if not provided at top level
@@ -276,7 +354,7 @@ function AnalyticsContent({
             .sort((a, b) => b.count - a.count)
     }, [operatingSystems, players])
 
-    // Geo data for pie chart
+    // Geo data for map and list
     const geoData = useMemo(() => {
         if (geo && geo.length > 0) return geo
         const gMap: Record<string, number> = {}
@@ -288,8 +366,18 @@ function AnalyticsContent({
             .sort((a, b) => b.count - a.count)
     }, [geo, players])
 
+    // Build a lookup map for the world map: country name -> count
+    const geoCountryMap = useMemo(() => {
+        const map: Record<string, number> = {}
+        geoData.forEach(g => { map[g.country] = g.count })
+        return map
+    }, [geoData])
+
+    // Tooltip state for world map
+    const [mapTooltip, setMapTooltip] = useState<{ name: string; count: number } | null>(null)
+
     return (
-        <div className="space-y-6 pb-8">
+        <div className="space-y-8 pb-8">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -345,7 +433,7 @@ function AnalyticsContent({
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={TrendingUp} title="Overview" />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
                     <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
                     <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
@@ -362,7 +450,7 @@ function AnalyticsContent({
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={Cpu} title="Performance" />
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
                     <StatCard icon={Gauge} label="Current TPS" value={overview.currentTps?.toFixed(1) ?? "N/A"} accent="text-emerald-500" />
                     <StatCard icon={MemoryStick} label="Memory" value={overview.memoryUsedMB ? `${overview.memoryUsedMB.toFixed(0)} / ${overview.memoryMaxMB?.toFixed(0)} MB` : "N/A"} accent="text-cyan-500" />
                     <StatCard icon={Activity} label="MSPT" value={overview.currentMspt?.toFixed(1) ?? "N/A"} accent="text-violet-500" />
@@ -479,7 +567,7 @@ function AnalyticsContent({
                                         <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis type="category" dataKey="version" width={90} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]}>
+                                        <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]} cursor={false}>
                                             {versionData.slice(0, 10).map((_, index) => (
                                                 <Cell key={`v-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} fillOpacity={0.8} />
                                             ))}
@@ -512,48 +600,12 @@ function AnalyticsContent({
                                             outerRadius={75}
                                             innerRadius={40}
                                             paddingAngle={2}
+                                            isAnimationActive={false}
                                             label={({ client, percent }) => `${client} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
                                         >
                                             {clientData.map((_, index) => (
                                                 <Cell key={`c-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Countries — Pie Chart */}
-                    {geoData.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                    <MapPin className="h-4 w-4" />
-                                    Player Countries
-                                </CardTitle>
-                                <CardDescription className="text-xs">Geographic distribution</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={220}>
-                                    <PieChart>
-                                        <Pie
-                                            data={geoData}
-                                            dataKey="count"
-                                            nameKey="country"
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={75}
-                                            innerRadius={40}
-                                            paddingAngle={2}
-                                            label={({ country, percent }) => `${country} ${(percent * 100).toFixed(0)}%`}
-                                            labelLine={false}
-                                        >
-                                            {geoData.map((_, index) => (
-                                                <Cell key={`g-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
@@ -586,6 +638,7 @@ function AnalyticsContent({
                                             outerRadius={75}
                                             innerRadius={40}
                                             paddingAngle={2}
+                                            isAnimationActive={false}
                                             label={({ os, percent }) => `${os} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
                                         >
@@ -604,7 +657,98 @@ function AnalyticsContent({
             </section>
 
             {/* ═══════════════════════════════════════════════════════════ */}
-            {/* SECTION 4: Sessions */}
+            {/* SECTION 4: Countries — Interactive World Map */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {geoData.length > 0 && (
+                <section>
+                    <SectionHeader icon={Globe} title="Player Countries" />
+                    <Card>
+                        <CardContent className="pt-6">
+                            <div className="relative">
+                                <ComposableMap
+                                    projectionConfig={{ scale: 147, center: [0, 20] }}
+                                    style={{ width: "100%", height: "auto", maxHeight: 380 }}
+                                >
+                                    <ZoomableGroup>
+                                        <Geographies geography={GEO_URL}>
+                                            {({ geographies }) =>
+                                                geographies.map((geoFeature) => {
+                                                    const countryName = geoFeature.properties.name
+                                                    const count = geoCountryMap[countryName] || 0
+                                                    // Also try matching via ISO code
+                                                    const isoMatch = !count
+                                                        ? Object.entries(COUNTRY_NAME_TO_ISO).find(
+                                                            ([, iso]) => iso === geoFeature.id
+                                                        )
+                                                        : null
+                                                    const resolvedCount = count || (isoMatch ? geoCountryMap[isoMatch[0]] || 0 : 0)
+                                                    const maxCount = Math.max(...geoData.map(g => g.count), 1)
+                                                    const intensity = resolvedCount > 0 ? 0.2 + (resolvedCount / maxCount) * 0.8 : 0
+
+                                                    return (
+                                                        <Geography
+                                                            key={geoFeature.rsmKey}
+                                                            geography={geoFeature}
+                                                            onMouseEnter={() => {
+                                                                if (resolvedCount > 0) {
+                                                                    setMapTooltip({ name: countryName, count: resolvedCount })
+                                                                }
+                                                            }}
+                                                            onMouseLeave={() => setMapTooltip(null)}
+                                                            style={{
+                                                                default: {
+                                                                    fill: resolvedCount > 0
+                                                                        ? `rgba(99, 102, 241, ${intensity})`
+                                                                        : "hsl(var(--muted))",
+                                                                    stroke: "hsl(var(--border))",
+                                                                    strokeWidth: 0.5,
+                                                                    outline: "none",
+                                                                },
+                                                                hover: {
+                                                                    fill: resolvedCount > 0
+                                                                        ? "rgba(99, 102, 241, 0.9)"
+                                                                        : "hsl(var(--muted))",
+                                                                    stroke: "hsl(var(--border))",
+                                                                    strokeWidth: 0.75,
+                                                                    outline: "none",
+                                                                    cursor: resolvedCount > 0 ? "pointer" : "default",
+                                                                },
+                                                                pressed: { outline: "none" },
+                                                            }}
+                                                        />
+                                                    )
+                                                })
+                                            }
+                                        </Geographies>
+                                    </ZoomableGroup>
+                                </ComposableMap>
+                                {mapTooltip && (
+                                    <div className="absolute top-3 right-3 bg-card border border-border rounded-lg px-3 py-2 shadow-lg pointer-events-none">
+                                        <p className="text-sm font-medium text-white">{mapTooltip.name}</p>
+                                        <p className="text-xs text-muted-foreground">{mapTooltip.count} player{mapTooltip.count !== 1 ? "s" : ""}</p>
+                                    </div>
+                                )}
+                            </div>
+                            {/* Country list below the map */}
+                            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                                {geoData.map((g, i) => (
+                                    <div key={g.country} className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/30 border border-border/50">
+                                        <div
+                                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                                            style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                                        />
+                                        <span className="text-sm truncate">{g.country}</span>
+                                        <span className="text-xs text-muted-foreground ml-auto font-mono">{g.count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </section>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 5: Sessions & Activity */}
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={Clock} title="Sessions & Activity" />
@@ -623,7 +767,7 @@ function AnalyticsContent({
                                         <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
+                                        <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]} cursor={false}>
                                             {hourlyData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
                                             ))}
@@ -663,7 +807,7 @@ function AnalyticsContent({
                                                 <div className="flex items-center gap-3">
                                                     {p.clientVersion && (
                                                         <Badge variant="outline" className="text-[10px] px-1.5">
-                                                            {p.clientVersion}
+                                                            {resolveVersion(p.clientVersion)}
                                                         </Badge>
                                                     )}
                                                     <span className="text-xs text-muted-foreground font-mono">
@@ -679,7 +823,7 @@ function AnalyticsContent({
                 </div>
 
                 {/* Additional stats row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                     <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
                     <StatCard icon={Globe} label="Countries" value={geoData.length} accent="text-sky-500" />
                     <StatCard icon={TrendingUp} label="Total Joins" value={overview.totalJoins} accent="text-violet-500" />
@@ -708,7 +852,7 @@ function AnalyticsContent({
 
 function SectionHeader({ icon: Icon, title }: { icon: React.ComponentType<{ className?: string }>; title: string }) {
     return (
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-4">
             <Icon className="h-4 w-4 text-muted-foreground" />
             <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
             <div className="flex-1 h-px bg-border" />
