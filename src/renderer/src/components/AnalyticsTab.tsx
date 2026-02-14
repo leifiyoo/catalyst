@@ -49,6 +49,12 @@ import {
     Pie,
     Legend,
 } from "recharts"
+import {
+    ComposableMap,
+    Geographies,
+    Geography,
+    ZoomableGroup,
+} from "react-simple-maps"
 import type { AnalyticsData } from "@shared/types"
 
 interface AnalyticsTabProps {
@@ -68,6 +74,83 @@ const CHART_TOOLTIP_STYLE = {
     border: "1px solid hsl(var(--border))",
     borderRadius: 8,
     fontSize: 12,
+    color: "#ffffff",
+}
+
+// World map topology URL (Natural Earth 110m)
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
+
+/**
+ * Protocol version to Minecraft version mapping.
+ * Used to convert raw protocol numbers to human-readable version strings.
+ */
+const PROTOCOL_VERSION_MAP: Record<number, string> = {
+    47: "1.8.9",
+    107: "1.9",
+    108: "1.9.1",
+    109: "1.9.2",
+    110: "1.9.4",
+    210: "1.10.x",
+    315: "1.11",
+    316: "1.11.2",
+    335: "1.12",
+    338: "1.12.1",
+    340: "1.12.2",
+    393: "1.13",
+    401: "1.13.1",
+    404: "1.13.2",
+    477: "1.14",
+    480: "1.14.1",
+    485: "1.14.2",
+    490: "1.14.3",
+    498: "1.14.4",
+    573: "1.15",
+    575: "1.15.1",
+    578: "1.15.2",
+    735: "1.16",
+    736: "1.16.1",
+    751: "1.16.2",
+    753: "1.16.3",
+    754: "1.16.5",
+    755: "1.17",
+    756: "1.17.1",
+    757: "1.18",
+    758: "1.18.2",
+    759: "1.19",
+    760: "1.19.2",
+    761: "1.19.3",
+    762: "1.19.4",
+    763: "1.20",
+    764: "1.20.2",
+    765: "1.20.3",
+    766: "1.20.4",
+    767: "1.20.5",
+    768: "1.21",
+    769: "1.21.1",
+    770: "1.21.2",
+    771: "1.21.3",
+    772: "1.21.4",
+    773: "1.21.5",
+    774: "1.21.6",
+}
+
+/**
+ * Resolve a version string that may be a raw protocol number
+ * to a human-readable Minecraft version.
+ */
+function resolveMinecraftVersion(version: string): string {
+    // If it already looks like a version string (contains a dot), return as-is
+    if (version.includes(".")) return version
+
+    // Try to parse as a protocol number
+    const protocol = parseInt(version, 10)
+    if (!isNaN(protocol)) {
+        const mapped = PROTOCOL_VERSION_MAP[protocol]
+        if (mapped) return mapped
+        return `Unknown (${protocol})`
+    }
+
+    return version
 }
 
 /**
@@ -228,6 +311,9 @@ function AnalyticsContent({
 }) {
     const { overview, players, tps, mspt, memory, timeline, geo, versions, clients, operatingSystems } = data
 
+    // Hovered country for the world map
+    const [hoveredCountry, setHoveredCountry] = useState<string | null>(null)
+
     // Prepare hourly joins chart data
     const hourlyData = useMemo(() => {
         if (!overview?.hourlyJoins) return []
@@ -240,13 +326,27 @@ function AnalyticsContent({
     }, [overview?.hourlyJoins])
 
     // Aggregate version data from players if not provided at top level
+    // Also resolve protocol versions to human-readable Minecraft versions
     const versionData = useMemo(() => {
-        if (versions && versions.length > 0) return versions
-        const vMap: Record<string, number> = {}
-        players.forEach(p => {
-            if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
+        let raw = versions && versions.length > 0 ? versions : null
+        if (!raw) {
+            const vMap: Record<string, number> = {}
+            players.forEach(p => {
+                if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
+            })
+            raw = Object.entries(vMap)
+                .map(([version, count]) => ({ version, count }))
+                .sort((a, b) => b.count - a.count)
+        }
+
+        // Resolve protocol versions and merge duplicates
+        const resolved: Record<string, number> = {}
+        raw.forEach(({ version, count }) => {
+            const readable = resolveMinecraftVersion(version)
+            resolved[readable] = (resolved[readable] || 0) + count
         })
-        return Object.entries(vMap)
+
+        return Object.entries(resolved)
             .map(([version, count]) => ({ version, count }))
             .sort((a, b) => b.count - a.count)
     }, [versions, players])
@@ -276,7 +376,7 @@ function AnalyticsContent({
             .sort((a, b) => b.count - a.count)
     }, [operatingSystems, players])
 
-    // Geo data for pie chart
+    // Geo data for pie chart and map
     const geoData = useMemo(() => {
         if (geo && geo.length > 0) return geo
         const gMap: Record<string, number> = {}
@@ -288,8 +388,18 @@ function AnalyticsContent({
             .sort((a, b) => b.count - a.count)
     }, [geo, players])
 
+    // Build a lookup map for country → player count (for the world map)
+    const geoCountMap = useMemo(() => {
+        const m: Record<string, number> = {}
+        geoData.forEach(g => { m[g.country] = g.count })
+        return m
+    }, [geoData])
+
+    // Total players for geo percentage
+    const geoTotal = useMemo(() => geoData.reduce((s, g) => s + g.count, 0), [geoData])
+
     return (
-        <div className="space-y-6 pb-8">
+        <div className="space-y-8 pb-8">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -345,7 +455,7 @@ function AnalyticsContent({
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={TrendingUp} title="Overview" />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
                     <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
                     <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
@@ -362,7 +472,7 @@ function AnalyticsContent({
             {/* ═══════════════════════════════════════════════════════════ */}
             <section>
                 <SectionHeader icon={Cpu} title="Performance" />
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                     <StatCard icon={Gauge} label="Current TPS" value={overview.currentTps?.toFixed(1) ?? "N/A"} accent="text-emerald-500" />
                     <StatCard icon={MemoryStick} label="Memory" value={overview.memoryUsedMB ? `${overview.memoryUsedMB.toFixed(0)} / ${overview.memoryMaxMB?.toFixed(0)} MB` : "N/A"} accent="text-cyan-500" />
                     <StatCard icon={Activity} label="MSPT" value={overview.currentMspt?.toFixed(1) ?? "N/A"} accent="text-violet-500" />
@@ -478,7 +588,7 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis type="category" dataKey="version" width={90} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }} />
                                         <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]}>
                                             {versionData.slice(0, 10).map((_, index) => (
                                                 <Cell key={`v-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} fillOpacity={0.8} />
@@ -514,46 +624,10 @@ function AnalyticsContent({
                                             paddingAngle={2}
                                             label={({ client, percent }) => `${client} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
+                                            isAnimationActive={false}
                                         >
                                             {clientData.map((_, index) => (
                                                 <Cell key={`c-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Countries — Pie Chart */}
-                    {geoData.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                    <MapPin className="h-4 w-4" />
-                                    Player Countries
-                                </CardTitle>
-                                <CardDescription className="text-xs">Geographic distribution</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={220}>
-                                    <PieChart>
-                                        <Pie
-                                            data={geoData}
-                                            dataKey="count"
-                                            nameKey="country"
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={75}
-                                            innerRadius={40}
-                                            paddingAngle={2}
-                                            label={({ country, percent }) => `${country} ${(percent * 100).toFixed(0)}%`}
-                                            labelLine={false}
-                                        >
-                                            {geoData.map((_, index) => (
-                                                <Cell key={`g-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
@@ -588,6 +662,7 @@ function AnalyticsContent({
                                             paddingAngle={2}
                                             label={({ os, percent }) => `${os} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
+                                            isAnimationActive={false}
                                         >
                                             {osData.map((_, index) => (
                                                 <Cell key={`o-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -602,6 +677,113 @@ function AnalyticsContent({
                     )}
                 </div>
             </section>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 3b: Countries / Geolocation */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {geoData.length > 0 && (
+                <section>
+                    <SectionHeader icon={Globe} title="Player Countries" />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        {/* Interactive World Map */}
+                        <Card className="lg:col-span-2">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                    <MapPin className="h-4 w-4" />
+                                    Geographic Distribution
+                                </CardTitle>
+                                <CardDescription className="text-xs">Hover over countries to see player counts</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="rounded-lg overflow-hidden border border-border bg-muted/20">
+                                    <ComposableMap
+                                        projectionConfig={{ rotate: [-10, 0, 0], scale: 147 }}
+                                        style={{ width: "100%", height: "auto" }}
+                                    >
+                                        <ZoomableGroup>
+                                            <Geographies geography={GEO_URL}>
+                                                {({ geographies }) =>
+                                                    geographies.map((geoFeature) => {
+                                                        const countryName = geoFeature.properties.name
+                                                        const playerCount = geoCountMap[countryName] || 0
+                                                        const isHovered = hoveredCountry === countryName
+                                                        // Color intensity based on player count
+                                                        let fillColor = "hsl(var(--muted))"
+                                                        if (playerCount > 0) {
+                                                            const maxCount = Math.max(...Object.values(geoCountMap))
+                                                            const intensity = Math.max(0.2, playerCount / maxCount)
+                                                            fillColor = `rgba(99, 102, 241, ${intensity})`
+                                                        }
+                                                        return (
+                                                            <Geography
+                                                                key={geoFeature.rsmKey}
+                                                                geography={geoFeature}
+                                                                fill={isHovered ? "#818cf8" : fillColor}
+                                                                stroke="hsl(var(--border))"
+                                                                strokeWidth={0.5}
+                                                                onMouseEnter={() => setHoveredCountry(countryName)}
+                                                                onMouseLeave={() => setHoveredCountry(null)}
+                                                                style={{
+                                                                    default: { outline: "none" },
+                                                                    hover: { outline: "none", cursor: "pointer" },
+                                                                    pressed: { outline: "none" },
+                                                                }}
+                                                            />
+                                                        )
+                                                    })
+                                                }
+                                            </Geographies>
+                                        </ZoomableGroup>
+                                    </ComposableMap>
+                                    {hoveredCountry && (
+                                        <div className="px-3 py-2 text-xs text-center border-t border-border bg-card">
+                                            <span className="font-medium">{hoveredCountry}</span>
+                                            {geoCountMap[hoveredCountry] ? (
+                                                <span className="text-muted-foreground ml-2">
+                                                    {geoCountMap[hoveredCountry]} player{geoCountMap[hoveredCountry] !== 1 ? "s" : ""}
+                                                </span>
+                                            ) : (
+                                                <span className="text-muted-foreground ml-2">No players</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Country Breakdown List */}
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">Country Breakdown</CardTitle>
+                                <CardDescription className="text-xs">{geoData.length} countries detected</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                                    {geoData.map((g, i) => (
+                                        <div key={g.country} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <div
+                                                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                                                    style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                                                />
+                                                <span className="text-sm">{g.country}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-mono text-muted-foreground">
+                                                    {g.count}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground w-10 text-right">
+                                                    {geoTotal > 0 ? `${((g.count / geoTotal) * 100).toFixed(0)}%` : ""}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </section>
+            )}
 
             {/* ═══════════════════════════════════════════════════════════ */}
             {/* SECTION 4: Sessions */}
@@ -622,7 +804,7 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }} />
                                         <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
                                             {hourlyData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
@@ -663,7 +845,7 @@ function AnalyticsContent({
                                                 <div className="flex items-center gap-3">
                                                     {p.clientVersion && (
                                                         <Badge variant="outline" className="text-[10px] px-1.5">
-                                                            {p.clientVersion}
+                                                            {resolveMinecraftVersion(p.clientVersion)}
                                                         </Badge>
                                                     )}
                                                     <span className="text-xs text-muted-foreground font-mono">
@@ -679,7 +861,7 @@ function AnalyticsContent({
                 </div>
 
                 {/* Additional stats row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                     <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
                     <StatCard icon={Globe} label="Countries" value={geoData.length} accent="text-sky-500" />
                     <StatCard icon={TrendingUp} label="Total Joins" value={overview.totalJoins} accent="text-violet-500" />
@@ -708,7 +890,7 @@ function AnalyticsContent({
 
 function SectionHeader({ icon: Icon, title }: { icon: React.ComponentType<{ className?: string }>; title: string }) {
     return (
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-4">
             <Icon className="h-4 w-4 text-muted-foreground" />
             <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
             <div className="flex-1 h-px bg-border" />

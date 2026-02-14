@@ -1316,13 +1316,13 @@ export function ServerDetailPage() {
             {/* Tabs */}
             <Tabs defaultValue="overview" className="flex flex-col">
                 <div className="px-10 border-b border-border">
-                    <TabsList className="bg-transparent p-0 h-auto gap-0 rounded-none">
-                        <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Overview</TabsTrigger>
-                        <TabsTrigger value="library" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Content</TabsTrigger>
-                        <TabsTrigger value="files" onClick={() => handleLoadFiles(currentPath)} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Files</TabsTrigger>
-                        <TabsTrigger value="settings" onClick={loadBackups} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Settings</TabsTrigger>
-                        <TabsTrigger value="properties" onClick={() => { handleLoadProperties(); handleLoadWhitelist(); handleLoadBanlist(); }} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Properties</TabsTrigger>
-                        <TabsTrigger value="analytics" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 pb-3 pt-2 text-sm">Analytics</TabsTrigger>
+                    <TabsList>
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="library">Content</TabsTrigger>
+                        <TabsTrigger value="files" onClick={() => handleLoadFiles(currentPath)}>Files</TabsTrigger>
+                        <TabsTrigger value="settings" onClick={loadBackups}>Settings</TabsTrigger>
+                        <TabsTrigger value="properties" onClick={() => { handleLoadProperties(); handleLoadWhitelist(); handleLoadBanlist(); }}>Properties</TabsTrigger>
+                        <TabsTrigger value="analytics">Analytics</TabsTrigger>
                     </TabsList>
                 </div>
 
