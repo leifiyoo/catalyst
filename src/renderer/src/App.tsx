@@ -1,5 +1,5 @@
-﻿import { useState, useEffect } from 'react';
-import { motion } from "framer-motion";
+import { useState, useEffect } from 'react';
+import { motion } from "motion/react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import { SpinnerButton } from "@/components/SpinnerButton";
 import { TitleBar } from "@/components/TitleBar";
