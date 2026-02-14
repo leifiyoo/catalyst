@@ -150,10 +150,10 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  // Run auto backups checks
+  // Run auto backups checks (every 15 minutes to reduce overhead)
   setInterval(() => {
     checkAndRunAutoBackups();
-  }, 5 * 60 * 1000); // Check every 5 minutes
+  }, 15 * 60 * 1000);
 
   // Clean up stale "Online" statuses from previous session
   const mainWin = BrowserWindow.getAllWindows()[0];

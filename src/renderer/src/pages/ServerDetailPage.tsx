@@ -329,13 +329,13 @@ export function ServerDetailPage() {
                     if (seen.has(key)) return false;
                     seen.add(key);
                     return true;
-                }).slice(-500);
+                }).slice(-300);
             });
         });
 
         const unsubscribe = window.context.onConsoleOutput((serverId, line) => {
             if (serverId === id) {
-                setConsoleLines((prev) => [...prev.slice(-500), line])
+                setConsoleLines((prev) => [...prev.slice(-300), line])
             }
         })
         return unsubscribe
@@ -419,9 +419,16 @@ export function ServerDetailPage() {
         if (!isOnline) setStats(null)
     }, [isOnline])
 
-    // Auto-scroll console
+    // Auto-scroll console (debounced to reduce layout thrashing)
+    const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => {
-        consoleEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+        scrollTimerRef.current = setTimeout(() => {
+            consoleEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        }, 150)
+        return () => {
+            if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+        }
     }, [consoleLines])
 
     // Get local IP on mount
