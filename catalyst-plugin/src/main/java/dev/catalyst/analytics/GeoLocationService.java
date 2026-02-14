@@ -33,8 +33,22 @@ public class GeoLocationService {
      * Results are cached and applied to the player's data.
      */
     public void lookupAsync(String playerUuid, String ipAddress) {
-        if (ipAddress == null || ipAddress.isEmpty() || ipAddress.equals("127.0.0.1") || ipAddress.startsWith("192.168.") || ipAddress.startsWith("10.")) {
-            return; // Skip local IPs
+        if (ipAddress == null || ipAddress.isEmpty()) {
+            return;
+        }
+        // Skip local/private IPs and validate format to prevent SSRF
+        if (ipAddress.equals("127.0.0.1") || ipAddress.startsWith("192.168.")
+                || ipAddress.startsWith("10.") || ipAddress.startsWith("172.16.")
+                || ipAddress.startsWith("172.17.") || ipAddress.startsWith("172.18.")
+                || ipAddress.startsWith("172.19.") || ipAddress.startsWith("172.2")
+                || ipAddress.startsWith("172.30.") || ipAddress.startsWith("172.31.")
+                || ipAddress.equals("0.0.0.0") || ipAddress.startsWith("169.254.")
+                || ipAddress.equals("::1") || ipAddress.startsWith("fc") || ipAddress.startsWith("fd")) {
+            return; // Skip local/private IPs
+        }
+        // Validate IP format (basic check to prevent injection into URL)
+        if (!ipAddress.matches("^[0-9a-fA-F.:]+$")) {
+            return;
         }
 
         // Check cache first

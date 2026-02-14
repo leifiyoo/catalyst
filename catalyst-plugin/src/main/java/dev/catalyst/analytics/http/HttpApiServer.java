@@ -10,7 +10,9 @@ import dev.catalyst.analytics.data.DataManager;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -71,9 +73,9 @@ public class HttpApiServer {
 
         boolean valid = false;
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            valid = authHeader.substring(7).equals(apiKey);
+            valid = timingSafeEquals(authHeader.substring(7), apiKey);
         } else if (queryKey != null) {
-            valid = queryKey.equals(apiKey);
+            valid = timingSafeEquals(queryKey, apiKey);
         }
 
         if (!valid) {
@@ -271,12 +273,16 @@ public class HttpApiServer {
     }
 
     private String getQueryParam(HttpExchange exchange, String key) {
-        String query = exchange.getRequestURI().getQuery();
+        String query = exchange.getRequestURI().getRawQuery();
         if (query == null) return null;
         for (String param : query.split("&")) {
             String[] kv = param.split("=", 2);
             if (kv.length == 2 && kv[0].equals(key)) {
-                return kv[1];
+                try {
+                    return URLDecoder.decode(kv[1], StandardCharsets.UTF_8.name());
+                } catch (Exception e) {
+                    return kv[1];
+                }
             }
         }
         return null;
@@ -286,9 +292,21 @@ public class HttpApiServer {
         String val = getQueryParam(exchange, key);
         if (val == null) return defaultValue;
         try {
-            return Integer.parseInt(val);
+            int parsed = Integer.parseInt(val);
+            // Bound to reasonable range to prevent memory exhaustion
+            return Math.max(1, Math.min(parsed, 10000));
         } catch (NumberFormatException e) {
             return defaultValue;
         }
+    }
+
+    /**
+     * Constant-time string comparison to prevent timing attacks on API key validation.
+     */
+    private boolean timingSafeEquals(String a, String b) {
+        if (a == null || b == null) return false;
+        byte[] aBytes = a.getBytes(StandardCharsets.UTF_8);
+        byte[] bBytes = b.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(aBytes, bBytes);
     }
 }

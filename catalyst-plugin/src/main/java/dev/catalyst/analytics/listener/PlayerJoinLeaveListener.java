@@ -33,16 +33,19 @@ public class PlayerJoinLeaveListener implements Listener {
         DataManager dm = plugin.getDataManager();
         dm.recordJoin(uuid, name);
 
-        // Capture protocol version for version detection (async-safe, runs on next tick)
+        // Capture protocol version for version detection (runs on main thread since Player API is not thread-safe)
         if (plugin.isTrackingEnabled("track-player-versions", "stats.client-version")) {
-            Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
-                detectProtocolVersion(player, uuid, dm);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (player.isOnline()) {
+                    detectProtocolVersion(player, uuid, dm);
+                }
             }, 20L); // Delay 1 second to let connection settle
         }
 
         // Try to get client brand (available on Paper/newer Spigot)
         if (plugin.isTrackingEnabled("track-player-clients", "stats.client-os")) {
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!player.isOnline()) return;
                 try {
                     java.lang.reflect.Method brandMethod = player.getClass().getMethod("getClientBrandName");
                     String brand = (String) brandMethod.invoke(player);

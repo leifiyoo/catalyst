@@ -13,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 
 /**
@@ -52,14 +53,14 @@ public class DataManager {
     // --- Server start time ---
     private final String serverStartTime = Instant.now().toString();
 
-    // --- Server-wide stats ---
-    private volatile long totalJoins = 0;
-    private volatile long totalChatMessages = 0;
-    private volatile long totalCommandsExecuted = 0;
-    private volatile long totalBlocksPlaced = 0;
-    private volatile long totalBlocksBroken = 0;
-    private volatile long totalDeaths = 0;
-    private volatile long totalKills = 0;
+    // --- Server-wide stats (AtomicLong for thread-safe increments) ---
+    private final AtomicLong totalJoins = new AtomicLong(0);
+    private final AtomicLong totalChatMessages = new AtomicLong(0);
+    private final AtomicLong totalCommandsExecuted = new AtomicLong(0);
+    private final AtomicLong totalBlocksPlaced = new AtomicLong(0);
+    private final AtomicLong totalBlocksBroken = new AtomicLong(0);
+    private final AtomicLong totalDeaths = new AtomicLong(0);
+    private final AtomicLong totalKills = new AtomicLong(0);
 
     // --- Dirty flag for batched writes ---
     private volatile boolean dirty = false;
@@ -101,7 +102,7 @@ public class DataManager {
         pd.joinCount++;
         pd.online = true;
         uniquePlayers.add(uuid);
-        totalJoins++;
+        totalJoins.incrementAndGet();
         dirty = true;
 
         // Track hourly joins
@@ -136,42 +137,42 @@ public class DataManager {
     public void recordChat(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.chatMessages++;
-        totalChatMessages++;
+        totalChatMessages.incrementAndGet();
         dirty = true;
     }
 
     public void recordDeath(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.deaths++;
-        totalDeaths++;
+        totalDeaths.incrementAndGet();
         dirty = true;
     }
 
     public void recordKill(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.kills++;
-        totalKills++;
+        totalKills.incrementAndGet();
         dirty = true;
     }
 
     public void recordBlockPlaced(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.blocksPlaced++;
-        totalBlocksPlaced++;
+        totalBlocksPlaced.incrementAndGet();
         dirty = true;
     }
 
     public void recordBlockBroken(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.blocksBroken++;
-        totalBlocksBroken++;
+        totalBlocksBroken.incrementAndGet();
         dirty = true;
     }
 
     public void recordCommand(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.commandsExecuted++;
-        totalCommandsExecuted++;
+        totalCommandsExecuted.incrementAndGet();
         dirty = true;
     }
 
@@ -268,13 +269,13 @@ public class DataManager {
 
     public int getPeakOnline() { return peakOnline; }
     public int getUniquePlayerCount() { return uniquePlayers.size(); }
-    public long getTotalJoins() { return totalJoins; }
-    public long getTotalChatMessages() { return totalChatMessages; }
-    public long getTotalCommandsExecuted() { return totalCommandsExecuted; }
-    public long getTotalBlocksPlaced() { return totalBlocksPlaced; }
-    public long getTotalBlocksBroken() { return totalBlocksBroken; }
-    public long getTotalDeaths() { return totalDeaths; }
-    public long getTotalKills() { return totalKills; }
+    public long getTotalJoins() { return totalJoins.get(); }
+    public long getTotalChatMessages() { return totalChatMessages.get(); }
+    public long getTotalCommandsExecuted() { return totalCommandsExecuted.get(); }
+    public long getTotalBlocksPlaced() { return totalBlocksPlaced.get(); }
+    public long getTotalBlocksBroken() { return totalBlocksBroken.get(); }
+    public long getTotalDeaths() { return totalDeaths.get(); }
+    public long getTotalKills() { return totalKills.get(); }
     public Map<Integer, Long> getHourlyJoins() { return Collections.unmodifiableMap(hourlyJoins); }
 
     public int getCurrentOnline() {
@@ -312,13 +313,13 @@ public class DataManager {
             // Save server-wide stats
             Map<String, Object> serverStats = new HashMap<>();
             serverStats.put("peakOnline", peakOnline);
-            serverStats.put("totalJoins", totalJoins);
-            serverStats.put("totalChatMessages", totalChatMessages);
-            serverStats.put("totalCommandsExecuted", totalCommandsExecuted);
-            serverStats.put("totalBlocksPlaced", totalBlocksPlaced);
-            serverStats.put("totalBlocksBroken", totalBlocksBroken);
-            serverStats.put("totalDeaths", totalDeaths);
-            serverStats.put("totalKills", totalKills);
+            serverStats.put("totalJoins", totalJoins.get());
+            serverStats.put("totalChatMessages", totalChatMessages.get());
+            serverStats.put("totalCommandsExecuted", totalCommandsExecuted.get());
+            serverStats.put("totalBlocksPlaced", totalBlocksPlaced.get());
+            serverStats.put("totalBlocksBroken", totalBlocksBroken.get());
+            serverStats.put("totalDeaths", totalDeaths.get());
+            serverStats.put("totalKills", totalKills.get());
             serverStats.put("uniquePlayers", new ArrayList<>(uniquePlayers));
             saveJson("server_stats.json", serverStats);
 
@@ -343,16 +344,16 @@ public class DataManager {
             overview.put("currentOnline", getCurrentOnline());
             overview.put("peakOnline", peakOnline);
             overview.put("uniquePlayers", uniquePlayers.size());
-            overview.put("totalJoins", totalJoins);
+            overview.put("totalJoins", totalJoins.get());
             overview.put("newPlayers", getNewPlayerCount());
             overview.put("returningPlayers", getReturningPlayerCount());
             overview.put("averagePlayTimeSeconds", getAveragePlayTimeSeconds());
-            overview.put("totalChatMessages", totalChatMessages);
-            overview.put("totalCommandsExecuted", totalCommandsExecuted);
-            overview.put("totalBlocksPlaced", totalBlocksPlaced);
-            overview.put("totalBlocksBroken", totalBlocksBroken);
-            overview.put("totalDeaths", totalDeaths);
-            overview.put("totalKills", totalKills);
+            overview.put("totalChatMessages", totalChatMessages.get());
+            overview.put("totalCommandsExecuted", totalCommandsExecuted.get());
+            overview.put("totalBlocksPlaced", totalBlocksPlaced.get());
+            overview.put("totalBlocksBroken", totalBlocksBroken.get());
+            overview.put("totalDeaths", totalDeaths.get());
+            overview.put("totalKills", totalKills.get());
 
             // Current TPS and memory
             Runtime rt = Runtime.getRuntime();
@@ -570,13 +571,13 @@ public class DataManager {
             Map<String, Object> serverStats = loadJson("server_stats.json", mapType);
             if (serverStats != null) {
                 peakOnline = ((Number) serverStats.getOrDefault("peakOnline", 0)).intValue();
-                totalJoins = ((Number) serverStats.getOrDefault("totalJoins", 0L)).longValue();
-                totalChatMessages = ((Number) serverStats.getOrDefault("totalChatMessages", 0L)).longValue();
-                totalCommandsExecuted = ((Number) serverStats.getOrDefault("totalCommandsExecuted", 0L)).longValue();
-                totalBlocksPlaced = ((Number) serverStats.getOrDefault("totalBlocksPlaced", 0L)).longValue();
-                totalBlocksBroken = ((Number) serverStats.getOrDefault("totalBlocksBroken", 0L)).longValue();
-                totalDeaths = ((Number) serverStats.getOrDefault("totalDeaths", 0L)).longValue();
-                totalKills = ((Number) serverStats.getOrDefault("totalKills", 0L)).longValue();
+                totalJoins.set(((Number) serverStats.getOrDefault("totalJoins", 0L)).longValue());
+                totalChatMessages.set(((Number) serverStats.getOrDefault("totalChatMessages", 0L)).longValue());
+                totalCommandsExecuted.set(((Number) serverStats.getOrDefault("totalCommandsExecuted", 0L)).longValue());
+                totalBlocksPlaced.set(((Number) serverStats.getOrDefault("totalBlocksPlaced", 0L)).longValue());
+                totalBlocksBroken.set(((Number) serverStats.getOrDefault("totalBlocksBroken", 0L)).longValue());
+                totalDeaths.set(((Number) serverStats.getOrDefault("totalDeaths", 0L)).longValue());
+                totalKills.set(((Number) serverStats.getOrDefault("totalKills", 0L)).longValue());
                 Object up = serverStats.get("uniquePlayers");
                 if (up instanceof List) {
                     ((List<String>) up).forEach(uniquePlayers::add);
