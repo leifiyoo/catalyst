@@ -6,10 +6,16 @@ export function AnimatedOutlet() {
     const location = useLocation()
     const outlet = useOutlet()
 
-    // Keep a ref of the current outlet keyed by pathname so AnimatePresence
-    // can render the exiting element while the new one enters.
-    const outletRef = useRef<Record<string, React.ReactNode>>({})
-    outletRef.current[location.pathname] = outlet
+    // Only keep the current and previous outlet (for exit animation),
+    // then discard old ones to prevent memory leaks.
+    const outletRef = useRef<{ key: string; node: React.ReactNode }[]>([])
+
+    // Update the ref: keep only the previous entry (if different) and the current one
+    const existing = outletRef.current
+    const prev = existing.find((e) => e.key !== location.pathname)
+    const current = { key: location.pathname, node: outlet }
+
+    outletRef.current = prev ? [prev, current] : [current]
 
     return (
         <AnimatePresence mode="wait">
@@ -20,7 +26,7 @@ export function AnimatedOutlet() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2, ease: "easeInOut" }}
             >
-                {outletRef.current[location.pathname]}
+                {outletRef.current.find((e) => e.key === location.pathname)?.node}
             </motion.div>
         </AnimatePresence>
     )

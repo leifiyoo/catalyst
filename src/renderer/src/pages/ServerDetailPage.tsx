@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { AnalyticsTab } from "@/components/AnalyticsTab"
+import { ConsoleTab } from "@/components/ConsoleTab"
 import { useParams, useNavigate } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -85,7 +86,6 @@ import {
 } from "lucide-react"
 import type {
     ServerRecord,
-    ConsoleLine,
     ServerProperty,
     ServerStats,
     FileEntry,
@@ -118,11 +118,6 @@ export function ServerDetailPage() {
         window.addEventListener("click", handleClick);
         return () => window.removeEventListener("click", handleClick);
     }, []);
-
-    // Console state
-    const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([])
-    const [commandInput, setCommandInput] = useState("")
-    const consoleEndRef = useRef<HTMLDivElement>(null)
 
     // Properties state
     const [properties, setProperties] = useState<ServerProperty[]>([])
@@ -315,32 +310,6 @@ export function ServerDetailPage() {
         })
     }, [id])
 
-    // Console output subscriber
-    useEffect(() => {
-        if (!id) return
-
-        // Fetch initial logs
-        window.context.getServerLogs(id).then((logs) => {
-            setConsoleLines((prev) => {
-                const all = [...logs, ...prev];
-                const seen = new Set();
-                return all.filter((l) => {
-                    const key = l.timestamp + l.text;
-                    if (seen.has(key)) return false;
-                    seen.add(key);
-                    return true;
-                }).slice(-300);
-            });
-        });
-
-        const unsubscribe = window.context.onConsoleOutput((serverId, line) => {
-            if (serverId === id) {
-                setConsoleLines((prev) => [...prev.slice(-300), line])
-            }
-        })
-        return unsubscribe
-    }, [id])
-
     // Server status subscriber
     useEffect(() => {
         if (!id) return
@@ -418,18 +387,6 @@ export function ServerDetailPage() {
     useEffect(() => {
         if (!isOnline) setStats(null)
     }, [isOnline])
-
-    // Auto-scroll console (debounced to reduce layout thrashing)
-    const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    useEffect(() => {
-        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
-        scrollTimerRef.current = setTimeout(() => {
-            consoleEndRef.current?.scrollIntoView({ behavior: "smooth" })
-        }, 150)
-        return () => {
-            if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
-        }
-    }, [consoleLines])
 
     // Get local IP on mount
     useEffect(() => {
@@ -643,20 +600,6 @@ export function ServerDetailPage() {
             setError(result.error || "Failed to export server")
         }
         setExporting(false)
-    }
-
-    const handleSendCommand = () => {
-        if (!id || !commandInput.trim()) return
-        window.context.sendCommand(id, commandInput.trim())
-        setConsoleLines((prev) => [
-            ...prev,
-            {
-                timestamp: new Date().toISOString(),
-                text: `> ${commandInput.trim()}`,
-                type: "system",
-            },
-        ])
-        setCommandInput("")
     }
 
     const handleLoadProperties = async () => {
@@ -1132,58 +1075,6 @@ export function ServerDetailPage() {
         return `${bytes} B`
     }
 
-    const renderAnsiText = (text: string) => {
-        const segments: React.ReactNode[] = []
-        const regex = /\x1b\[([0-9;]*)m/g
-        let lastIndex = 0
-        let color: string | null = null
-        let match: RegExpExecArray | null
-        let keyIndex = 0
-
-        while ((match = regex.exec(text)) !== null) {
-            const chunk = text.slice(lastIndex, match.index)
-            if (chunk) {
-                segments.push(
-                    <span key={`ansi-${keyIndex++}`} style={{ color: color ?? undefined }}>
-                        {chunk}
-                    </span>
-                )
-            }
-
-            const params = match[1]
-                .split(";")
-                .map((value) => parseInt(value, 10))
-                .filter((value) => !Number.isNaN(value))
-
-            if (params.length === 0 || params.includes(0) || params.includes(39)) {
-                color = null
-            } else {
-                const colorIndex = params.indexOf(38)
-                if (colorIndex !== -1 && params[colorIndex + 1] === 2) {
-                    const r = params[colorIndex + 2]
-                    const g = params[colorIndex + 3]
-                    const b = params[colorIndex + 4]
-                    if ([r, g, b].every((value) => typeof value === "number" && !Number.isNaN(value))) {
-                        color = `rgb(${r}, ${g}, ${b})`
-                    }
-                }
-            }
-
-            lastIndex = regex.lastIndex
-        }
-
-        const tail = text.slice(lastIndex)
-        if (tail) {
-            segments.push(
-                <span key={`ansi-${keyIndex++}`} style={{ color: color ?? undefined }}>
-                    {tail}
-                </span>
-            )
-        }
-
-        return segments
-    }
-
     const filteredProperties = useMemo(() => {
         const needle = propsFilter.trim().toLowerCase()
         return properties
@@ -1422,49 +1313,8 @@ export function ServerDetailPage() {
                         </Card>
                     </div>
 
-                    {/* Console */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-3">
-                            <h2 className="text-lg font-semibold">Console</h2>
-                            <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-primary animate-pulse" : "bg-muted-foreground/40"}`} />
-                        </div>
-                        <div className="rounded-xl border border-border overflow-hidden">
-                            <div className="h-[420px] overflow-auto bg-[#2c2b28] font-mono text-xs text-[#e8e4df] select-text p-4">
-                                {consoleLines.length === 0 ? (
-                                    <p className="text-muted-foreground">
-                                        {isOnline ? "Waiting for output..." : "Start the server to see console output"}
-                                    </p>
-                                ) : (
-                                    consoleLines.map((line, i) => (
-                                        <div
-                                            key={i}
-                                            className={
-                                                line.type === "stderr"
-                                                    ? "text-destructive"
-                                                    : line.type === "system"
-                                                      ? "text-primary"
-                                                      : "text-[#e8e4df]"
-                                            }
-                                        >
-                                            {renderAnsiText(line.text)}
-                                        </div>
-                                    ))
-                                )}
-                                <div ref={consoleEndRef} />
-                            </div>
-                            <div className="flex items-center gap-2 px-4 py-3 border-t border-border bg-card/50">
-                                <Send className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                <Input
-                                    value={commandInput}
-                                    onChange={(e) => setCommandInput(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") handleSendCommand() }}
-                                    placeholder={isOnline ? "Send a command" : "Server is offline"}
-                                    disabled={!isOnline}
-                                    className="font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
-                                />
-                            </div>
-                        </div>
-                    </div>
+                    {/* Console — isolated component with its own state */}
+                    <ConsoleTab serverId={id || ""} isOnline={isOnline} />
                 </TabsContent>
 
                 {/* Properties Tab */}
