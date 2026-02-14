@@ -14,7 +14,6 @@ import {
     Clock,
     Gauge,
     MemoryStick,
-    Globe,
     Skull,
     Sword,
     MessageSquare,
@@ -29,7 +28,6 @@ import {
     Cpu,
     Settings,
     Gamepad2,
-    MapPin,
     Layers,
 } from "lucide-react"
 import {
@@ -56,24 +54,25 @@ import type { AnalyticsData } from "@shared/types"
  * Used to display friendly version names instead of raw protocol numbers.
  */
 const PROTOCOL_VERSION_MAP: Record<number, string> = {
-    774: "1.21.6",
-    769: "1.21.1",
-    768: "1.21",
-    767: "1.20.5",
-    766: "1.20.4",
-    765: "1.20.3",
-    764: "1.20.2",
-    763: "1.20.1",
-    762: "1.20",
+    774: "1.21.4",
+    769: "1.21.2/1.21.3",
+    768: "1.21.1",
+    767: "1.21",
+    766: "1.20.6",
+    765: "1.20.5",
+    764: "1.20.3/1.20.4",
+    763: "1.20.2",
+    762: "1.20/1.20.1",
     761: "1.19.4",
     760: "1.19.3",
-    759: "1.19.2",
-    758: "1.19.1",
-    757: "1.18",
+    759: "1.19/1.19.1/1.19.2",
+    758: "1.18.2",
+    757: "1.18/1.18.1",
     756: "1.17.1",
     755: "1.17",
-    754: "1.16.5",
-    753: "1.16.4",
+    754: "1.16.4/1.16.5",
+    753: "1.16.3",
+    751: "1.16.2",
     736: "1.16.1",
     735: "1.16",
     578: "1.15.2",
@@ -85,15 +84,19 @@ const PROTOCOL_VERSION_MAP: Record<number, string> = {
     480: "1.14.1",
     477: "1.14",
     404: "1.13.2",
+    401: "1.13.1",
     393: "1.13",
     340: "1.12.2",
     338: "1.12.1",
     335: "1.12",
+    316: "1.11.2",
     315: "1.11",
-    210: "1.10",
+    210: "1.10/1.10.1/1.10.2",
     110: "1.9.4",
-    109: "1.9",
-    47: "1.8.9",
+    109: "1.9.2",
+    108: "1.9.1",
+    107: "1.9",
+    47: "1.8/1.8.9",
     5: "1.7.10",
     4: "1.7.5",
 }
@@ -134,7 +137,7 @@ const CHART_TOOLTIP_STYLE = {
     border: "1px solid hsl(var(--border))",
     borderRadius: 8,
     fontSize: 12,
-    color: "hsl(var(--foreground))",
+    color: "#ffffff",
 }
 
 /**
@@ -293,7 +296,7 @@ function AnalyticsContent({
     formatTimestamp: (ts: string) => string
     formatUptime: (s?: string) => string
 }) {
-    const { overview, players, tps, mspt, memory, timeline, geo, versions, clients, operatingSystems } = data
+    const { overview, players, tps, mspt, memory, timeline, versions, clients, operatingSystems } = data
 
     // Prepare hourly joins chart data
     const hourlyData = useMemo(() => {
@@ -356,18 +359,6 @@ function AnalyticsContent({
             .map(([os, count]) => ({ os, count }))
             .sort((a, b) => b.count - a.count)
     }, [operatingSystems, players])
-
-    // Geo data for pie chart
-    const geoData = useMemo(() => {
-        if (geo && geo.length > 0) return geo
-        const gMap: Record<string, number> = {}
-        players.forEach(p => {
-            if (p.country) gMap[p.country] = (gMap[p.country] || 0) + 1
-        })
-        return Object.entries(gMap)
-            .map(([country, count]) => ({ country, count }))
-            .sort((a, b) => b.count - a.count)
-    }, [geo, players])
 
     return (
         <div className="space-y-6 pb-8">
@@ -609,44 +600,6 @@ function AnalyticsContent({
                         </Card>
                     )}
 
-                    {/* Countries — Pie Chart */}
-                    {geoData.length > 0 && (
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                    <MapPin className="h-4 w-4" />
-                                    Player Countries
-                                </CardTitle>
-                                <CardDescription className="text-xs">Geographic distribution</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <ResponsiveContainer width="100%" height={220}>
-                                    <PieChart>
-                                        <Pie
-                                            data={geoData}
-                                            dataKey="count"
-                                            nameKey="country"
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={75}
-                                            innerRadius={40}
-                                            paddingAngle={2}
-                                            label={({ country, percent }) => `${country} ${(percent * 100).toFixed(0)}%`}
-                                            labelLine={false}
-                                            isAnimationActive={false}
-                                        >
-                                            {geoData.map((_, index) => (
-                                                <Cell key={`g-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                                        <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
-                    )}
-
                     {/* Operating Systems — Pie Chart */}
                     {osData.length > 0 && (
                         <Card>
@@ -737,6 +690,13 @@ function AnalyticsContent({
                                             <div key={p.uuid} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs text-muted-foreground w-5 font-mono">#{i + 1}</span>
+                                                    <img
+                                                        src={`https://minotar.net/helm/${p.name}/32`}
+                                                        alt={p.name}
+                                                        className="h-6 w-6 rounded"
+                                                        loading="lazy"
+                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                                    />
                                                     <span className="text-sm font-medium">{p.name}</span>
                                                     {p.online && (
                                                         <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">
@@ -747,7 +707,7 @@ function AnalyticsContent({
                                                 <div className="flex items-center gap-3">
                                                     {p.clientVersion && (
                                                         <Badge variant="outline" className="text-[10px] px-1.5">
-                                                            {p.clientVersion}
+                                                            {resolveVersion(p.clientVersion)}
                                                         </Badge>
                                                     )}
                                                     <span className="text-xs text-muted-foreground font-mono">
@@ -763,9 +723,8 @@ function AnalyticsContent({
                 </div>
 
                 {/* Additional stats row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <div className="grid grid-cols-3 gap-3 mt-4">
                     <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
-                    <StatCard icon={Globe} label="Countries" value={geoData.length} accent="text-sky-500" />
                     <StatCard icon={TrendingUp} label="Total Joins" value={overview.totalJoins} accent="text-violet-500" />
                     <StatCard icon={Users} label="New Players" value={overview.newPlayers} accent="text-pink-500" />
                 </div>
