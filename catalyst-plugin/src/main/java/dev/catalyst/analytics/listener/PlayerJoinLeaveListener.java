@@ -33,10 +33,10 @@ public class PlayerJoinLeaveListener implements Listener {
         DataManager dm = plugin.getDataManager();
         dm.recordJoin(uuid, name);
 
-        // Capture protocol version for version detection (async-safe, runs on next tick)
+        // Capture version for version detection (async-safe, runs on next tick)
         if (plugin.isTrackingEnabled("track-player-versions", "stats.client-version")) {
             Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
-                detectProtocolVersion(player, uuid, dm);
+                detectClientVersion(player, uuid, dm);
             }, 20L); // Delay 1 second to let connection settle
         }
 
@@ -72,11 +72,36 @@ public class PlayerJoinLeaveListener implements Listener {
     }
 
     /**
-     * Detect the player's protocol version using multiple approaches for broad compatibility.
+     * Detect the player's Minecraft version using the most reliable method available.
+     *
+     * Priority order:
+     * 1. ViaVersion API — if ViaVersion plugin is present, it knows the real client protocol version
+     * 2. Paper API Bukkit.getMinecraftVersion() — returns the server's exact version string (e.g. "1.21.4").
+     *    If ViaVersion is NOT installed, all players must be on the server's version, so this is accurate.
+     * 3. Protocol number fallback — use ProtocolVersionMapper as a last resort (least accurate).
      */
-    private void detectProtocolVersion(Player player, String uuid, DataManager dm) {
+    private void detectClientVersion(Player player, String uuid, DataManager dm) {
         try {
-            // Approach 1: Try Paper API (getProtocolVersion) — Paper 1.13+
+            // Approach 1: Try ViaVersion API if available
+            // ViaVersion knows the actual protocol version of each individual player,
+            // even when they connect with a different version than the server.
+            String viaVersion = tryViaVersion(player);
+            if (viaVersion != null) {
+                dm.setPlayerClientVersionString(uuid, viaVersion);
+                return;
+            }
+
+            // Approach 2: Use Bukkit.getMinecraftVersion() (Paper API)
+            // If ViaVersion is NOT installed, all players MUST be on the server's version.
+            // This returns the exact version string like "1.21.4" — no ambiguity.
+            String serverVersion = tryGetMinecraftVersion();
+            if (serverVersion != null) {
+                dm.setPlayerClientVersionString(uuid, serverVersion);
+                return;
+            }
+
+            // Approach 3: Try player.getProtocolVersion() (Paper API) and map it
+            // This is less accurate because protocol numbers can map to multiple versions.
             try {
                 java.lang.reflect.Method protocolMethod = player.getClass().getMethod("getProtocolVersion");
                 int protocol = (int) protocolMethod.invoke(player);
@@ -86,90 +111,87 @@ public class PlayerJoinLeaveListener implements Listener {
                 }
             } catch (Exception ignored) {}
 
-            // Approach 2: Try ViaVersion API if available
-            try {
-                Class<?> viaClass = Class.forName("com.viaversion.viaversion.api.Via");
-                Object api = viaClass.getMethod("getAPI").invoke(null);
-                Object playerVersion = api.getClass().getMethod("getPlayerVersion", Object.class).invoke(api, player);
-                if (playerVersion instanceof Integer) {
-                    int protocol = (Integer) playerVersion;
-                    if (protocol > 0) {
-                        dm.setPlayerClientVersion(uuid, protocol);
-                        return;
-                    }
-                }
-            } catch (Exception ignored) {}
-
-            // Approach 3: Try ProtocolSupport API if available
-            try {
-                Class<?> psClass = Class.forName("protocolsupport.api.ProtocolSupportAPI");
-                Object protocolVersion = psClass.getMethod("getProtocolVersion", Player.class).invoke(null, player);
-                if (protocolVersion != null) {
-                    java.lang.reflect.Method getIdMethod = protocolVersion.getClass().getMethod("getId");
-                    int protocol = (int) getIdMethod.invoke(protocolVersion);
-                    if (protocol > 0) {
-                        dm.setPlayerClientVersion(uuid, protocol);
-                        return;
-                    }
-                }
-            } catch (Exception ignored) {}
-
-            // Approach 4: NMS reflection for Spigot (works on many versions)
-            try {
-                Object handle = player.getClass().getMethod("getHandle").invoke(player);
-
-                // Try different field names across versions
-                Object connection = null;
-                for (String fieldName : new String[]{"connection", "playerConnection", "b"}) {
-                    try {
-                        connection = handle.getClass().getField(fieldName).get(handle);
-                        if (connection != null) break;
-                    } catch (Exception ignored) {}
-                }
-
-                if (connection != null) {
-                    Object networkManager = null;
-                    for (String fieldName : new String[]{"networkManager", "a", "connection"}) {
-                        try {
-                            networkManager = connection.getClass().getField(fieldName).get(connection);
-                            if (networkManager != null) break;
-                        } catch (Exception ignored) {}
-                    }
-
-                    if (networkManager != null) {
-                        // Try to get protocol version from channel
-                        for (String methodName : new String[]{"getProtocolVersion", "getVersion"}) {
-                            try {
-                                java.lang.reflect.Method m = networkManager.getClass().getMethod(methodName);
-                                int protocol = (int) m.invoke(networkManager);
-                                if (protocol > 0) {
-                                    dm.setPlayerClientVersion(uuid, protocol);
-                                    return;
-                                }
-                            } catch (Exception ignored) {}
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-
-            // Approach 5: Fall back to server's own protocol version
-            // This at least tells us the server version
-            try {
-                Object server = Bukkit.getServer().getClass().getMethod("getServer").invoke(Bukkit.getServer());
-                for (String methodName : new String[]{"getProtocolVersion", "getServerVersion"}) {
-                    try {
-                        java.lang.reflect.Method m = server.getClass().getMethod(methodName);
-                        Object result = m.invoke(server);
-                        if (result instanceof Integer && (Integer) result > 0) {
-                            dm.setPlayerClientVersion(uuid, (Integer) result);
-                            return;
-                        }
-                    } catch (Exception ignored) {}
-                }
-            } catch (Exception ignored) {}
+            // Approach 4: Parse version from Bukkit.getVersion() string
+            // Format is typically like "git-Paper-123 (MC: 1.21.4)"
+            String parsedVersion = tryParseBukkitVersion();
+            if (parsedVersion != null) {
+                dm.setPlayerClientVersionString(uuid, parsedVersion);
+                return;
+            }
 
         } catch (Exception e) {
-            plugin.getLogger().fine("Could not detect protocol version for " + player.getName());
+            plugin.getLogger().fine("Could not detect client version for " + player.getName());
         }
+    }
+
+    /**
+     * Try to get the player's version via ViaVersion API.
+     * Returns the version string if ViaVersion is available, null otherwise.
+     */
+    private String tryViaVersion(Player player) {
+        try {
+            // Check if ViaVersion plugin is loaded
+            if (Bukkit.getPluginManager().getPlugin("ViaVersion") == null) {
+                return null;
+            }
+
+            Class<?> viaClass = Class.forName("com.viaversion.viaversion.api.Via");
+            Object api = viaClass.getMethod("getAPI").invoke(null);
+            Object playerVersion = api.getClass()
+                    .getMethod("getPlayerVersion", java.util.UUID.class)
+                    .invoke(api, player.getUniqueId());
+
+            if (playerVersion instanceof Integer) {
+                int protocol = (Integer) playerVersion;
+                if (protocol > 0) {
+                    // Map the ViaVersion protocol number to a version string
+                    return ProtocolVersionMapper.map(protocol);
+                }
+            }
+        } catch (Exception ignored) {
+            // ViaVersion not available or API changed
+        }
+        return null;
+    }
+
+    /**
+     * Try to get the server's Minecraft version using Paper API's Bukkit.getMinecraftVersion().
+     * Returns the exact version string (e.g. "1.21.4") or null if not available.
+     */
+    private String tryGetMinecraftVersion() {
+        try {
+            java.lang.reflect.Method method = Bukkit.class.getMethod("getMinecraftVersion");
+            Object result = method.invoke(null);
+            if (result instanceof String) {
+                String version = (String) result;
+                if (!version.isEmpty()) {
+                    return version;
+                }
+            }
+        } catch (Exception ignored) {
+            // Not running on Paper, or method not available
+        }
+        return null;
+    }
+
+    /**
+     * Try to parse the Minecraft version from Bukkit.getVersion().
+     * The format is typically "git-Paper-123 (MC: 1.21.4)" or "git-Spigot-abc-def (MC: 1.21.4)".
+     */
+    private String tryParseBukkitVersion() {
+        try {
+            String fullVersion = Bukkit.getVersion();
+            if (fullVersion != null && fullVersion.contains("MC: ")) {
+                int start = fullVersion.indexOf("MC: ") + 4;
+                int end = fullVersion.indexOf(")", start);
+                if (end > start) {
+                    String version = fullVersion.substring(start, end).trim();
+                    if (!version.isEmpty()) {
+                        return version;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }

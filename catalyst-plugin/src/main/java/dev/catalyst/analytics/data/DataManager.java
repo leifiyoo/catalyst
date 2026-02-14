@@ -184,6 +184,19 @@ public class DataManager {
         }
     }
 
+    /**
+     * Set the player's client version directly as a string.
+     * Preferred over setPlayerClientVersion(int) when the exact version string is known
+     * (e.g. from Bukkit.getMinecraftVersion() or ViaVersion API).
+     */
+    public void setPlayerClientVersionString(String uuid, String versionString) {
+        PlayerData pd = players.get(uuid);
+        if (pd != null) {
+            pd.clientVersion = versionString;
+            dirty = true;
+        }
+    }
+
     public void setPlayerClientBrand(String uuid, String brand) {
         PlayerData pd = players.get(uuid);
         if (pd != null) {

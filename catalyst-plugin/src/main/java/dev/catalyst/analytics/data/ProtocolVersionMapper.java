@@ -5,33 +5,43 @@ import java.util.Map;
 
 /**
  * Maps Minecraft protocol version numbers to human-readable version strings.
+ * 
+ * NOTE: Protocol numbers do NOT uniquely identify sub-versions (e.g. 1.21.2 through 1.21.4
+ * all share protocol 768). This mapper is used as a FALLBACK only.
+ * 
+ * The preferred approach is:
+ * 1. Use ViaVersion API if available (gives real client protocol version)
+ * 2. Use Bukkit.getMinecraftVersion() (Paper API) for the server's own version
+ * 3. Fall back to this mapper only when neither is available
  */
 public class ProtocolVersionMapper {
 
     private static final Map<Integer, String> PROTOCOL_MAP = new HashMap<>();
 
     static {
-        // 1.21.x
-        PROTOCOL_MAP.put(768, "1.21.1");
-        PROTOCOL_MAP.put(767, "1.21");
+        // 1.21.x — Protocol versions from https://wiki.vg/Protocol_version_numbers
+        PROTOCOL_MAP.put(770, "1.21.5");
+        PROTOCOL_MAP.put(769, "1.21.4");
+        PROTOCOL_MAP.put(768, "1.21.2");   // 1.21.2 and 1.21.3 share protocol 768
+        PROTOCOL_MAP.put(767, "1.21");      // 1.21 and 1.21.1 share protocol 767
         // 1.20.x
-        PROTOCOL_MAP.put(766, "1.20.6");
-        PROTOCOL_MAP.put(765, "1.20.5");
-        PROTOCOL_MAP.put(764, "1.20.3/1.20.4");
-        PROTOCOL_MAP.put(763, "1.20.2");
-        PROTOCOL_MAP.put(762, "1.20/1.20.1");
+        PROTOCOL_MAP.put(766, "1.20.5");    // 1.20.5 and 1.20.6 share protocol 766
+        PROTOCOL_MAP.put(765, "1.20.3");    // 1.20.3 and 1.20.4 share protocol 765
+        PROTOCOL_MAP.put(764, "1.20.2");
+        PROTOCOL_MAP.put(763, "1.20");      // 1.20 and 1.20.1 share protocol 763
         // 1.19.x
-        PROTOCOL_MAP.put(761, "1.19.4");
-        PROTOCOL_MAP.put(760, "1.19.3");
-        PROTOCOL_MAP.put(759, "1.19/1.19.1/1.19.2");
+        PROTOCOL_MAP.put(762, "1.19.4");
+        PROTOCOL_MAP.put(761, "1.19.3");
+        PROTOCOL_MAP.put(760, "1.19.1");    // 1.19.1 and 1.19.2 share protocol 760
+        PROTOCOL_MAP.put(759, "1.19");
         // 1.18.x
         PROTOCOL_MAP.put(758, "1.18.2");
-        PROTOCOL_MAP.put(757, "1.18/1.18.1");
+        PROTOCOL_MAP.put(757, "1.18");      // 1.18 and 1.18.1 share protocol 757
         // 1.17.x
         PROTOCOL_MAP.put(756, "1.17.1");
         PROTOCOL_MAP.put(755, "1.17");
         // 1.16.x
-        PROTOCOL_MAP.put(754, "1.16.4/1.16.5");
+        PROTOCOL_MAP.put(754, "1.16.4");    // 1.16.4 and 1.16.5 share protocol 754
         PROTOCOL_MAP.put(753, "1.16.3");
         PROTOCOL_MAP.put(751, "1.16.2");
         PROTOCOL_MAP.put(736, "1.16.1");
@@ -55,21 +65,22 @@ public class ProtocolVersionMapper {
         PROTOCOL_MAP.put(338, "1.12.1");
         PROTOCOL_MAP.put(335, "1.12");
         // 1.11.x
-        PROTOCOL_MAP.put(316, "1.11.2");
+        PROTOCOL_MAP.put(316, "1.11.1");    // 1.11.1 and 1.11.2 share protocol 316
         PROTOCOL_MAP.put(315, "1.11");
         // 1.10.x
-        PROTOCOL_MAP.put(210, "1.10/1.10.1/1.10.2");
+        PROTOCOL_MAP.put(210, "1.10");      // 1.10, 1.10.1, 1.10.2 share protocol 210
         // 1.9.x
         PROTOCOL_MAP.put(110, "1.9.4");
         PROTOCOL_MAP.put(109, "1.9.2");
         PROTOCOL_MAP.put(108, "1.9.1");
         PROTOCOL_MAP.put(107, "1.9");
         // 1.8.x
-        PROTOCOL_MAP.put(47, "1.8/1.8.9");
+        PROTOCOL_MAP.put(47, "1.8");        // 1.8 through 1.8.9 share protocol 47
     }
 
     /**
      * Map a protocol version number to a Minecraft version string.
+     * This is a fallback — prefer using Bukkit.getMinecraftVersion() or ViaVersion API.
      */
     public static String map(int protocolVersion) {
         return PROTOCOL_MAP.getOrDefault(protocolVersion, "Unknown (" + protocolVersion + ")");
