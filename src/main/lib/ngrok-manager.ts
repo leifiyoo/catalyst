@@ -240,7 +240,7 @@ async function extractZip(
       }
       let stderr = "";
 
-      proc.stderr.on("data", (data) => {
+      proc.stderr?.on("data", (data) => {
         stderr += data.toString();
       });
 
