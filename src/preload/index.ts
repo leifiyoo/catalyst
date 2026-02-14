@@ -226,6 +226,10 @@ try {
     // Analytics
     getAnalyticsData: (serverId: string): Promise<{ success: boolean; data?: AnalyticsData; error?: string }> =>
       ipcRenderer.invoke("getAnalyticsData", serverId),
+
+    // System info
+    getSystemInfo: (): Promise<{ totalMemoryMB: number; maxRamMB: number }> =>
+      ipcRenderer.invoke("getSystemInfo"),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

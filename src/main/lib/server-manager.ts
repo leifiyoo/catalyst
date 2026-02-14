@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog } from "electron";
+import os from "os";
 import path from "path";
 import fs from "fs/promises";
 import { createWriteStream, existsSync } from "fs";
@@ -263,11 +264,26 @@ function isPathWithin(targetPath: string, rootPath: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
+function isEnoent(err: unknown): boolean {
+  return err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+async function ensureServersJson(): Promise<void> {
+  const dir = path.dirname(SERVERS_JSON);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(SERVERS_JSON, "[]", "utf-8");
+}
+
 async function loadServerList(): Promise<ServerRecord[]> {
   try {
     const data = await fs.readFile(SERVERS_JSON, "utf-8");
     return JSON.parse(data) as ServerRecord[];
   } catch (err) {
+    if (isEnoent(err)) {
+      console.debug("No servers.json found, creating default.");
+      await ensureServersJson();
+      return [];
+    }
     try {
       const backup = await fs.readFile(SERVERS_JSON_BAK, "utf-8");
       return JSON.parse(backup) as ServerRecord[];
@@ -468,7 +484,7 @@ export async function createServer(
     sendProgress({ stage: "writing-files", message: "Creating start.bat...", percent: 85 });
     await fs.writeFile(
       path.join(finalDir, "start.bat"),
-      generateStartBat(params.ramMB, downloadInfo.jarFile),
+      generateStartBat(clampRam(params.ramMB), downloadInfo.jarFile),
       "utf-8"
     );
 
@@ -491,7 +507,7 @@ export async function createServer(
       name: params.name,
       framework: params.framework,
       version: params.version,
-      ramMB: params.ramMB,
+      ramMB: clampRam(params.ramMB),
       status: "Offline",
       players: "0/20",
       createdAt: new Date().toISOString(),
@@ -675,6 +691,24 @@ export async function saveBanlist(
   }
 }
 
+/** Returns the maximum RAM (in MB) that should be allocated to a server. */
+function getMaxRamMB(): number {
+  const totalMB = Math.floor(os.totalmem() / (1024 * 1024));
+  const eightyPercent = Math.floor(totalMB * 0.8);
+  const totalMinus1GB = totalMB - 1024;
+  return Math.max(512, Math.min(eightyPercent, totalMinus1GB));
+}
+
+/** Clamp a RAM value to the safe system maximum. */
+function clampRam(ramMB: number): number {
+  return Math.max(512, Math.min(ramMB, getMaxRamMB()));
+}
+
+export function getSystemInfo(): { totalMemoryMB: number; maxRamMB: number } {
+  const totalMemoryMB = Math.floor(os.totalmem() / (1024 * 1024));
+  return { totalMemoryMB, maxRamMB: getMaxRamMB() };
+}
+
 export async function updateServerSettings(
   id: string,
   settings: { ramMB?: number; javaPath?: string; backupConfig?: ServerRecord['backupConfig']; useNgrok?: boolean; ngrokUrl?: string; name?: string; analyticsEnabled?: boolean }
@@ -687,10 +721,11 @@ export async function updateServerSettings(
     }
 
     if (settings.ramMB !== undefined) {
-      server.ramMB = settings.ramMB;
+      const safeRam = clampRam(settings.ramMB);
+      server.ramMB = safeRam;
       // Update start.bat with new RAM
       const batPath = path.join(server.serverPath, "start.bat");
-      await fs.writeFile(batPath, generateStartBat(settings.ramMB, server.jarFile || "server.jar"), "utf-8");
+      await fs.writeFile(batPath, generateStartBat(safeRam, server.jarFile || "server.jar"), "utf-8");
     }
 
     if (settings.javaPath !== undefined) {
