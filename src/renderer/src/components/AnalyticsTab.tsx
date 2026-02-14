@@ -52,7 +52,7 @@ interface AnalyticsTabProps {
     serverId: string
 }
 
-const POLL_INTERVAL = 7000
+const POLL_INTERVAL = 30000
 
 const PIE_COLORS = [
     "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
