@@ -93,6 +93,7 @@ export function ServersPage() {
     const [framework, setFramework] = useState("Paper")
     const [ramOption, setRamOption] = useState("4096")
     const [customRamMB, setCustomRamMB] = useState("")
+    const [maxRamMB, setMaxRamMB] = useState(16384)
 
     const effectiveRamMB = ramOption === "custom"
         ? parseInt(customRamMB, 10) || 0
@@ -103,6 +104,13 @@ export function ServersPage() {
         (currentPage - 1) * ITEMS_PER_PAGE,
         currentPage * ITEMS_PER_PAGE
     )
+
+    // Load system info for RAM limits
+    useEffect(() => {
+        window.context.getSystemInfo().then((info) => {
+            setMaxRamMB(info.maxRamMB)
+        })
+    }, [])
 
     // Load servers on mount
     useEffect(() => {
@@ -440,12 +448,9 @@ export function ServersPage() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="2048">2 GB</SelectItem>
-                                    <SelectItem value="4096">4 GB</SelectItem>
-                                    <SelectItem value="6144">6 GB</SelectItem>
-                                    <SelectItem value="8192">8 GB</SelectItem>
-                                    <SelectItem value="12288">12 GB</SelectItem>
-                                    <SelectItem value="16384">16 GB</SelectItem>
+                                    {[2048, 4096, 6144, 8192, 12288, 16384].filter(v => v <= maxRamMB).map(v => (
+                                        <SelectItem key={v} value={String(v)}>{v >= 1024 ? `${v / 1024} GB` : `${v} MB`}</SelectItem>
+                                    ))}
                                     <SelectItem value="custom">Custom</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -454,14 +459,14 @@ export function ServersPage() {
                                     <Input
                                         type="number"
                                         min={512}
-                                        max={32768}
+                                        max={maxRamMB}
                                         value={customRamMB}
                                         onChange={(e) => setCustomRamMB(e.target.value)}
                                         placeholder="e.g. 7168"
                                         disabled={isCreating}
                                         className="w-[200px]"
                                     />
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">MB</span>
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">MB (max {maxRamMB})</span>
                                 </div>
                             )}
                         </div>

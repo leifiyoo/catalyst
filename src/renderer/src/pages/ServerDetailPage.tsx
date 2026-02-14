@@ -149,6 +149,7 @@ export function ServerDetailPage() {
     const [javaPath, setJavaPath] = useState("")
     const [settingsSaving, setSettingsSaving] = useState(false)
     const [settingsSuccess, setSettingsSuccess] = useState(false)
+    const [maxRamMB, setMaxRamMB] = useState(16384)
 
     // Stats state
     const [stats, setStats] = useState<ServerStats | null>(null)
@@ -294,6 +295,13 @@ export function ServerDetailPage() {
             }
         })
     }, [id])
+
+    // Load system info for RAM limits
+    useEffect(() => {
+        window.context.getSystemInfo().then((info) => {
+            setMaxRamMB(info.maxRamMB)
+        })
+    }, [])
 
     // Load disk usage
     useEffect(() => {
@@ -2565,12 +2573,9 @@ export function ServerDetailPage() {
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="2048">2 GB</SelectItem>
-                                                    <SelectItem value="4096">4 GB</SelectItem>
-                                                    <SelectItem value="6144">6 GB</SelectItem>
-                                                    <SelectItem value="8192">8 GB</SelectItem>
-                                                    <SelectItem value="12288">12 GB</SelectItem>
-                                                    <SelectItem value="16384">16 GB</SelectItem>
+                                                    {[2048, 4096, 6144, 8192, 12288, 16384].filter(v => v <= maxRamMB).map(v => (
+                                                        <SelectItem key={v} value={String(v)}>{v >= 1024 ? `${v / 1024} GB` : `${v} MB`}</SelectItem>
+                                                    ))}
                                                     <SelectItem value="custom">Custom</SelectItem>
                                                 </SelectContent>
                                             </Select>
@@ -2579,14 +2584,14 @@ export function ServerDetailPage() {
                                                     <Input
                                                         type="number"
                                                         min={512}
-                                                        max={32768}
+                                                        max={maxRamMB}
                                                         value={customRamMB}
                                                         onChange={(e) =>
                                                             setCustomRamMB(e.target.value)
                                                         }
                                                         placeholder="MB"
                                                     />
-                                                    <span className="text-xs text-muted-foreground">MB</span>
+                                                    <span className="text-xs text-muted-foreground">MB (max {maxRamMB})</span>
                                                 </div>
                                             )}
                                         </div>

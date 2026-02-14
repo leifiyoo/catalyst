@@ -1,6 +1,11 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
+
+// Issue 3: Disable Chromium sandbox on Linux to avoid common sandbox errors
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("--no-sandbox");
+}
 import icon from "../../resources/logoonly.png?asset";
 import {
   getVersions,
@@ -48,7 +53,8 @@ import {
   cancelBackup,
   getBackupStatus,
   isBackupInProgress,
-  getAnalyticsData
+  getAnalyticsData,
+  getSystemInfo
 } from "@/lib";
 import {
   installNgrok,
@@ -526,6 +532,11 @@ app.whenReady().then(() => {
   // Analytics IPC handler
   ipcMain.handle("getAnalyticsData", async (_event, serverId: string) => {
     return getAnalyticsData(serverId);
+  });
+
+  // System info IPC handler (for RAM limit validation)
+  ipcMain.handle("getSystemInfo", () => {
+    return getSystemInfo();
   });
 
 });

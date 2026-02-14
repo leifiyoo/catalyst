@@ -140,6 +140,7 @@ declare global {
       setNgrokEnabled: (enabled: boolean) => Promise<void>;
       removeNgrokAuthtoken: () => Promise<{ success: boolean; error?: string }>;
       getAnalyticsData: GetAnalyticsDataFn;
+      getSystemInfo: () => Promise<{ totalMemoryMB: number; maxRamMB: number }>;
     };
   }
 }
