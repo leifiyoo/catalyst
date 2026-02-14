@@ -10,7 +10,7 @@ Catalyst is a desktop Minecraft server manager built with Electron + Vite + Reac
 
 - `npm run dev` — Start Electron app in development mode (HMR enabled)
 - `npm run build` — Typecheck then build for production
-- `npm run build:win` / `build:mac` / `build:linux` — Build platform-specific installers
+- `npm run build:win` / `build:mac` — Build platform-specific installers (Linux: 🚧 Coming Soon)
 - `npm run typecheck` — Run TypeScript checks for both main and renderer
 - `npm run test:unit` — Run tests with Vitest (no separate config file; configured in package.json)
 - `npm run start` — Preview the built app via `electron-vite preview`

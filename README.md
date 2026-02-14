@@ -3,7 +3,7 @@
 # Catalyst
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey.svg)](#installation)
+[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#installation)
 [![Electron](https://img.shields.io/badge/Electron-33-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 
 **A modern, feature-rich Minecraft server launcher and manager.**
@@ -24,7 +24,7 @@ Catalyst makes it easy to create, configure, and manage multiple Minecraft serve
 - ⚙️ **Server Properties Editor** — Edit server.properties, whitelist, and banlist from the UI
 - 🎨 **Modern Dark UI** — Custom frameless window with a polished, modern interface and 3D splash screen
 - 🔄 **Auto-Updates** — Built-in update checker to stay on the latest version
-- 💻 **Cross-Platform** — Supports Windows and Linux
+- 💻 **Cross-Platform** — Supports Windows (Linux coming soon)
 
 ---
 
@@ -35,7 +35,7 @@ Download the latest release from [**GitHub Releases**](../../releases).
 | Platform | Format |
 |----------|--------|
 | Windows  | `.exe` installer |
-| Linux    | `.AppImage`, `.deb`, `.snap` |
+| Linux    | 🚧 Coming Soon |
 
 ---
 
@@ -63,7 +63,7 @@ npm run dev
 npm run build:win
 
 # Linux
-npm run build:linux
+# 🚧 Coming Soon
 
 # macOS
 npm run build:mac
