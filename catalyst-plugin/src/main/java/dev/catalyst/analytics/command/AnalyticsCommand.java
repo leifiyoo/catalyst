@@ -45,7 +45,7 @@ public class AnalyticsCommand implements CommandExecutor {
                 sender.sendMessage(ChatColor.GRAY + "Total joins: " + ChatColor.WHITE + plugin.getDataManager().getTotalJoins());
                 sender.sendMessage(ChatColor.GRAY + "TPS samples: " + ChatColor.WHITE + plugin.getDataManager().getTpsHistory().size());
                 sender.sendMessage(ChatColor.GRAY + "Memory samples: " + ChatColor.WHITE + plugin.getDataManager().getMemoryHistory().size());
-                sender.sendMessage(ChatColor.GRAY + "API port: " + ChatColor.WHITE + plugin.getConfig().getInt("api.port", 7845));
+                sender.sendMessage(ChatColor.GRAY + "Mode: " + ChatColor.WHITE + "File-based (analytics.json)");
                 break;
 
             default:

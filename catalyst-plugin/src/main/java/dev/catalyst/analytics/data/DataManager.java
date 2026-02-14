@@ -8,18 +8,17 @@ import dev.catalyst.analytics.CatalystAnalyticsPlugin;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
-import java.util.stream.Collectors;
 
 /**
  * Manages all analytics data with JSON file persistence.
  * All collections are thread-safe for async access.
+ * Optimized for low memory footprint with bounded collections.
  */
 public class DataManager {
 
@@ -27,15 +26,15 @@ public class DataManager {
     private final File dataFolder;
     private final Gson gson;
 
+    // Maximum entries for time-series data to prevent unbounded growth
+    private static final int MAX_HISTORY_ENTRIES = 2880; // ~48h at 1min intervals
+
     // --- Player tracking ---
-    /** UUID -> PlayerData */
     private final ConcurrentHashMap<String, PlayerData> players = new ConcurrentHashMap<>();
-    /** Set of all unique player UUIDs ever seen */
     private final Set<String> uniquePlayers = ConcurrentHashMap.newKeySet();
-    /** Peak online player count */
     private volatile int peakOnline = 0;
 
-    // --- TPS history: list of {timestamp, value} ---
+    // --- TPS history ---
     private final CopyOnWriteArrayList<TimestampedValue> tpsHistory = new CopyOnWriteArrayList<>();
 
     // --- Memory history ---
@@ -52,6 +51,9 @@ public class DataManager {
 
     // --- Server start time ---
     private final String serverStartTime = Instant.now().toString();
+
+    // --- Dirty flag for batched writes ---
+    private volatile boolean dirty = false;
 
     // --- Server-wide stats ---
     private volatile long totalJoins = 0;
@@ -94,12 +96,13 @@ public class DataManager {
 
     public void recordJoin(String uuid, String name) {
         PlayerData pd = getOrCreatePlayer(uuid, name);
-        pd.name = name; // update name in case it changed
+        pd.name = name;
         pd.lastJoin = Instant.now().toString();
         pd.joinCount++;
         pd.online = true;
         uniquePlayers.add(uuid);
         totalJoins++;
+        dirty = true;
 
         // Track hourly joins
         int hour = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC).getHour();
@@ -126,6 +129,7 @@ public class DataManager {
                 } catch (Exception ignored) {}
             }
             pd.lastLeave = Instant.now().toString();
+            dirty = true;
         }
     }
 
@@ -133,36 +137,42 @@ public class DataManager {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.chatMessages++;
         totalChatMessages++;
+        dirty = true;
     }
 
     public void recordDeath(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.deaths++;
         totalDeaths++;
+        dirty = true;
     }
 
     public void recordKill(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.kills++;
         totalKills++;
+        dirty = true;
     }
 
     public void recordBlockPlaced(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.blocksPlaced++;
         totalBlocksPlaced++;
+        dirty = true;
     }
 
     public void recordBlockBroken(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.blocksBroken++;
         totalBlocksBroken++;
+        dirty = true;
     }
 
     public void recordCommand(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.commandsExecuted++;
         totalCommandsExecuted++;
+        dirty = true;
     }
 
     public void setPlayerClientVersion(String uuid, int protocolVersion) {
@@ -170,13 +180,23 @@ public class DataManager {
         if (pd != null) {
             pd.protocolVersion = protocolVersion;
             pd.clientVersion = ProtocolVersionMapper.map(protocolVersion);
+            dirty = true;
         }
     }
 
     public void setPlayerClientBrand(String uuid, String brand) {
         PlayerData pd = players.get(uuid);
         if (pd != null) {
-            pd.clientBrand = brand;
+            pd.clientBrand = normalizeClientBrand(brand);
+            dirty = true;
+        }
+    }
+
+    public void setPlayerOs(String uuid, String os) {
+        PlayerData pd = players.get(uuid);
+        if (pd != null) {
+            pd.os = os;
+            dirty = true;
         }
     }
 
@@ -186,13 +206,46 @@ public class DataManager {
             pd.country = geo.country;
             pd.region = geo.regionName;
             pd.city = geo.city;
+            dirty = true;
         }
+    }
+
+    /**
+     * Normalize client brand strings to friendly names.
+     * e.g. "lunarclient:v1.8.9-2.15.1" -> "Lunar Client"
+     */
+    private String normalizeClientBrand(String brand) {
+        if (brand == null) return "Unknown";
+        String lower = brand.toLowerCase().trim();
+
+        if (lower.startsWith("lunarclient") || lower.contains("lunar")) return "Lunar Client";
+        if (lower.startsWith("badlion") || lower.contains("badlion")) return "Badlion Client";
+        if (lower.equals("fabric") || lower.startsWith("fabric")) return "Fabric";
+        if (lower.equals("forge") || lower.startsWith("forge") || lower.contains("fml")) return "Forge";
+        if (lower.equals("vanilla") || lower.equals("minecraft") || lower.equals("brand")) return "Vanilla";
+        if (lower.contains("optifine")) return "OptiFine";
+        if (lower.contains("quilt")) return "Quilt";
+        if (lower.contains("labymod")) return "LabyMod";
+        if (lower.contains("feather")) return "Feather Client";
+        if (lower.contains("pvplounge")) return "PvPLounge";
+
+        // Return the original brand if no match (capitalize first letter)
+        if (brand.length() > 0) {
+            return brand.substring(0, 1).toUpperCase() + brand.substring(1);
+        }
+        return brand;
     }
 
     // ========== TPS ==========
 
     public void addTpsSample(double tps) {
-        tpsHistory.add(new TimestampedValue(Instant.now().toString(), tps));
+        addBounded(tpsHistory, new TimestampedValue(Instant.now().toString(), tps));
+        dirty = true;
+    }
+
+    public void addTpsSampleWithMspt(double tps, double mspt) {
+        addBounded(tpsHistory, new TimestampedValue(Instant.now().toString(), tps, mspt));
+        dirty = true;
     }
 
     public List<TimestampedValue> getTpsHistory() {
@@ -202,7 +255,8 @@ public class DataManager {
     // ========== Memory ==========
 
     public void addMemorySample(double usedMB, double maxMB) {
-        memoryHistory.add(new TimestampedValue(Instant.now().toString(), usedMB, maxMB));
+        addBounded(memoryHistory, new TimestampedValue(Instant.now().toString(), usedMB, maxMB));
+        dirty = true;
     }
 
     public List<TimestampedValue> getMemoryHistory() {
@@ -212,11 +266,22 @@ public class DataManager {
     // ========== Player Count Timeline ==========
 
     public void addPlayerCountSnapshot(int count) {
-        playerCountTimeline.add(new TimestampedValue(Instant.now().toString(), count));
+        addBounded(playerCountTimeline, new TimestampedValue(Instant.now().toString(), count));
+        dirty = true;
     }
 
     public List<TimestampedValue> getPlayerCountTimeline() {
         return Collections.unmodifiableList(playerCountTimeline);
+    }
+
+    // ========== Bounded list helper ==========
+
+    private void addBounded(CopyOnWriteArrayList<TimestampedValue> list, TimestampedValue value) {
+        list.add(value);
+        // Trim if exceeds max (remove oldest entries)
+        while (list.size() > MAX_HISTORY_ENTRIES) {
+            list.remove(0);
+        }
     }
 
     // ========== Geo Cache ==========
@@ -266,28 +331,33 @@ public class DataManager {
 
     public synchronized void saveAll() {
         try {
-            saveJson("players.json", players);
-            saveJson("tps_history.json", tpsHistory);
-            saveJson("memory_history.json", memoryHistory);
-            saveJson("player_count_timeline.json", playerCountTimeline);
-            saveJson("geo_cache.json", geoCache);
-            saveJson("hourly_joins.json", hourlyJoins);
-
-            // Save server-wide stats
-            Map<String, Object> serverStats = new HashMap<>();
-            serverStats.put("peakOnline", peakOnline);
-            serverStats.put("totalJoins", totalJoins);
-            serverStats.put("totalChatMessages", totalChatMessages);
-            serverStats.put("totalCommandsExecuted", totalCommandsExecuted);
-            serverStats.put("totalBlocksPlaced", totalBlocksPlaced);
-            serverStats.put("totalBlocksBroken", totalBlocksBroken);
-            serverStats.put("totalDeaths", totalDeaths);
-            serverStats.put("totalKills", totalKills);
-            serverStats.put("uniquePlayers", new ArrayList<>(uniquePlayers));
-            saveJson("server_stats.json", serverStats);
-
-            // Write combined analytics.json for Electron app to read
+            // Always write the combined analytics.json (Electron reads this)
             writeCombinedAnalyticsJson();
+
+            // Only write individual data files if data changed
+            if (dirty) {
+                saveJson("players.json", players);
+                saveJson("tps_history.json", tpsHistory);
+                saveJson("memory_history.json", memoryHistory);
+                saveJson("player_count_timeline.json", playerCountTimeline);
+                saveJson("geo_cache.json", geoCache);
+                saveJson("hourly_joins.json", hourlyJoins);
+
+                // Save server-wide stats
+                Map<String, Object> serverStats = new HashMap<>();
+                serverStats.put("peakOnline", peakOnline);
+                serverStats.put("totalJoins", totalJoins);
+                serverStats.put("totalChatMessages", totalChatMessages);
+                serverStats.put("totalCommandsExecuted", totalCommandsExecuted);
+                serverStats.put("totalBlocksPlaced", totalBlocksPlaced);
+                serverStats.put("totalBlocksBroken", totalBlocksBroken);
+                serverStats.put("totalDeaths", totalDeaths);
+                serverStats.put("totalKills", totalKills);
+                serverStats.put("uniquePlayers", new ArrayList<>(uniquePlayers));
+                saveJson("server_stats.json", serverStats);
+
+                dirty = false;
+            }
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to save analytics data", e);
         }
@@ -326,7 +396,11 @@ public class DataManager {
 
             // Get latest TPS from history
             if (!tpsHistory.isEmpty()) {
-                overview.put("currentTps", tpsHistory.get(tpsHistory.size() - 1).value);
+                TimestampedValue latestTps = tpsHistory.get(tpsHistory.size() - 1);
+                overview.put("currentTps", latestTps.value);
+                if (latestTps.value2 > 0) {
+                    overview.put("currentMspt", latestTps.value2);
+                }
             }
 
             // Hourly joins
@@ -335,8 +409,6 @@ public class DataManager {
                 hourlyJoinsStr.put(String.valueOf(entry.getKey()), entry.getValue());
             }
             overview.put("hourlyJoins", hourlyJoinsStr);
-
-            // Server uptime
             overview.put("serverStartTime", serverStartTime);
 
             combined.put("overview", overview);
@@ -356,6 +428,7 @@ public class DataManager {
                 pm.put("region", pd.region);
                 pm.put("clientVersion", pd.clientVersion);
                 pm.put("clientBrand", pd.clientBrand);
+                pm.put("os", pd.os);
                 pm.put("chatMessages", pd.chatMessages);
                 pm.put("deaths", pd.deaths);
                 pm.put("kills", pd.kills);
@@ -366,7 +439,7 @@ public class DataManager {
             }
             combined.put("players", playersList);
 
-            // TPS history (last 100 entries)
+            // TPS history (last 100 entries for the JSON file)
             List<Map<String, Object>> tpsList = new ArrayList<>();
             int tpsStart = Math.max(0, tpsHistory.size() - 100);
             for (int i = tpsStart; i < tpsHistory.size(); i++) {
@@ -374,6 +447,9 @@ public class DataManager {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("timestamp", tv.timestamp);
                 m.put("tps", tv.value);
+                if (tv.value2 > 0) {
+                    m.put("mspt", tv.value2);
+                }
                 tpsList.add(m);
             }
             combined.put("tps", tpsList);
@@ -421,16 +497,85 @@ public class DataManager {
                     });
             combined.put("geo", geoList);
 
+            // Version distribution
+            Map<String, Integer> versionDistribution = new LinkedHashMap<>();
+            for (PlayerData pd : players.values()) {
+                if (pd.clientVersion != null && !pd.clientVersion.isEmpty()) {
+                    versionDistribution.merge(pd.clientVersion, 1, Integer::sum);
+                }
+            }
+            List<Map<String, Object>> versionList = new ArrayList<>();
+            versionDistribution.entrySet().stream()
+                    .sorted((a, b) -> b.getValue() - a.getValue())
+                    .forEach(e -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("version", e.getKey());
+                        m.put("count", e.getValue());
+                        versionList.add(m);
+                    });
+            combined.put("versions", versionList);
+
+            // Client brand distribution
+            Map<String, Integer> clientDistribution = new LinkedHashMap<>();
+            for (PlayerData pd : players.values()) {
+                if (pd.clientBrand != null && !pd.clientBrand.isEmpty()) {
+                    clientDistribution.merge(pd.clientBrand, 1, Integer::sum);
+                }
+            }
+            List<Map<String, Object>> clientList = new ArrayList<>();
+            clientDistribution.entrySet().stream()
+                    .sorted((a, b) -> b.getValue() - a.getValue())
+                    .forEach(e -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("client", e.getKey());
+                        m.put("count", e.getValue());
+                        clientList.add(m);
+                    });
+            combined.put("clients", clientList);
+
+            // OS distribution
+            Map<String, Integer> osDistribution = new LinkedHashMap<>();
+            for (PlayerData pd : players.values()) {
+                if (pd.os != null && !pd.os.isEmpty()) {
+                    osDistribution.merge(pd.os, 1, Integer::sum);
+                }
+            }
+            List<Map<String, Object>> osList = new ArrayList<>();
+            osDistribution.entrySet().stream()
+                    .sorted((a, b) -> b.getValue() - a.getValue())
+                    .forEach(e -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("os", e.getKey());
+                        m.put("count", e.getValue());
+                        osList.add(m);
+                    });
+            combined.put("operatingSystems", osList);
+
+            // Tracking settings (so the UI can show toggles)
+            Map<String, Boolean> trackingSettings = new LinkedHashMap<>();
+            trackingSettings.put("trackPlayerJoins", plugin.isTrackingEnabled("track-player-joins"));
+            trackingSettings.put("trackPlayerVersions", plugin.isTrackingEnabled("track-player-versions"));
+            trackingSettings.put("trackPlayerClients", plugin.isTrackingEnabled("track-player-clients"));
+            trackingSettings.put("trackGeolocation", plugin.isTrackingEnabled("track-geolocation"));
+            trackingSettings.put("trackOs", plugin.isTrackingEnabled("track-os"));
+            trackingSettings.put("trackTps", plugin.isTrackingEnabled("track-tps"));
+            trackingSettings.put("trackRam", plugin.isTrackingEnabled("track-ram"));
+            trackingSettings.put("trackPlaytime", plugin.isTrackingEnabled("track-playtime"));
+            trackingSettings.put("trackChatMessages", plugin.isTrackingEnabled("track-chat-messages"));
+            trackingSettings.put("trackDeathsKills", plugin.isTrackingEnabled("track-deaths-kills"));
+            trackingSettings.put("trackBlocks", plugin.isTrackingEnabled("track-blocks"));
+            trackingSettings.put("trackCommands", plugin.isTrackingEnabled("track-commands"));
+            combined.put("trackingSettings", trackingSettings);
+
             // Timestamp of this snapshot
             combined.put("lastUpdated", Instant.now().toString());
 
-            // Write to analytics.json in the plugin's data folder
+            // Write to analytics.json in the plugin's data folder (atomic write)
             File analyticsFile = new File(dataFolder, "analytics.json");
             File tmpFile = new File(dataFolder, "analytics.json.tmp");
             try (Writer writer = new OutputStreamWriter(new FileOutputStream(tmpFile), StandardCharsets.UTF_8)) {
                 gson.toJson(combined, writer);
             }
-            // Atomic rename for safe reading
             if (analyticsFile.exists()) {
                 analyticsFile.delete();
             }
@@ -447,10 +592,9 @@ public class DataManager {
             Type playerMapType = new TypeToken<ConcurrentHashMap<String, PlayerData>>() {}.getType();
             ConcurrentHashMap<String, PlayerData> loadedPlayers = loadJson("players.json", playerMapType);
             if (loadedPlayers != null) {
-                // Mark all as offline on load
                 loadedPlayers.values().forEach(p -> {
                     p.online = false;
-                    p.isNew = false; // They've been seen before
+                    p.isNew = false;
                 });
                 players.putAll(loadedPlayers);
             }
@@ -458,15 +602,31 @@ public class DataManager {
             // Load TPS history
             Type tpsListType = new TypeToken<CopyOnWriteArrayList<TimestampedValue>>() {}.getType();
             CopyOnWriteArrayList<TimestampedValue> loadedTps = loadJson("tps_history.json", tpsListType);
-            if (loadedTps != null) tpsHistory.addAll(loadedTps);
+            if (loadedTps != null) {
+                // Only load up to MAX_HISTORY_ENTRIES
+                int start = Math.max(0, loadedTps.size() - MAX_HISTORY_ENTRIES);
+                for (int i = start; i < loadedTps.size(); i++) {
+                    tpsHistory.add(loadedTps.get(i));
+                }
+            }
 
             // Load memory history
             CopyOnWriteArrayList<TimestampedValue> loadedMem = loadJson("memory_history.json", tpsListType);
-            if (loadedMem != null) memoryHistory.addAll(loadedMem);
+            if (loadedMem != null) {
+                int start = Math.max(0, loadedMem.size() - MAX_HISTORY_ENTRIES);
+                for (int i = start; i < loadedMem.size(); i++) {
+                    memoryHistory.add(loadedMem.get(i));
+                }
+            }
 
             // Load player count timeline
             CopyOnWriteArrayList<TimestampedValue> loadedPc = loadJson("player_count_timeline.json", tpsListType);
-            if (loadedPc != null) playerCountTimeline.addAll(loadedPc);
+            if (loadedPc != null) {
+                int start = Math.max(0, loadedPc.size() - MAX_HISTORY_ENTRIES);
+                for (int i = start; i < loadedPc.size(); i++) {
+                    playerCountTimeline.add(loadedPc.get(i));
+                }
+            }
 
             // Load geo cache
             Type geoCacheType = new TypeToken<ConcurrentHashMap<String, GeoData>>() {}.getType();
@@ -553,6 +713,7 @@ public class DataManager {
         public int protocolVersion;
         public String clientVersion;
         public String clientBrand;
+        public String os;
         public long chatMessages = 0;
         public long deaths = 0;
         public long kills = 0;
@@ -564,7 +725,7 @@ public class DataManager {
     public static class TimestampedValue {
         public String timestamp;
         public double value;
-        public double value2; // optional secondary value (e.g., max memory)
+        public double value2; // optional secondary value (e.g., max memory or mspt)
 
         public TimestampedValue() {}
 

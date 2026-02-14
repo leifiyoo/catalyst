@@ -324,6 +324,7 @@ export type AnalyticsData = {
     totalDeaths: number;
     totalKills: number;
     currentTps?: number;
+    currentMspt?: number;
     memoryUsedMB?: number;
     memoryMaxMB?: number;
     hourlyJoins?: Record<string, number>;
@@ -341,6 +342,7 @@ export type AnalyticsData = {
     region?: string;
     clientVersion?: string;
     clientBrand?: string;
+    os?: string;
     chatMessages: number;
     deaths: number;
     kills: number;
@@ -348,11 +350,30 @@ export type AnalyticsData = {
     blocksBroken: number;
     commandsExecuted: number;
   }[];
-  tps: { timestamp: string; tps: number }[];
+  tps: { timestamp: string; tps: number; mspt?: number }[];
   memory: { timestamp: string; usedMB: number; maxMB: number }[];
   timeline: { timestamp: string; players: number }[];
   geo: { country: string; count: number }[];
+  versions: { version: string; count: number }[];
+  clients: { client: string; count: number }[];
+  operatingSystems: { os: string; count: number }[];
+  trackingSettings?: AnalyticsTrackingSettings;
   lastUpdated: string;
+};
+
+export type AnalyticsTrackingSettings = {
+  trackPlayerJoins: boolean;
+  trackPlayerVersions: boolean;
+  trackPlayerClients: boolean;
+  trackGeolocation: boolean;
+  trackOs: boolean;
+  trackTps: boolean;
+  trackRam: boolean;
+  trackPlaytime: boolean;
+  trackChatMessages: boolean;
+  trackDeathsKills: boolean;
+  trackBlocks: boolean;
+  trackCommands: boolean;
 };
 
 export type GetAnalyticsDataFn = (serverId: string) => Promise<{ success: boolean; data?: AnalyticsData; error?: string }>;

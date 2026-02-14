@@ -20,22 +20,33 @@ collection:
   # Player count snapshot interval
   player-count-interval: 300
 
-# Enable/disable individual stat collectors
-stats:
-  player-join-leave: true
-  geolocation: true
-  play-time: true
-  client-os: true
-  client-version: true
-  tps-history: true
-  memory-history: true
-  player-count-timeline: true
-  new-vs-returning: true
-  active-hours: true
-  chat-messages: true
-  deaths-kills: true
-  blocks: true
-  commands: true
+# Enable/disable individual tracking categories
+# Toggle these to control what data gets collected
+tracking:
+  # Track player join/leave events
+  track-player-joins: true
+  # Track player Minecraft versions (protocol version detection)
+  track-player-versions: true
+  # Track player client brands (Fabric, Forge, Lunar, Vanilla, etc.)
+  track-player-clients: true
+  # Track player geolocation (country, region via IP lookup)
+  track-geolocation: true
+  # Track player operating system
+  track-os: true
+  # Track server TPS over time
+  track-tps: true
+  # Track server RAM usage over time
+  track-ram: true
+  # Track player playtime
+  track-playtime: true
+  # Track chat messages
+  track-chat-messages: true
+  # Track deaths and kills
+  track-deaths-kills: true
+  # Track blocks placed/broken
+  track-blocks: true
+  # Track commands executed
+  track-commands: true
 
 # Geolocation settings
 geolocation:

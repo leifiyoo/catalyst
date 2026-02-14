@@ -34,33 +34,33 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         // Initialize geolocation service
         geoLocationService = new GeoLocationService(this);
 
-        // Register event listeners based on config
-        if (getConfig().getBoolean("stats.player-join-leave", true)) {
+        // Register event listeners based on tracking config
+        if (isTrackingEnabled("track-player-joins")) {
             Bukkit.getPluginManager().registerEvents(new PlayerJoinLeaveListener(this), this);
         }
-        if (getConfig().getBoolean("stats.chat-messages", true)) {
+        if (isTrackingEnabled("track-chat-messages")) {
             Bukkit.getPluginManager().registerEvents(new ChatListener(this), this);
         }
-        if (getConfig().getBoolean("stats.deaths-kills", true)) {
+        if (isTrackingEnabled("track-deaths-kills")) {
             Bukkit.getPluginManager().registerEvents(new DeathKillListener(this), this);
         }
-        if (getConfig().getBoolean("stats.blocks", true)) {
+        if (isTrackingEnabled("track-blocks")) {
             Bukkit.getPluginManager().registerEvents(new BlockListener(this), this);
         }
-        if (getConfig().getBoolean("stats.commands", true)) {
+        if (isTrackingEnabled("track-commands")) {
             Bukkit.getPluginManager().registerEvents(new CommandListener(this), this);
         }
 
         // Start collectors (async tasks)
-        if (getConfig().getBoolean("stats.tps-history", true)) {
+        if (isTrackingEnabled("track-tps")) {
             tpsCollector = new TpsCollector(this);
             tpsCollector.start();
         }
-        if (getConfig().getBoolean("stats.memory-history", true)) {
+        if (isTrackingEnabled("track-ram")) {
             memoryCollector = new MemoryCollector(this);
             memoryCollector.start();
         }
-        if (getConfig().getBoolean("stats.player-count-timeline", true)) {
+        if (isTrackingEnabled("track-player-joins")) {
             playerCountCollector = new PlayerCountCollector(this);
             playerCountCollector.start();
         }
@@ -70,7 +70,7 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         long saveIntervalTicks = saveIntervalSeconds * 20L;
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.saveAll(), saveIntervalTicks, saveIntervalTicks);
 
-        // Schedule data cleanup
+        // Schedule data cleanup (every hour)
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.cleanupOldData(), 20L * 60, 20L * 60 * 60);
 
         // Register commands
@@ -87,6 +87,23 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         }
 
         getLogger().info("CatalystAnalytics disabled.");
+    }
+
+    /**
+     * Check if a specific tracking category is enabled in config.
+     * Uses the new tracking.* config path, with fallback to old stats.* path.
+     */
+    public boolean isTrackingEnabled(String key) {
+        // New config path: tracking.track-player-joins
+        if (getConfig().contains("tracking." + key)) {
+            return getConfig().getBoolean("tracking." + key, true);
+        }
+        // Fallback to old config path for backwards compatibility
+        String oldKey = key.replace("track-", "");
+        if (getConfig().contains("stats." + oldKey)) {
+            return getConfig().getBoolean("stats." + oldKey, true);
+        }
+        return true; // Default enabled
     }
 
     public static CatalystAnalyticsPlugin getInstance() {
