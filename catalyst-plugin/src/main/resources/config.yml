@@ -20,7 +20,20 @@ collection:
   # Player count snapshot interval
   player-count-interval: 300
 
-# Enable/disable individual stat collectors
+# Enable/disable individual tracking categories
+# These can be toggled to reduce resource usage or for privacy
+tracking:
+  track-player-joins: true
+  track-player-versions: true
+  track-player-clients: true
+  track-geolocation: true
+  track-os: true
+  track-tps: true
+  track-ram: true
+  track-playtime: true
+  track-fps: true
+
+# Legacy stats toggles (still supported for backwards compatibility)
 stats:
   player-join-leave: true
   geolocation: true

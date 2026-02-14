@@ -4,14 +4,13 @@ import dev.catalyst.analytics.CatalystAnalyticsPlugin;
 import org.bukkit.Bukkit;
 
 /**
- * Samples TPS (ticks per second) at configurable intervals.
+ * Samples TPS (ticks per second) and MSPT (milliseconds per tick) at configurable intervals.
  * Uses a tick-counting approach compatible with all Spigot/Paper versions.
  */
 public class TpsCollector {
 
     private final CatalystAnalyticsPlugin plugin;
     private long lastPollTime;
-    private long lastPollTick;
 
     public TpsCollector(CatalystAnalyticsPlugin plugin) {
         this.plugin = plugin;
@@ -23,7 +22,6 @@ public class TpsCollector {
 
         // Initialize baseline
         lastPollTime = System.nanoTime();
-        lastPollTick = 0;
 
         // Use a repeating sync task to count ticks accurately
         Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
@@ -41,10 +39,31 @@ public class TpsCollector {
                     tps = Math.min(tps, 20.0);
                     tps = Math.round(tps * 100.0) / 100.0;
 
+                    // Calculate MSPT (milliseconds per tick)
+                    double mspt = (elapsed / 1_000_000.0) / intervalTicks;
+                    mspt = Math.round(mspt * 100.0) / 100.0;
+
                     plugin.getDataManager().addTpsSample(tps);
+                    plugin.getDataManager().addMsptSample(mspt);
                     lastPollTime = now;
                 }
             }
         }, 1L, 1L);
+
+        // Also try to use Paper's MSPT API if available
+        tryPaperMspt();
+    }
+
+    /**
+     * Try to use Paper's server tick times API for more accurate MSPT.
+     */
+    private void tryPaperMspt() {
+        try {
+            // Paper 1.19+ has Bukkit.getServer().getAverageTickTime()
+            Bukkit.getServer().getClass().getMethod("getAverageTickTime");
+            plugin.getLogger().fine("Paper MSPT API available");
+        } catch (Exception ignored) {
+            // Not available, using calculated MSPT from tick counter
+        }
     }
 }

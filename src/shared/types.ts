@@ -324,6 +324,7 @@ export type AnalyticsData = {
     totalDeaths: number;
     totalKills: number;
     currentTps?: number;
+    currentMspt?: number;
     memoryUsedMB?: number;
     memoryMaxMB?: number;
     hourlyJoins?: Record<string, number>;
@@ -339,6 +340,7 @@ export type AnalyticsData = {
     totalPlayTimeSeconds: number;
     country?: string;
     region?: string;
+    os?: string;
     clientVersion?: string;
     clientBrand?: string;
     chatMessages: number;
@@ -349,9 +351,24 @@ export type AnalyticsData = {
     commandsExecuted: number;
   }[];
   tps: { timestamp: string; tps: number }[];
+  mspt: { timestamp: string; mspt: number }[];
   memory: { timestamp: string; usedMB: number; maxMB: number }[];
   timeline: { timestamp: string; players: number }[];
   geo: { country: string; count: number }[];
+  versions: { version: string; count: number }[];
+  clients: { client: string; count: number }[];
+  operatingSystems: { os: string; count: number }[];
+  trackingConfig?: {
+    "track-player-joins": boolean;
+    "track-player-versions": boolean;
+    "track-player-clients": boolean;
+    "track-geolocation": boolean;
+    "track-os": boolean;
+    "track-tps": boolean;
+    "track-ram": boolean;
+    "track-playtime": boolean;
+    "track-fps": boolean;
+  };
   lastUpdated: string;
 };
 
