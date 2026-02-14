@@ -173,19 +173,19 @@ export function ServerDetailPage() {
     // Helper for tag colors and icons
     const getTagConfig = (tag: string) => {
         const lower = tag.toLowerCase()
-        if (lower.includes("fabric")) return { color: "bg-stone-500/10 text-stone-600 dark:text-stone-400 border-stone-500/20 hover:bg-stone-500/15", icon: ScrollText }
-        if (lower.includes("forge")) return { color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/15", icon: Anvil }
+        if (lower.includes("fabric")) return { color: "bg-stone-400/10 text-stone-500 dark:text-stone-400 border-stone-400/20 hover:bg-stone-400/15", icon: ScrollText }
+        if (lower.includes("forge")) return { color: "bg-indigo-700/10 text-indigo-700 dark:text-indigo-400 border-indigo-700/20 hover:bg-indigo-700/15", icon: Anvil }
         if (lower.includes("neoforge")) return { color: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/15", icon: Zap }
         if (lower.includes("quilt")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/15", icon: Layers }
-        if (lower.includes("paper")) return { color: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/15", icon: Send }
-        if (lower.includes("spigot")) return { color: "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100", icon: Droplet }
-        if (lower.includes("velocity")) return { color: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20", icon: Wind }
+        if (lower.includes("paper")) return { color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/15", icon: Send }
+        if (lower.includes("spigot")) return { color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/15", icon: Droplet }
+        if (lower.includes("velocity")) return { color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20 hover:bg-teal-500/15", icon: Wind }
         if (lower.includes("folia")) return { color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 hover:bg-green-500/15", icon: Leaf }
         if (lower.includes("bukkit")) return { color: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/15", icon: Box }
         if (lower.includes("bungeecord")) return { color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/15", icon: Layers }
         if (lower.includes("waterfall")) return { color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/15", icon: Droplet }
-        if (lower.includes("sponge")) return { color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/15", icon: Square }
-        if (lower.includes("purpur")) return { color: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20 hover:bg-fuchsia-500/15", icon: Box }
+        if (lower.includes("sponge")) return { color: "bg-lime-500/10 text-lime-600 dark:text-lime-400 border-lime-500/20 hover:bg-lime-500/15", icon: Square }
+        if (lower.includes("purpur")) return { color: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 hover:bg-purple-500/15", icon: Box }
         return { color: "bg-muted text-muted-foreground border-border hover:bg-muted/80", icon: Box }
     }
 
@@ -645,7 +645,7 @@ export function ServerDetailPage() {
     }
 
     const handleLoadProperties = async () => {
-        if (!id || propsLoaded) return
+        if (!id) return
         const props = await window.context.getServerProperties(id)
         setProperties(props)
         setPropsLoaded(true)
@@ -663,14 +663,14 @@ export function ServerDetailPage() {
     }
 
     const handleLoadWhitelist = async () => {
-        if (!id || whitelistLoaded) return
+        if (!id) return
         const wl = await window.context.getWhitelist(id)
         setWhitelist(wl)
         setWhitelistLoaded(true)
     }
 
     const handleLoadBanlist = async () => {
-        if (!id || banlistLoaded) return
+        if (!id) return
         const bl = await window.context.getBanlist(id)
         setBanlist(bl)
         setBanlistLoaded(true)
@@ -2436,7 +2436,11 @@ export function ServerDetailPage() {
                              <Alert className="border-primary/40 bg-primary/10 text-primary shadow-xl">
                                 <CheckCircle2 className="h-4 w-4" />
                                 <AlertTitle>Success</AlertTitle>
-                                <AlertDescription>Settings have been saved successfully.</AlertDescription>
+                                <AlertDescription>
+                                    {isOnline
+                                        ? "Settings saved. RAM changes will apply on next server restart."
+                                        : "Settings saved. RAM changes will apply on next server start."}
+                                </AlertDescription>
                                 <AlertAction>
                                     <Button variant="ghost" size="icon" className="-mt-2 -mr-2 h-8 w-8 text-primary/60 hover:text-primary" onClick={() => setSettingsSuccess(false)}>
                                         <X className="h-4 w-4" />
