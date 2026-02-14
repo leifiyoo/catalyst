@@ -1,7 +1,7 @@
 import { BrowserWindow } from "electron";
 import { spawn, ChildProcess, execFile } from "child_process";
 import { ConsoleLine, ServerStats, ServerStatusUpdate } from "@shared/types";
-import { getServer, getServers, updateServerStatus, updateServerSettings, installCatalystPlugin } from "./server-manager";
+import { getServer, getServers, getServerProperties, updateServerStatus, updateServerSettings, installCatalystPlugin } from "./server-manager";
 import { getRequiredJavaVersion, ensureJavaInstalled, getJavaHome } from "./java-manager";
 import { startNgrokTunnel, isNgrokEnabled, isAuthtokenConfigured } from "./ngrok-manager";
 
@@ -522,7 +522,6 @@ export async function startServer(
         
         if (ngrokEnabled && hasToken) {
           // Get the server port from properties
-          const { getServerProperties } = await import("./server-manager");
           const properties = await getServerProperties(server.serverPath);
           const portProp = properties.find(p => p.key === "server-port");
           const port = portProp ? parseInt(portProp.value, 10) : 25565;
@@ -658,7 +657,6 @@ export async function restartServer(
     const server = await getServer(serverId);
     if (server) {
       // Get the server port from properties file
-      const { getServerProperties } = await import("./server-manager");
       const properties = await getServerProperties(server.serverPath);
       const portProp = properties.find(p => p.key === "server-port");
       const port = portProp ? parseInt(portProp.value, 10) : 25565;
