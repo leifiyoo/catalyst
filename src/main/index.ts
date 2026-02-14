@@ -47,7 +47,8 @@ import {
   checkAndRunAutoBackups,
   cancelBackup,
   getBackupStatus,
-  isBackupInProgress
+  isBackupInProgress,
+  getAnalyticsData
 } from "@/lib";
 import {
   installNgrok,
@@ -520,6 +521,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle("removeNgrokAuthtoken", async () => {
     return removeNgrokAuthtoken();
+  });
+
+  // Analytics IPC handler
+  ipcMain.handle("getAnalyticsData", async (_event, serverId: string) => {
+    return getAnalyticsData(serverId);
   });
 
 });

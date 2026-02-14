@@ -8,6 +8,7 @@ import crypto from "crypto";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
 import {
+  AnalyticsData,
   CreateServerParams,
   CreateServerResult,
   FileEntry,
@@ -63,6 +64,40 @@ export async function uninstallCatalystPlugin(serverPath: string): Promise<void>
     await fs.unlink(destJar);
   } catch {
     // Ignore if not present
+  }
+}
+
+/**
+ * Reads the analytics.json file written by the CatalystAnalytics plugin.
+ * The file is located at <serverPath>/plugins/CatalystAnalytics/data/analytics.json
+ */
+export async function getAnalyticsData(
+  serverId: string
+): Promise<{ success: boolean; data?: AnalyticsData; error?: string }> {
+  try {
+    const server = await getServer(serverId);
+    if (!server) {
+      return { success: false, error: "Server not found" };
+    }
+
+    const analyticsPath = path.join(
+      server.serverPath,
+      "plugins",
+      "CatalystAnalytics",
+      "data",
+      "analytics.json"
+    );
+
+    if (!existsSync(analyticsPath)) {
+      return { success: false, error: "no-data" };
+    }
+
+    const content = await fs.readFile(analyticsPath, "utf-8");
+    const data = JSON.parse(content) as AnalyticsData;
+    return { success: true, data };
+  } catch (err) {
+    console.error("Failed to read analytics data:", err);
+    return { success: false, error: "Failed to read analytics data" };
   }
 }
 

@@ -3,22 +3,20 @@ package dev.catalyst.analytics;
 import dev.catalyst.analytics.collector.*;
 import dev.catalyst.analytics.command.AnalyticsCommand;
 import dev.catalyst.analytics.data.DataManager;
-import dev.catalyst.analytics.http.HttpApiServer;
 import dev.catalyst.analytics.listener.*;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.logging.Level;
-
 /**
  * CatalystAnalytics — Lightweight analytics plugin for Catalyst server manager.
- * Collects server statistics asynchronously and exposes them via a REST API.
+ * Collects server statistics asynchronously and writes them to a JSON file
+ * that the Catalyst Electron app reads directly from the filesystem.
+ * No HTTP API, no external connections needed.
  */
 public class CatalystAnalyticsPlugin extends JavaPlugin {
 
     private static CatalystAnalyticsPlugin instance;
     private DataManager dataManager;
-    private HttpApiServer httpServer;
     private TpsCollector tpsCollector;
     private MemoryCollector memoryCollector;
     private PlayerCountCollector playerCountCollector;
@@ -67,30 +65,18 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
             playerCountCollector.start();
         }
 
-        // Schedule periodic async data saving
-        int saveIntervalMinutes = getConfig().getInt("data.save-interval-minutes", 5);
-        long saveIntervalTicks = saveIntervalMinutes * 60L * 20L;
+        // Schedule periodic async data saving (writes analytics.json for Electron app)
+        int saveIntervalSeconds = getConfig().getInt("data.save-interval-seconds", 30);
+        long saveIntervalTicks = saveIntervalSeconds * 20L;
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.saveAll(), saveIntervalTicks, saveIntervalTicks);
 
         // Schedule data cleanup
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.cleanupOldData(), 20L * 60, 20L * 60 * 60);
 
-        // Start HTTP API server
-        int apiPort = getConfig().getInt("api.port", 7845);
-        String apiKey = getConfig().getString("api.key", "change-me-to-a-secure-key");
-        String corsOrigin = getConfig().getString("api.cors-origin", "*");
-        try {
-            httpServer = new HttpApiServer(this, apiPort, apiKey, corsOrigin);
-            httpServer.start();
-            getLogger().info("REST API started on port " + apiPort);
-        } catch (Exception e) {
-            getLogger().log(Level.SEVERE, "Failed to start HTTP API server on port " + apiPort, e);
-        }
-
         // Register commands
         getCommand("analytics").setExecutor(new AnalyticsCommand(this));
 
-        getLogger().info("CatalystAnalytics v" + getDescription().getVersion() + " enabled!");
+        getLogger().info("CatalystAnalytics v" + getDescription().getVersion() + " enabled! (file-based mode)");
     }
 
     @Override
@@ -98,11 +84,6 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         // Save all data synchronously on shutdown
         if (dataManager != null) {
             dataManager.saveAll();
-        }
-
-        // Stop HTTP server
-        if (httpServer != null) {
-            httpServer.stop();
         }
 
         getLogger().info("CatalystAnalytics disabled.");

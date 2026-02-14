@@ -1,21 +1,15 @@
 # CatalystAnalytics Configuration
 # ================================
+# This plugin writes analytics data to a JSON file that the
+# Catalyst Electron app reads directly. No API or network needed.
 
-# REST API settings
-api:
-  # Port for the built-in HTTP server
-  port: 7845
-  # API key for authentication (change this!)
-  key: "change-me-to-a-secure-key"
-  # Allowed CORS origins (use * for all)
-  cors-origin: "*"
-
-# Data retention settings
+# Data settings
 data:
   # How many days to keep detailed data
   retention-days: 30
-  # Auto-save interval in minutes
-  save-interval-minutes: 5
+  # How often to write analytics.json (in seconds)
+  # The Catalyst app polls this file every 5-10 seconds
+  save-interval-seconds: 30
 
 # Collection intervals (in seconds)
 collection:

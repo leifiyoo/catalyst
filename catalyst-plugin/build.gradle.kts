@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "dev.catalyst"
-version = "1.0.0"
+version = "2.0.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -19,7 +19,6 @@ repositories {
 dependencies {
     compileOnly("org.spigotmc:spigot-api:1.20.4-R0.1-SNAPSHOT")
     implementation("com.google.code.gson:gson:2.10.1")
-    // com.sun.net.httpserver is included in the JDK
 }
 
 tasks.withType<JavaCompile> {
@@ -27,7 +26,11 @@ tasks.withType<JavaCompile> {
 }
 
 tasks.jar {
-    archiveFileName.set("CatalystAnalytics-${version}.jar")
+    archiveFileName.set("CatalystAnalytics.jar")
+
+    // Shade Gson into the JAR
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.processResources {

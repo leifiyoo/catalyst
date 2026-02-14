@@ -28,6 +28,7 @@ export {
   exportServer,
   importServer,
   getServerDiskUsage,
+  getAnalyticsData,
 } from "./server-manager";
 
 export {

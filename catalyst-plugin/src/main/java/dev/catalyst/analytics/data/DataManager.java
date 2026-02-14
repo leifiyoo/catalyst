@@ -15,6 +15,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * Manages all analytics data with JSON file persistence.
@@ -48,6 +49,9 @@ public class DataManager {
 
     // --- Hourly join counts: hour (0-23) -> count ---
     private final ConcurrentHashMap<Integer, Long> hourlyJoins = new ConcurrentHashMap<>();
+
+    // --- Server start time ---
+    private final String serverStartTime = Instant.now().toString();
 
     // --- Server-wide stats ---
     private volatile long totalJoins = 0;
@@ -281,8 +285,158 @@ public class DataManager {
             serverStats.put("totalKills", totalKills);
             serverStats.put("uniquePlayers", new ArrayList<>(uniquePlayers));
             saveJson("server_stats.json", serverStats);
+
+            // Write combined analytics.json for Electron app to read
+            writeCombinedAnalyticsJson();
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to save analytics data", e);
+        }
+    }
+
+    /**
+     * Writes a single combined analytics.json file that the Catalyst Electron app
+     * reads directly from the filesystem. No API needed.
+     */
+    private void writeCombinedAnalyticsJson() {
+        try {
+            Map<String, Object> combined = new LinkedHashMap<>();
+
+            // Overview
+            Map<String, Object> overview = new LinkedHashMap<>();
+            overview.put("currentOnline", getCurrentOnline());
+            overview.put("peakOnline", peakOnline);
+            overview.put("uniquePlayers", uniquePlayers.size());
+            overview.put("totalJoins", totalJoins);
+            overview.put("newPlayers", getNewPlayerCount());
+            overview.put("returningPlayers", getReturningPlayerCount());
+            overview.put("averagePlayTimeSeconds", getAveragePlayTimeSeconds());
+            overview.put("totalChatMessages", totalChatMessages);
+            overview.put("totalCommandsExecuted", totalCommandsExecuted);
+            overview.put("totalBlocksPlaced", totalBlocksPlaced);
+            overview.put("totalBlocksBroken", totalBlocksBroken);
+            overview.put("totalDeaths", totalDeaths);
+            overview.put("totalKills", totalKills);
+
+            // Current TPS and memory
+            Runtime rt = Runtime.getRuntime();
+            double usedMB = (rt.totalMemory() - rt.freeMemory()) / (1024.0 * 1024.0);
+            double maxMB = rt.maxMemory() / (1024.0 * 1024.0);
+            overview.put("memoryUsedMB", Math.round(usedMB * 10.0) / 10.0);
+            overview.put("memoryMaxMB", Math.round(maxMB * 10.0) / 10.0);
+
+            // Get latest TPS from history
+            if (!tpsHistory.isEmpty()) {
+                overview.put("currentTps", tpsHistory.get(tpsHistory.size() - 1).value);
+            }
+
+            // Hourly joins
+            Map<String, Long> hourlyJoinsStr = new LinkedHashMap<>();
+            for (Map.Entry<Integer, Long> entry : hourlyJoins.entrySet()) {
+                hourlyJoinsStr.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            overview.put("hourlyJoins", hourlyJoinsStr);
+
+            // Server uptime
+            overview.put("serverStartTime", serverStartTime);
+
+            combined.put("overview", overview);
+
+            // Players list
+            List<Map<String, Object>> playersList = new ArrayList<>();
+            for (PlayerData pd : players.values()) {
+                Map<String, Object> pm = new LinkedHashMap<>();
+                pm.put("uuid", pd.uuid);
+                pm.put("name", pd.name);
+                pm.put("online", pd.online);
+                pm.put("firstJoin", pd.firstJoin);
+                pm.put("lastJoin", pd.lastJoin);
+                pm.put("joinCount", pd.joinCount);
+                pm.put("totalPlayTimeSeconds", pd.totalPlayTimeSeconds);
+                pm.put("country", pd.country);
+                pm.put("region", pd.region);
+                pm.put("clientVersion", pd.clientVersion);
+                pm.put("clientBrand", pd.clientBrand);
+                pm.put("chatMessages", pd.chatMessages);
+                pm.put("deaths", pd.deaths);
+                pm.put("kills", pd.kills);
+                pm.put("blocksPlaced", pd.blocksPlaced);
+                pm.put("blocksBroken", pd.blocksBroken);
+                pm.put("commandsExecuted", pd.commandsExecuted);
+                playersList.add(pm);
+            }
+            combined.put("players", playersList);
+
+            // TPS history (last 100 entries)
+            List<Map<String, Object>> tpsList = new ArrayList<>();
+            int tpsStart = Math.max(0, tpsHistory.size() - 100);
+            for (int i = tpsStart; i < tpsHistory.size(); i++) {
+                TimestampedValue tv = tpsHistory.get(i);
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("timestamp", tv.timestamp);
+                m.put("tps", tv.value);
+                tpsList.add(m);
+            }
+            combined.put("tps", tpsList);
+
+            // Memory history (last 100 entries)
+            List<Map<String, Object>> memList = new ArrayList<>();
+            int memStart = Math.max(0, memoryHistory.size() - 100);
+            for (int i = memStart; i < memoryHistory.size(); i++) {
+                TimestampedValue tv = memoryHistory.get(i);
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("timestamp", tv.timestamp);
+                m.put("usedMB", tv.value);
+                m.put("maxMB", tv.value2);
+                memList.add(m);
+            }
+            combined.put("memory", memList);
+
+            // Player count timeline (last 100 entries)
+            List<Map<String, Object>> timelineList = new ArrayList<>();
+            int tlStart = Math.max(0, playerCountTimeline.size() - 100);
+            for (int i = tlStart; i < playerCountTimeline.size(); i++) {
+                TimestampedValue tv = playerCountTimeline.get(i);
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("timestamp", tv.timestamp);
+                m.put("players", (int) tv.value);
+                timelineList.add(m);
+            }
+            combined.put("timeline", timelineList);
+
+            // Geo distribution
+            Map<String, Integer> geoDistribution = new LinkedHashMap<>();
+            for (PlayerData pd : players.values()) {
+                if (pd.country != null && !pd.country.isEmpty()) {
+                    geoDistribution.merge(pd.country, 1, Integer::sum);
+                }
+            }
+            List<Map<String, Object>> geoList = new ArrayList<>();
+            geoDistribution.entrySet().stream()
+                    .sorted((a, b) -> b.getValue() - a.getValue())
+                    .forEach(e -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("country", e.getKey());
+                        m.put("count", e.getValue());
+                        geoList.add(m);
+                    });
+            combined.put("geo", geoList);
+
+            // Timestamp of this snapshot
+            combined.put("lastUpdated", Instant.now().toString());
+
+            // Write to analytics.json in the plugin's data folder
+            File analyticsFile = new File(dataFolder, "analytics.json");
+            File tmpFile = new File(dataFolder, "analytics.json.tmp");
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(tmpFile), StandardCharsets.UTF_8)) {
+                gson.toJson(combined, writer);
+            }
+            // Atomic rename for safe reading
+            if (analyticsFile.exists()) {
+                analyticsFile.delete();
+            }
+            tmpFile.renameTo(analyticsFile);
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to write combined analytics.json", e);
         }
     }
 

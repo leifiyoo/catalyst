@@ -25,6 +25,7 @@ import {
   BackupEntry,
   LogToMainFn,
   NgrokTunnelInfo,
+  AnalyticsData,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -221,6 +222,10 @@ try {
       ipcRenderer.invoke("setNgrokEnabled", enabled),
     removeNgrokAuthtoken: () =>
       ipcRenderer.invoke("removeNgrokAuthtoken"),
+
+    // Analytics
+    getAnalyticsData: (serverId: string): Promise<{ success: boolean; data?: AnalyticsData; error?: string }> =>
+      ipcRenderer.invoke("getAnalyticsData", serverId),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);
