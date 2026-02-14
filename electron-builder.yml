@@ -46,6 +46,9 @@ linux:
     - deb
   maintainer: ''
   category: Utility
+  # Pass --no-sandbox to the executable to avoid SUID sandbox errors on Linux
+  executableArgs:
+    - "--no-sandbox"
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
