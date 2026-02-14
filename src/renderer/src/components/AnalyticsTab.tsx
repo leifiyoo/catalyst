@@ -51,6 +51,72 @@ import {
 } from "recharts"
 import type { AnalyticsData } from "@shared/types"
 
+/**
+ * Minecraft protocol version to game version mapping.
+ * Used to display friendly version names instead of raw protocol numbers.
+ */
+const PROTOCOL_VERSION_MAP: Record<number, string> = {
+    774: "1.21.6",
+    769: "1.21.1",
+    768: "1.21",
+    767: "1.20.5",
+    766: "1.20.4",
+    765: "1.20.3",
+    764: "1.20.2",
+    763: "1.20.1",
+    762: "1.20",
+    761: "1.19.4",
+    760: "1.19.3",
+    759: "1.19.2",
+    758: "1.19.1",
+    757: "1.18",
+    756: "1.17.1",
+    755: "1.17",
+    754: "1.16.5",
+    753: "1.16.4",
+    736: "1.16.1",
+    735: "1.16",
+    578: "1.15.2",
+    575: "1.15.1",
+    573: "1.15",
+    498: "1.14.4",
+    490: "1.14.3",
+    485: "1.14.2",
+    480: "1.14.1",
+    477: "1.14",
+    404: "1.13.2",
+    393: "1.13",
+    340: "1.12.2",
+    338: "1.12.1",
+    335: "1.12",
+    315: "1.11",
+    210: "1.10",
+    110: "1.9.4",
+    109: "1.9",
+    47: "1.8.9",
+    5: "1.7.10",
+    4: "1.7.5",
+}
+
+/**
+ * Resolve a version string that may be a raw protocol number like "Unknown (774)"
+ * into a friendly Minecraft version string.
+ */
+function resolveVersion(version: string): string {
+    // Match patterns like "Unknown (774)" or just raw numbers
+    const unknownMatch = version.match(/^Unknown\s*\((\d+)\)$/i)
+    if (unknownMatch) {
+        const proto = parseInt(unknownMatch[1], 10)
+        return PROTOCOL_VERSION_MAP[proto] || version
+    }
+    // If it's just a plain number, try to map it
+    const num = parseInt(version, 10)
+    if (!isNaN(num) && String(num) === version.trim()) {
+        return PROTOCOL_VERSION_MAP[num] || version
+    }
+    return version
+}
+
 interface AnalyticsTabProps {
     serverId: string
 }
@@ -68,6 +134,7 @@ const CHART_TOOLTIP_STYLE = {
     border: "1px solid hsl(var(--border))",
     borderRadius: 8,
     fontSize: 12,
+    color: "hsl(var(--foreground))",
 }
 
 /**
@@ -239,14 +306,28 @@ function AnalyticsContent({
             .sort((a, b) => a.hour.localeCompare(b.hour))
     }, [overview?.hourlyJoins])
 
-    // Aggregate version data from players if not provided at top level
+    // Aggregate version data from players if not provided at top level,
+    // resolving protocol numbers to friendly version names
     const versionData = useMemo(() => {
-        if (versions && versions.length > 0) return versions
-        const vMap: Record<string, number> = {}
-        players.forEach(p => {
-            if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
+        const raw = (versions && versions.length > 0)
+            ? versions
+            : (() => {
+                const vMap: Record<string, number> = {}
+                players.forEach(p => {
+                    if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
+                })
+                return Object.entries(vMap)
+                    .map(([version, count]) => ({ version, count }))
+                    .sort((a, b) => b.count - a.count)
+            })()
+
+        // Resolve protocol numbers and merge duplicates
+        const merged: Record<string, number> = {}
+        raw.forEach(({ version, count }) => {
+            const resolved = resolveVersion(version)
+            merged[resolved] = (merged[resolved] || 0) + count
         })
-        return Object.entries(vMap)
+        return Object.entries(merged)
             .map(([version, count]) => ({ version, count }))
             .sort((a, b) => b.count - a.count)
     }, [versions, players])
@@ -474,11 +555,11 @@ function AnalyticsContent({
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={220}>
-                                    <BarChart data={versionData.slice(0, 10)} layout="vertical">
+                                    <BarChart data={versionData.slice(0, 10)} layout="vertical" style={{ cursor: "default" }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis type="category" dataKey="version" width={90} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={false} />
                                         <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]}>
                                             {versionData.slice(0, 10).map((_, index) => (
                                                 <Cell key={`v-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} fillOpacity={0.8} />
@@ -514,6 +595,7 @@ function AnalyticsContent({
                                             paddingAngle={2}
                                             label={({ client, percent }) => `${client} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
+                                            isAnimationActive={false}
                                         >
                                             {clientData.map((_, index) => (
                                                 <Cell key={`c-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -551,6 +633,7 @@ function AnalyticsContent({
                                             paddingAngle={2}
                                             label={({ country, percent }) => `${country} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
+                                            isAnimationActive={false}
                                         >
                                             {geoData.map((_, index) => (
                                                 <Cell key={`g-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -588,6 +671,7 @@ function AnalyticsContent({
                                             paddingAngle={2}
                                             label={({ os, percent }) => `${os} ${(percent * 100).toFixed(0)}%`}
                                             labelLine={false}
+                                            isAnimationActive={false}
                                         >
                                             {osData.map((_, index) => (
                                                 <Cell key={`o-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -618,11 +702,11 @@ function AnalyticsContent({
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={200}>
-                                    <BarChart data={hourlyData}>
+                                    <BarChart data={hourlyData} style={{ cursor: "default" }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={false} />
                                         <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
                                             {hourlyData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
