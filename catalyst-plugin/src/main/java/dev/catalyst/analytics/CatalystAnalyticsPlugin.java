@@ -35,7 +35,8 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         geoLocationService = new GeoLocationService(this);
 
         // Register event listeners based on config
-        if (getConfig().getBoolean("stats.player-join-leave", true)) {
+        // Support both new "tracking.*" and legacy "stats.*" config keys
+        if (isTrackingEnabled("track-player-joins", "stats.player-join-leave")) {
             Bukkit.getPluginManager().registerEvents(new PlayerJoinLeaveListener(this), this);
         }
         if (getConfig().getBoolean("stats.chat-messages", true)) {
@@ -51,12 +52,28 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
             Bukkit.getPluginManager().registerEvents(new CommandListener(this), this);
         }
 
+        // Register brand channel listener for client detection
+        if (isTrackingEnabled("track-player-clients", "stats.client-os")) {
+            Bukkit.getPluginManager().registerEvents(new ClientBrandListener(this), this);
+            // Register plugin messaging channel for brand detection
+            try {
+                Bukkit.getMessenger().registerIncomingPluginChannel(this, "minecraft:brand", new ClientBrandListener(this));
+            } catch (Exception e) {
+                // Try legacy channel name for older versions
+                try {
+                    Bukkit.getMessenger().registerIncomingPluginChannel(this, "MC|Brand", new ClientBrandListener(this));
+                } catch (Exception ignored) {
+                    getLogger().fine("Could not register brand channel listener");
+                }
+            }
+        }
+
         // Start collectors (async tasks)
-        if (getConfig().getBoolean("stats.tps-history", true)) {
+        if (isTrackingEnabled("track-tps", "stats.tps-history")) {
             tpsCollector = new TpsCollector(this);
             tpsCollector.start();
         }
-        if (getConfig().getBoolean("stats.memory-history", true)) {
+        if (isTrackingEnabled("track-ram", "stats.memory-history")) {
             memoryCollector = new MemoryCollector(this);
             memoryCollector.start();
         }
@@ -70,7 +87,7 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
         long saveIntervalTicks = saveIntervalSeconds * 20L;
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.saveAll(), saveIntervalTicks, saveIntervalTicks);
 
-        // Schedule data cleanup
+        // Schedule data cleanup (every hour)
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> dataManager.cleanupOldData(), 20L * 60, 20L * 60 * 60);
 
         // Register commands
@@ -86,7 +103,24 @@ public class CatalystAnalyticsPlugin extends JavaPlugin {
             dataManager.saveAll();
         }
 
+        // Unregister plugin channels
+        try {
+            Bukkit.getMessenger().unregisterIncomingPluginChannel(this);
+        } catch (Exception ignored) {}
+
         getLogger().info("CatalystAnalytics disabled.");
+    }
+
+    /**
+     * Check if a tracking feature is enabled, supporting both new and legacy config keys.
+     */
+    public boolean isTrackingEnabled(String newKey, String legacyKey) {
+        // New tracking.* keys take priority
+        if (getConfig().contains("tracking." + newKey)) {
+            return getConfig().getBoolean("tracking." + newKey, true);
+        }
+        // Fall back to legacy stats.* keys
+        return getConfig().getBoolean(legacyKey, true);
     }
 
     public static CatalystAnalyticsPlugin getInstance() {

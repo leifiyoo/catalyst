@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
+    CardDescription,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
 import {
     Users,
     Clock,
@@ -17,13 +19,18 @@ import {
     Sword,
     MessageSquare,
     Terminal,
-    Box,
     RefreshCw,
     TrendingUp,
     Activity,
     ServerOff,
     BarChart3,
     Timer,
+    Monitor,
+    Cpu,
+    Settings,
+    Gamepad2,
+    MapPin,
+    Layers,
 } from "lucide-react"
 import {
     LineChart,
@@ -38,6 +45,9 @@ import {
     BarChart,
     Bar,
     Cell,
+    PieChart,
+    Pie,
+    Legend,
 } from "recharts"
 import type { AnalyticsData } from "@shared/types"
 
@@ -45,13 +55,24 @@ interface AnalyticsTabProps {
     serverId: string
 }
 
-const POLL_INTERVAL = 7000 // 7 seconds
+const POLL_INTERVAL = 7000
+
+const PIE_COLORS = [
+    "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
+    "#f43f5e", "#ef4444", "#f97316", "#eab308", "#84cc16",
+    "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#2563eb",
+]
+
+const CHART_TOOLTIP_STYLE = {
+    background: "hsl(var(--card))",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: 8,
+    fontSize: 12,
+}
 
 /**
  * Analytics tab component — reads data directly from the filesystem.
  * No API, no connect button, no configuration needed.
- * The CatalystAnalytics plugin writes analytics.json which the Electron
- * main process reads and passes to this component via IPC.
  */
 export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     const [data, setData] = useState<AnalyticsData | null>(null)
@@ -59,6 +80,7 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     const [noData, setNoData] = useState(false)
     const [serverOffline, setServerOffline] = useState(false)
     const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+    const [showSettings, setShowSettings] = useState(false)
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const lastDataRef = useRef<AnalyticsData | null>(null)
 
@@ -72,16 +94,13 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                 setServerOffline(false)
                 setLastUpdated(result.data.lastUpdated)
             } else if (result.error === "no-data") {
-                // No analytics file yet — show empty state
                 if (lastDataRef.current) {
-                    // We had data before, server might have stopped
                     setServerOffline(true)
                 } else {
                     setNoData(true)
                 }
             }
         } catch {
-            // Silent fail — keep showing last known data
             if (lastDataRef.current) {
                 setServerOffline(true)
             }
@@ -149,7 +168,7 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
         )
     }
 
-    // No data yet — friendly empty state
+    // No data yet
     if (noData && !data) {
         return (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -167,21 +186,107 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
         )
     }
 
-    // Use current data or last known data
     const displayData = data || lastDataRef.current
     if (!displayData) return null
 
-    const { overview, players, tps, memory, timeline, geo } = displayData
+    return (
+        <AnalyticsContent
+            data={displayData}
+            serverOffline={serverOffline}
+            isLive={!serverOffline && !!data}
+            lastUpdated={lastUpdated}
+            showSettings={showSettings}
+            setShowSettings={setShowSettings}
+            formatPlayTime={formatPlayTime}
+            formatTimestamp={formatTimestamp}
+            formatUptime={formatUptime}
+        />
+    )
+}
+
+// Separate content component to keep things organized
+function AnalyticsContent({
+    data,
+    serverOffline,
+    isLive,
+    lastUpdated,
+    showSettings,
+    setShowSettings,
+    formatPlayTime,
+    formatTimestamp,
+    formatUptime,
+}: {
+    data: AnalyticsData
+    serverOffline: boolean
+    isLive: boolean
+    lastUpdated: string | null
+    showSettings: boolean
+    setShowSettings: (v: boolean) => void
+    formatPlayTime: (s: number) => string
+    formatTimestamp: (ts: string) => string
+    formatUptime: (s?: string) => string
+}) {
+    const { overview, players, tps, mspt, memory, timeline, geo, versions, clients, operatingSystems } = data
 
     // Prepare hourly joins chart data
-    const hourlyData = overview?.hourlyJoins
-        ? Object.entries(overview.hourlyJoins)
-              .map(([hour, count]) => ({
-                  hour: `${hour.padStart(2, "0")}:00`,
-                  joins: count,
-              }))
-              .sort((a, b) => a.hour.localeCompare(b.hour))
-        : []
+    const hourlyData = useMemo(() => {
+        if (!overview?.hourlyJoins) return []
+        return Object.entries(overview.hourlyJoins)
+            .map(([hour, count]) => ({
+                hour: `${hour.padStart(2, "0")}:00`,
+                joins: count,
+            }))
+            .sort((a, b) => a.hour.localeCompare(b.hour))
+    }, [overview?.hourlyJoins])
+
+    // Aggregate version data from players if not provided at top level
+    const versionData = useMemo(() => {
+        if (versions && versions.length > 0) return versions
+        const vMap: Record<string, number> = {}
+        players.forEach(p => {
+            if (p.clientVersion) vMap[p.clientVersion] = (vMap[p.clientVersion] || 0) + 1
+        })
+        return Object.entries(vMap)
+            .map(([version, count]) => ({ version, count }))
+            .sort((a, b) => b.count - a.count)
+    }, [versions, players])
+
+    // Aggregate client data from players if not provided at top level
+    const clientData = useMemo(() => {
+        if (clients && clients.length > 0) return clients
+        const cMap: Record<string, number> = {}
+        players.forEach(p => {
+            const brand = normalizeClientBrand(p.clientBrand)
+            if (brand) cMap[brand] = (cMap[brand] || 0) + 1
+        })
+        return Object.entries(cMap)
+            .map(([client, count]) => ({ client, count }))
+            .sort((a, b) => b.count - a.count)
+    }, [clients, players])
+
+    // Aggregate OS data from players if not provided at top level
+    const osData = useMemo(() => {
+        if (operatingSystems && operatingSystems.length > 0) return operatingSystems
+        const oMap: Record<string, number> = {}
+        players.forEach(p => {
+            if (p.os) oMap[p.os] = (oMap[p.os] || 0) + 1
+        })
+        return Object.entries(oMap)
+            .map(([os, count]) => ({ os, count }))
+            .sort((a, b) => b.count - a.count)
+    }, [operatingSystems, players])
+
+    // Geo data for pie chart
+    const geoData = useMemo(() => {
+        if (geo && geo.length > 0) return geo
+        const gMap: Record<string, number> = {}
+        players.forEach(p => {
+            if (p.country) gMap[p.country] = (gMap[p.country] || 0) + 1
+        })
+        return Object.entries(gMap)
+            .map(([country, count]) => ({ country, count }))
+            .sort((a, b) => b.count - a.count)
+    }, [geo, players])
 
     return (
         <div className="space-y-6 pb-8">
@@ -196,194 +301,394 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                             Server Offline
                         </Badge>
                     )}
-                    {!serverOffline && data && (
+                    {isLive && (
                         <Badge variant="secondary" className="gap-1 text-green-500 border-green-500/20 bg-green-500/10">
                             <Activity className="h-3 w-3" />
                             Live
                         </Badge>
                     )}
                 </div>
-                {lastUpdated && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <RefreshCw className="h-3 w-3" />
-                        Updated {formatTimestamp(lastUpdated)}
-                    </span>
-                )}
+                <div className="flex items-center gap-3">
+                    {lastUpdated && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <RefreshCw className="h-3 w-3" />
+                            Updated {formatTimestamp(lastUpdated)}
+                        </span>
+                    )}
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                        title="Tracking Settings"
+                    >
+                        <Settings className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
-                <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
-                <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
-                <StatCard icon={Timer} label="Uptime" value={formatUptime(overview.serverStartTime)} accent="text-teal-500" />
-                <StatCard icon={Gauge} label="Current TPS" value={overview.currentTps?.toFixed(1) ?? "N/A"} accent="text-emerald-500" />
-                <StatCard icon={MemoryStick} label="Memory" value={overview.memoryUsedMB ? `${overview.memoryUsedMB.toFixed(0)} / ${overview.memoryMaxMB?.toFixed(0)} MB` : "N/A"} accent="text-cyan-500" />
-                <StatCard icon={Clock} label="Avg Play Time" value={formatPlayTime(overview.averagePlayTimeSeconds)} accent="text-amber-500" />
-                <StatCard icon={Skull} label="Deaths" value={overview.totalDeaths} accent="text-red-500" />
-                <StatCard icon={Sword} label="Kills" value={overview.totalKills} accent="text-orange-500" />
-                <StatCard icon={MessageSquare} label="Chat Messages" value={overview.totalChatMessages} accent="text-indigo-500" />
-                <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
-                <StatCard icon={Box} label="Blocks Placed" value={overview.totalBlocksPlaced} accent="text-lime-500" />
-            </div>
+            {/* Settings Panel */}
+            {showSettings && data.trackingConfig && (
+                <TrackingSettings config={data.trackingConfig} />
+            )}
+            {showSettings && !data.trackingConfig && (
+                <Card>
+                    <CardContent className="py-4">
+                        <p className="text-sm text-muted-foreground">
+                            Tracking settings are configured in the plugin&apos;s <code className="text-xs bg-muted px-1 py-0.5 rounded">config.yml</code> file.
+                            Update the plugin to v2.1+ to manage settings from here.
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Player Count Timeline */}
-                {timeline.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Player Count Over Time</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={200}>
-                                <AreaChart data={timeline}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <Tooltip labelFormatter={formatTimestamp} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                                    <Area type="monotone" dataKey="players" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={2} />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                )}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 1: Overview */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section>
+                <SectionHeader icon={TrendingUp} title="Overview" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <StatCard icon={Users} label="Online" value={overview.currentOnline} accent="text-green-500" />
+                    <StatCard icon={TrendingUp} label="Peak Online" value={overview.peakOnline} accent="text-blue-500" />
+                    <StatCard icon={Users} label="Unique Players" value={overview.uniquePlayers} accent="text-purple-500" />
+                    <StatCard icon={Timer} label="Uptime" value={formatUptime(overview.serverStartTime)} accent="text-teal-500" />
+                    <StatCard icon={Clock} label="Avg Play Time" value={formatPlayTime(overview.averagePlayTimeSeconds)} accent="text-amber-500" />
+                    <StatCard icon={Skull} label="Deaths" value={overview.totalDeaths} accent="text-red-500" />
+                    <StatCard icon={Sword} label="Kills" value={overview.totalKills} accent="text-orange-500" />
+                    <StatCard icon={MessageSquare} label="Chat Messages" value={overview.totalChatMessages} accent="text-indigo-500" />
+                </div>
+            </section>
 
-                {/* TPS Chart */}
-                {tps.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">TPS History</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={200}>
-                                <LineChart data={tps}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <Tooltip labelFormatter={formatTimestamp} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                                    <Line type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} dot={false} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                )}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 2: Performance */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section>
+                <SectionHeader icon={Cpu} title="Performance" />
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                    <StatCard icon={Gauge} label="Current TPS" value={overview.currentTps?.toFixed(1) ?? "N/A"} accent="text-emerald-500" />
+                    <StatCard icon={MemoryStick} label="Memory" value={overview.memoryUsedMB ? `${overview.memoryUsedMB.toFixed(0)} / ${overview.memoryMaxMB?.toFixed(0)} MB` : "N/A"} accent="text-cyan-500" />
+                    <StatCard icon={Activity} label="MSPT" value={overview.currentMspt?.toFixed(1) ?? "N/A"} accent="text-violet-500" />
+                </div>
 
-                {/* Memory Chart */}
-                {memory.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={200}>
-                                <AreaChart data={memory}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <Tooltip labelFormatter={formatTimestamp} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                                    <Area type="monotone" dataKey="usedMB" name="Used MB" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} strokeWidth={2} />
-                                    <Area type="monotone" dataKey="maxMB" name="Max MB" stroke="#94a3b8" fill="none" strokeWidth={1} strokeDasharray="5 5" />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* TPS Chart */}
+                    {tps && tps.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">TPS History</CardTitle>
+                                <CardDescription className="text-xs">Ticks per second over time (ideal: 20)</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <LineChart data={tps}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Line type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} dot={false} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
 
-                {/* Peak Hours Chart */}
-                {hourlyData.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Most Active Hours (UTC)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={200}>
-                                <BarChart data={hourlyData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                    <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                                    <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
-                                        {hourlyData.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
+                    {/* Memory Chart */}
+                    {memory && memory.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+                                <CardDescription className="text-xs">JVM heap memory over time</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <AreaChart data={memory}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Area type="monotone" dataKey="usedMB" name="Used MB" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} strokeWidth={2} />
+                                        <Area type="monotone" dataKey="maxMB" name="Max MB" stroke="#94a3b8" fill="none" strokeWidth={1} strokeDasharray="5 5" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
 
-            {/* Players & Geo */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Geo Distribution */}
-                {geo.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <Globe className="h-4 w-4" />
-                                Player Locations
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {geo.map((g) => (
-                                    <div key={g.country} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
-                                        <span className="text-sm">{g.country}</span>
-                                        <Badge variant="secondary">{g.count}</Badge>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                    {/* MSPT Chart */}
+                    {mspt && mspt.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">MSPT History</CardTitle>
+                                <CardDescription className="text-xs">Milliseconds per tick (ideal: &lt;50ms)</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <AreaChart data={mspt}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Area type="monotone" dataKey="mspt" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.15} strokeWidth={2} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
 
-                {/* Top Players by Playtime */}
-                {players.length > 0 && (
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <Users className="h-4 w-4" />
-                                Players
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                {[...players]
-                                    .sort((a, b) => b.totalPlayTimeSeconds - a.totalPlayTimeSeconds)
-                                    .slice(0, 20)
-                                    .map((p, i) => (
-                                        <div key={p.uuid} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs text-muted-foreground w-5">#{i + 1}</span>
-                                                <span className="text-sm font-medium">{p.name}</span>
-                                                {p.online && (
-                                                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">
-                                                        Online
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-xs text-muted-foreground">
-                                                    {formatPlayTime(p.totalPlayTimeSeconds)}
-                                                </span>
-                                                {p.lastJoin && (
-                                                    <span className="text-xs text-muted-foreground/60">
-                                                        Last: {formatTimestamp(p.lastJoin)}
+                    {/* Player Count Timeline */}
+                    {timeline && timeline.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">Player Count Over Time</CardTitle>
+                                <CardDescription className="text-xs">Online players timeline</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <AreaChart data={timeline}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Area type="monotone" dataKey="players" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={2} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+            </section>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 3: Players */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section>
+                <SectionHeader icon={Gamepad2} title="Players" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Minecraft Versions — Bar Chart */}
+                    {versionData.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                    <Layers className="h-4 w-4" />
+                                    Minecraft Versions
+                                </CardTitle>
+                                <CardDescription className="text-xs">Player client versions</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={220}>
+                                    <BarChart data={versionData.slice(0, 10)} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis type="category" dataKey="version" width={90} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Bar dataKey="count" name="Players" radius={[0, 4, 4, 0]}>
+                                            {versionData.slice(0, 10).map((_, index) => (
+                                                <Cell key={`v-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} fillOpacity={0.8} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Client Brands — Pie Chart */}
+                    {clientData.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                    <Monitor className="h-4 w-4" />
+                                    Client Brands
+                                </CardTitle>
+                                <CardDescription className="text-xs">Lunar, Fabric, Forge, Vanilla, etc.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={220}>
+                                    <PieChart>
+                                        <Pie
+                                            data={clientData}
+                                            dataKey="count"
+                                            nameKey="client"
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={75}
+                                            innerRadius={40}
+                                            paddingAngle={2}
+                                            label={({ client, percent }) => `${client} ${(percent * 100).toFixed(0)}%`}
+                                            labelLine={false}
+                                        >
+                                            {clientData.map((_, index) => (
+                                                <Cell key={`c-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Countries — Pie Chart */}
+                    {geoData.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                    <MapPin className="h-4 w-4" />
+                                    Player Countries
+                                </CardTitle>
+                                <CardDescription className="text-xs">Geographic distribution</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={220}>
+                                    <PieChart>
+                                        <Pie
+                                            data={geoData}
+                                            dataKey="count"
+                                            nameKey="country"
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={75}
+                                            innerRadius={40}
+                                            paddingAngle={2}
+                                            label={({ country, percent }) => `${country} ${(percent * 100).toFixed(0)}%`}
+                                            labelLine={false}
+                                        >
+                                            {geoData.map((_, index) => (
+                                                <Cell key={`g-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Operating Systems — Pie Chart */}
+                    {osData.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                    <Monitor className="h-4 w-4" />
+                                    Operating Systems
+                                </CardTitle>
+                                <CardDescription className="text-xs">Windows, macOS, Linux</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={220}>
+                                    <PieChart>
+                                        <Pie
+                                            data={osData}
+                                            dataKey="count"
+                                            nameKey="os"
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={75}
+                                            innerRadius={40}
+                                            paddingAngle={2}
+                                            label={({ os, percent }) => `${os} ${(percent * 100).toFixed(0)}%`}
+                                            labelLine={false}
+                                        >
+                                            {osData.map((_, index) => (
+                                                <Cell key={`o-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+            </section>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* SECTION 4: Sessions */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section>
+                <SectionHeader icon={Clock} title="Sessions & Activity" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Peak Hours Chart */}
+                    {hourlyData.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium">Most Active Hours (UTC)</CardTitle>
+                                <CardDescription className="text-xs">Join distribution by hour of day</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <BarChart data={hourlyData}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                                        <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
+                                            {hourlyData.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Top Players by Playtime */}
+                    {players.length > 0 && (
+                        <Card>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                    <Users className="h-4 w-4" />
+                                    Top Players by Playtime
+                                </CardTitle>
+                                <CardDescription className="text-xs">{players.length} total players tracked</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+                                    {[...players]
+                                        .sort((a, b) => b.totalPlayTimeSeconds - a.totalPlayTimeSeconds)
+                                        .slice(0, 15)
+                                        .map((p, i) => (
+                                            <div key={p.uuid} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-muted-foreground w-5 font-mono">#{i + 1}</span>
+                                                    <span className="text-sm font-medium">{p.name}</span>
+                                                    {p.online && (
+                                                        <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px] px-1.5">
+                                                            Online
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {p.clientVersion && (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5">
+                                                            {p.clientVersion}
+                                                        </Badge>
+                                                    )}
+                                                    <span className="text-xs text-muted-foreground font-mono">
+                                                        {formatPlayTime(p.totalPlayTimeSeconds)}
                                                     </span>
-                                                )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
+                                        ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+
+                {/* Additional stats row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                    <StatCard icon={Terminal} label="Commands" value={overview.totalCommandsExecuted} accent="text-slate-500" />
+                    <StatCard icon={Globe} label="Countries" value={geoData.length} accent="text-sky-500" />
+                    <StatCard icon={TrendingUp} label="Total Joins" value={overview.totalJoins} accent="text-violet-500" />
+                    <StatCard icon={Users} label="New Players" value={overview.newPlayers} accent="text-pink-500" />
+                </div>
+            </section>
 
             {/* No charts/players yet but have overview */}
-            {timeline.length === 0 && tps.length === 0 && memory.length === 0 && players.length === 0 && (
+            {(!timeline || timeline.length === 0) && (!tps || tps.length === 0) && (!memory || memory.length === 0) && players.length === 0 && (
                 <Card>
                     <CardContent className="py-8">
                         <div className="text-center text-muted-foreground text-sm">
@@ -397,7 +702,20 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     )
 }
 
-// Stat card component
+// ═══════════════════════════════════════════════════════════
+// Helper Components
+// ═══════════════════════════════════════════════════════════
+
+function SectionHeader({ icon: Icon, title }: { icon: React.ComponentType<{ className?: string }>; title: string }) {
+    return (
+        <div className="flex items-center gap-2 mb-3">
+            <Icon className="h-4 w-4 text-muted-foreground" />
+            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
+            <div className="flex-1 h-px bg-border" />
+        </div>
+    )
+}
+
 function StatCard({
     icon: Icon,
     label,
@@ -424,4 +742,63 @@ function StatCard({
             </CardContent>
         </Card>
     )
+}
+
+function TrackingSettings({ config }: { config: NonNullable<AnalyticsData["trackingConfig"]> }) {
+    const settings = [
+        { key: "track-player-joins" as const, label: "Player Joins/Leaves", description: "Track when players join and leave" },
+        { key: "track-player-versions" as const, label: "Player Versions", description: "Detect Minecraft client versions" },
+        { key: "track-player-clients" as const, label: "Client Brands", description: "Detect Lunar, Fabric, Forge, etc." },
+        { key: "track-geolocation" as const, label: "Geolocation", description: "Look up player countries via IP" },
+        { key: "track-os" as const, label: "Operating System", description: "Detect player OS (Windows, macOS, Linux)" },
+        { key: "track-tps" as const, label: "TPS Monitoring", description: "Track server ticks per second" },
+        { key: "track-ram" as const, label: "RAM Monitoring", description: "Track JVM memory usage" },
+        { key: "track-playtime" as const, label: "Play Time", description: "Track player session durations" },
+        { key: "track-fps" as const, label: "FPS Collection", description: "Collect player FPS data (if available)" },
+    ]
+
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Tracking Settings
+                </CardTitle>
+                <CardDescription className="text-xs">
+                    These settings are read from the plugin config. Edit <code className="bg-muted px-1 py-0.5 rounded">plugins/CatalystAnalytics/config.yml</code> to change them.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {settings.map(s => (
+                        <div key={s.key} className="flex items-center justify-between p-2.5 rounded-md bg-muted/30 border border-border/50">
+                            <div className="min-w-0">
+                                <p className="text-sm font-medium">{s.label}</p>
+                                <p className="text-xs text-muted-foreground">{s.description}</p>
+                            </div>
+                            <Switch checked={config[s.key]} disabled className="ml-3 shrink-0" />
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+/**
+ * Normalize client brand strings to friendly names.
+ */
+function normalizeClientBrand(brand?: string): string | null {
+    if (!brand) return null
+    const lower = brand.toLowerCase().trim()
+    if (lower.includes("lunarclient") || lower.includes("lunar")) return "Lunar Client"
+    if (lower.includes("badlion") || lower.includes("blc")) return "Badlion Client"
+    if (lower.includes("fabric")) return "Fabric"
+    if (lower.includes("forge") || lower.includes("fml")) return "Forge"
+    if (lower.includes("quilt")) return "Quilt"
+    if (lower.includes("optifine")) return "OptiFine"
+    if (lower.includes("labymod")) return "LabyMod"
+    if (lower.includes("feather")) return "Feather Client"
+    if (lower === "vanilla" || lower === "minecraft" || lower === "brand") return "Vanilla"
+    return brand
 }
