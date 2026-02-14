@@ -63,8 +63,7 @@ All IPC between renderer and main goes through `src/preload/index.ts`, which exp
 
 ### Key dependencies
 
-- **UI**: React 19, shadcn/ui (Radix UI primitives), Tailwind CSS, Framer Motion, Lucide icons
-- **3D**: Three.js + React Three Fiber (used for splash screen ballpit animation)
+- **UI**: React 19, shadcn/ui (Radix UI primitives), Tailwind CSS, Motion (animation), Lucide icons
 - **Build**: electron-vite, electron-builder (NSIS installer on Windows)
 - **Server I/O**: adm-zip, archiver (for backup/export)
 
