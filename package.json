@@ -46,7 +46,7 @@
     "lucide-react": "^0.468.0",
     "motion": "^11.0.0",
     "react-router-dom": "^7.13.0",
-    "react-window": "^2.2.7",
+    "react-window": "^1.8.11",
     "recharts": "^3.7.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7"
