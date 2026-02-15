@@ -65,8 +65,6 @@ npm run build:win
 # Linux
 # 🚧 Coming Soon
 
-# macOS
-npm run build:mac
 ```
 
 ### Testing
