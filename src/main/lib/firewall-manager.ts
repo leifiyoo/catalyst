@@ -14,6 +14,35 @@ import { app } from "electron";
 
 const execFileAsync = promisify(execFile);
 
+// ---- Admin check cache ----
+let adminCheckResult: boolean | null = null;
+
+/**
+ * Check if the current process is running with administrator privileges.
+ * Caches the result since elevation status doesn't change at runtime.
+ */
+export async function checkAdminPrivileges(): Promise<boolean> {
+  if (adminCheckResult !== null) return adminCheckResult;
+
+  if (process.platform !== "win32") {
+    adminCheckResult = false;
+    return false;
+  }
+
+  try {
+    // Attempt a harmless netsh query that requires admin
+    await execFileAsync("net", ["session"], {
+      timeout: 5000,
+      windowsHide: true,
+    });
+    adminCheckResult = true;
+    return true;
+  } catch {
+    adminCheckResult = false;
+    return false;
+  }
+}
+
 // ---- TCPShield published IP ranges ----
 // Source: https://docs.tcpshield.com/misc/ip-addresses
 const TCPSHIELD_IP_RANGES = [
@@ -119,6 +148,17 @@ async function ensureDataDir(): Promise<string> {
 }
 
 async function runNetsh(args: string[]): Promise<string> {
+  if (process.platform !== "win32") {
+    throw new Error("Firewall management is only supported on Windows");
+  }
+
+  const isAdmin = await checkAdminPrivileges();
+  if (!isAdmin) {
+    throw new Error(
+      "Administrator privileges required. Please restart Catalyst as Administrator to manage firewall rules."
+    );
+  }
+
   try {
     const { stdout } = await execFileAsync("netsh", args, {
       timeout: 30000,
@@ -209,12 +249,24 @@ export async function listCatalystRules(): Promise<{
   error?: string;
 }> {
   try {
-    const output = await runNetsh([
-      "advfirewall", "firewall", "show", "rule", "name=all", "verbose",
-    ]);
+    // Query only Catalyst-prefixed rules instead of name=all (which loads 200-500+ rules)
+    let output: string;
+    try {
+      output = await runNetsh([
+        "advfirewall", "firewall", "show", "rule", `name=${RULE_PREFIX}*`, "verbose",
+      ]);
+    } catch (err: any) {
+      // netsh returns error when no rules match the wildcard — treat as empty
+      if (err?.message?.includes("No rules match")) {
+        logAudit("listRules", "No Catalyst rules found", true);
+        return { success: true, rules: [] };
+      }
+      throw err;
+    }
 
-    const allRules = parseCatalystRules(output);
-    const catalystRules = allRules.filter((r) => r.name.startsWith(RULE_PREFIX));
+    const catalystRules = parseCatalystRules(output).filter((r) =>
+      r.name.startsWith(RULE_PREFIX)
+    );
 
     logAudit("listRules", `Found ${catalystRules.length} Catalyst rules`, true);
     return { success: true, rules: catalystRules };
@@ -571,4 +623,8 @@ export function getAuditLog(): FirewallAuditEntry[] {
 
 export function getTcpShieldIpRanges(): string[] {
   return [...TCPSHIELD_IP_RANGES];
+}
+
+export async function isAdmin(): Promise<boolean> {
+  return checkAdminPrivileges();
 }

@@ -111,6 +111,7 @@ import {
   getAuditLog as firewallGetAuditLog,
   getTcpShieldIpRanges as firewallGetTcpShieldIps,
   generateConfirmationCode as firewallGenerateCode,
+  isAdmin as firewallIsAdmin,
 } from "@/lib/firewall-manager";
 import {
   GetVersionsFn,
@@ -711,6 +712,15 @@ app.whenReady().then(() => {
 
   ipcMain.handle("firewall:generate-code", async () => {
     return firewallGenerateCode();
+  });
+
+  ipcMain.handle("firewall:is-admin", async () => {
+    return firewallIsAdmin();
+  });
+
+  // Signal app readiness to renderer for splash screen dismissal
+  ipcMain.handle("app:ready", async () => {
+    return { ready: true };
   });
 
 });

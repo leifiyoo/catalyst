@@ -303,6 +303,12 @@ try {
       ipcRenderer.invoke("firewall:get-tcpshield-ips"),
     firewallGenerateCode: (): Promise<string> =>
       ipcRenderer.invoke("firewall:generate-code"),
+    firewallIsAdmin: (): Promise<boolean> =>
+      ipcRenderer.invoke("firewall:is-admin"),
+
+    // App readiness signal for splash screen
+    appReady: (): Promise<{ ready: boolean }> =>
+      ipcRenderer.invoke("app:ready"),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

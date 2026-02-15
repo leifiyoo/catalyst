@@ -1,13 +1,14 @@
+import { memo, useCallback } from "react"
 import minimizeIcon from "../assets/titlebar/minimieren.svg"
 import closeIcon from "../assets/titlebar/close.svg"
 import fullscreenIcon from "../assets/titlebar/fullscreen.svg"
 import restoreIcon from "../assets/titlebar/kleiner.svg"
 import titlebarLogo from "../assets/transparentlogo.png"
 
-export const TitleBar = ({ isMaximized }: { isMaximized: boolean }) => {
-    const handleControl = (action: "minimize" | "toggle-maximize" | "close") => {
+export const TitleBar = memo(({ isMaximized }: { isMaximized: boolean }) => {
+    const handleControl = useCallback((action: "minimize" | "toggle-maximize" | "close") => {
         window.context?.windowControl?.(action);
-    };
+    }, []);
 
     return (
         <div className="titlebar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
@@ -61,4 +62,6 @@ export const TitleBar = ({ isMaximized }: { isMaximized: boolean }) => {
             </div>
         </div>
     );
-};
+});
+
+TitleBar.displayName = "TitleBar";
