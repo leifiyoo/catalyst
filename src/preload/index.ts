@@ -305,6 +305,8 @@ try {
       ipcRenderer.invoke("firewall:generate-code"),
     firewallIsAdmin: (): Promise<boolean> =>
       ipcRenderer.invoke("firewall:is-admin"),
+    firewallRequestElevation: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("firewall:request-elevation"),
 
     // App readiness signal for splash screen
     appReady: (): Promise<{ ready: boolean }> =>

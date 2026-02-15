@@ -450,8 +450,27 @@ export function FirewallManager() {
           <Alert className="border-amber-500/40 bg-amber-500/10">
             <ShieldAlert className="h-4 w-4 text-amber-500" />
             <AlertTitle className="text-amber-500">Administrator Required</AlertTitle>
-            <AlertDescription className="text-muted-foreground">
-              Firewall management requires administrator privileges. Please restart Catalyst as Administrator to manage firewall rules.
+            <AlertDescription className="text-muted-foreground flex items-center justify-between gap-4">
+              <span>Firewall management requires administrator privileges. Please restart Catalyst as Administrator to manage firewall rules.</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/20 hover:text-amber-400"
+                onClick={async () => {
+                  try {
+                    setError(null)
+                    const result = await window.context.firewallRequestElevation()
+                    if (!result.success) {
+                      setError(result.error || "Failed to request admin privileges")
+                    }
+                  } catch (err: any) {
+                    setError(err?.message || "Failed to request admin privileges")
+                  }
+                }}
+              >
+                <ShieldAlert className="h-4 w-4 mr-1.5" />
+                Als Admin neu starten
+              </Button>
             </AlertDescription>
           </Alert>
         )}

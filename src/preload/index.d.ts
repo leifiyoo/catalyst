@@ -201,6 +201,7 @@ declare global {
       firewallGetTcpShieldIps: FirewallGetTcpShieldIpsFn;
       firewallGenerateCode: FirewallGenerateCodeFn;
       firewallIsAdmin: () => Promise<boolean>;
+      firewallRequestElevation: () => Promise<{ success: boolean; error?: string }>;
       // App readiness
       appReady: () => Promise<{ ready: boolean }>;
     };
