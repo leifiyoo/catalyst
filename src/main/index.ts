@@ -91,11 +91,18 @@ import {
 } from "@/lib/tcpshield-manager";
 import { getApiKeyCensored as tcpshieldGetApiKeyCensored } from "@/lib/protection-config";
 import {
+  loadTutorialConfig as tcpshieldGetTutorialConfig,
+  updateTutorialConfig as tcpshieldSetTutorialConfig,
+  resetTutorial as tcpshieldResetTutorial,
+  getTutorialSteps as tcpshieldGetTutorialSteps,
+} from "@/lib/tcpshield-tutorial";
+import {
   GetVersionsFn,
   WindowControlAction,
   CreateServerParams,
   ServerProperty,
   TCPShieldConfig,
+  TCPShieldTutorialConfig,
 } from "@shared/types";
 
 function createWindow(): void {
@@ -602,6 +609,35 @@ app.whenReady().then(() => {
 
   ipcMain.handle("tcpshield:remove-backend", async (_event, networkId: number, backendId: number) => {
     return tcpshieldRemoveBackend(networkId, backendId);
+  });
+
+  // TCPShield Tutorial IPC handlers
+  ipcMain.handle("tcpshield:get-tutorial-config", async () => {
+    return tcpshieldGetTutorialConfig();
+  });
+
+  ipcMain.handle("tcpshield:set-tutorial-config", async (_event, config: Partial<TCPShieldTutorialConfig>) => {
+    try {
+      await tcpshieldSetTutorialConfig(config);
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: message };
+    }
+  });
+
+  ipcMain.handle("tcpshield:reset-tutorial", async () => {
+    try {
+      await tcpshieldResetTutorial();
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: message };
+    }
+  });
+
+  ipcMain.handle("tcpshield:get-tutorial-steps", () => {
+    return tcpshieldGetTutorialSteps();
   });
 
 });

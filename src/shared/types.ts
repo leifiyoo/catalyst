@@ -405,6 +405,36 @@ export type TCPShieldConfig = {
   networkId?: number;
 };
 
+export type TCPShieldTutorialStatus = "not-started" | "in-progress" | "completed";
+
+export type TCPShieldTutorialConfig = {
+  tutorialStatus: TCPShieldTutorialStatus;
+  currentStep: number;
+  protectedCname: string;
+  domain: string;
+  backendAddress: string;
+  backendPort: number;
+  debug: boolean;
+};
+
+export type TCPShieldTutorialStep = {
+  id: number;
+  title: string;
+  description: string;
+  instructions: string[];
+  hasInput?: boolean;
+  inputLabel?: string;
+  inputPlaceholder?: string;
+  inputField?: keyof Pick<TCPShieldTutorialConfig, "protectedCname" | "backendAddress" | "backendPort">;
+  hasExternalLink?: boolean;
+  externalLinkUrl?: string;
+  externalLinkLabel?: string;
+};
+
+export type GetTCPShieldTutorialConfigFn = () => Promise<TCPShieldTutorialConfig>;
+export type SetTCPShieldTutorialConfigFn = (config: Partial<TCPShieldTutorialConfig>) => Promise<{ success: boolean; error?: string }>;
+export type ResetTCPShieldTutorialFn = () => Promise<{ success: boolean; error?: string }>;
+
 export type SetTCPShieldApiKeyFn = (apiKey: string) => Promise<{ success: boolean; error?: string }>;
 export type GetTCPShieldStatusFn = () => Promise<TCPShieldStatus>;
 export type EnableTCPShieldFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
