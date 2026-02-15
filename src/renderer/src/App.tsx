@@ -1,16 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion } from "motion/react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import { SpinnerButton } from "@/components/SpinnerButton";
 import { TitleBar } from "@/components/TitleBar";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { ServersPage } from "@/pages/ServersPage";
-import { ServerDetailPage } from "@/pages/ServerDetailPage";
-import { SettingsPage } from "@/pages/SettingsPage";
-import { UpdateNotifier } from "@/components/UpdateNotifier";
 import { ErrorPage } from "@/components/ErrorPage";
+import { UpdateNotifier } from "@/components/UpdateNotifier";
+import { Spinner } from "@/components/ui/spinner";
 import catalystLogo from "@/assets/catalystwithlogotransparent.png";
+
+// Lazy-load page components for better initial load performance
+const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage })));
+const ServersPage = lazy(() => import("@/pages/ServersPage").then(m => ({ default: m.ServersPage })));
+const ServerDetailPage = lazy(() => import("@/pages/ServerDetailPage").then(m => ({ default: m.ServerDetailPage })));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
+
+const PageFallback = () => (
+    <div className="flex items-center justify-center h-full min-h-[200px]">
+        <Spinner className="h-8 w-8 text-primary" />
+    </div>
+);
 
 const SplashScreen = ({ showSpinner }: { showSpinner: boolean }) => {
     return (
@@ -44,13 +53,16 @@ const router = createHashRouter([
         element: <DashboardLayout />,
         errorElement: <ErrorPage />,
         children: [
-            { index: true, element: <DashboardPage />, errorElement: <ErrorPage /> },
-            { path: "servers", element: <ServersPage />, errorElement: <ErrorPage /> },
-            { path: "servers/:id", element: <ServerDetailPage />, errorElement: <ErrorPage /> },
-            { path: "settings", element: <SettingsPage />, errorElement: <ErrorPage /> },
+            { index: true, element: <Suspense fallback={<PageFallback />}><DashboardPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "servers", element: <Suspense fallback={<PageFallback />}><ServersPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "servers/:id", element: <Suspense fallback={<PageFallback />}><ServerDetailPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "settings", element: <Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>, errorElement: <ErrorPage /> },
         ],
     },
 ]);
+
+const SPLASH_MIN_DURATION_MS = 1500;
+const SPLASH_FALLBACK_TIMEOUT_MS = 8000;
 
 const App = () => {
     const [showSpinner, setShowSpinner] = useState(false);
@@ -58,23 +70,40 @@ const App = () => {
     const [isMaximized, setIsMaximized] = useState(false);
     const [showDashboard, setShowDashboard] = useState(false);
 
+    const transitionToDashboard = useCallback(() => {
+        setShowDashboard(true);
+        setShowTitleBar(true);
+        window.context?.setAlwaysOnTop?.(false);
+        // Resize after a short delay to allow the dashboard to render
+        setTimeout(() => {
+            window.context?.resizeWindow?.();
+        }, 200);
+    }, []);
+
     useEffect(() => {
         window.context?.setAlwaysOnTop?.(true);
+        const mountTime = Date.now();
+        let transitioned = false;
+
+        // Show spinner after a short delay so fast loads feel instant
         const showSpinnerTimer = setTimeout(() => {
             setShowSpinner(true);
-        }, 3000);
+        }, 1200);
 
-        const showDashboardTimer = setTimeout(() => {
-            setShowDashboard(true);
-            setShowTitleBar(true);
-            window.context?.setAlwaysOnTop?.(false);
-        }, 4800);
+        const doTransition = () => {
+            if (transitioned) return;
+            transitioned = true;
+            // Ensure minimum splash duration for smooth UX
+            const elapsed = Date.now() - mountTime;
+            const remaining = Math.max(0, SPLASH_MIN_DURATION_MS - elapsed);
+            setTimeout(transitionToDashboard, remaining);
+        };
 
-        const resizeTimer = setTimeout(() => {
-            if (window.context?.resizeWindow) {
-                window.context.resizeWindow();
-            }
-        }, 5000);
+        // Listen for the main process "app-ready" event
+        const unsubscribeReady = window.context?.onAppReady?.(doTransition);
+
+        // Fallback timeout in case the event never fires
+        const fallbackTimer = setTimeout(doTransition, SPLASH_FALLBACK_TIMEOUT_MS);
 
         const unsubscribe = window.context?.onResizeStep?.(() => {
             window.dispatchEvent(new Event("resize"));
@@ -90,20 +119,18 @@ const App = () => {
 
         return () => {
             clearTimeout(showSpinnerTimer);
-            clearTimeout(showDashboardTimer);
-            clearTimeout(resizeTimer);
+            clearTimeout(fallbackTimer);
             unsubscribe?.();
+            unsubscribeReady?.();
             unsubscribeWindowState?.();
         };
-    }, []);
+    }, [transitionToDashboard]);
 
     return (
         <div className="relative w-full h-full min-h-screen bg-background text-foreground" style={{ borderRadius: '12px', overflow: 'auto' }}>
             {showTitleBar && !showDashboard && <TitleBar isMaximized={isMaximized} />}
             {!showDashboard && (
-                <>
-                    <SplashScreen showSpinner={showSpinner} />
-                </>
+                <SplashScreen showSpinner={showSpinner} />
             )}
 
             {showDashboard && (

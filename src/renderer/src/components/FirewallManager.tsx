@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, memo } from "react"
 import {
   Card,
   CardContent,
@@ -32,6 +32,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  ShieldOff,
   Trash2,
   Plus,
   RefreshCw,
@@ -55,10 +56,12 @@ export function FirewallManager() {
   // State
   const [rules, setRules] = useState<FirewallRule[]>([])
   const [auditLog, setAuditLog] = useState<FirewallAuditEntry[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true) // Start with loading=true
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabView>("rules")
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  const [isWindows, setIsWindows] = useState(true)
 
   // Servers for multi-server support
   const [servers, setServers] = useState<ServerRecord[]>([])
@@ -92,16 +95,26 @@ export function FirewallManager() {
   // Snapshot
   const [hasSnapshot, setHasSnapshot] = useState(false)
 
-  // Load servers
+  // Load servers and check admin on mount
   useEffect(() => {
     loadServers()
+    initFirewall()
   }, [])
 
-  // Load rules when component mounts
-  useEffect(() => {
-    loadRules()
-    checkSnapshot()
-  }, [])
+  const initFirewall = async () => {
+    setLoading(true)
+    try {
+      const admin = await window.context.firewallCheckAdmin()
+      setIsAdmin(admin)
+    } catch {
+      // Not on Windows or check failed
+      setIsAdmin(false)
+      setIsWindows(false)
+    }
+    await loadRulesInternal()
+    await checkSnapshot()
+    setLoading(false)
+  }
 
   const loadServers = async () => {
     try {
@@ -115,21 +128,27 @@ export function FirewallManager() {
     }
   }
 
-  const loadRules = useCallback(async () => {
-    setLoading(true)
+  const loadRulesInternal = async () => {
     setError(null)
     try {
       const result = await window.context.firewallListRules()
       if (result.success && result.rules) {
         setRules(result.rules)
+        if (result.isAdmin !== undefined) {
+          setIsAdmin(result.isAdmin)
+        }
       } else {
         setError(result.error || "Failed to load firewall rules")
       }
     } catch (err: any) {
       setError(err?.message || "Failed to load firewall rules")
-    } finally {
-      setLoading(false)
     }
+  }
+
+  const loadRules = useCallback(async () => {
+    setLoading(true)
+    await loadRulesInternal()
+    setLoading(false)
   }, [])
 
   const checkSnapshot = async () => {
@@ -431,6 +450,26 @@ export function FirewallManager() {
           </div>
         )}
 
+        {/* Platform / admin warnings */}
+        {!isWindows && (
+          <Alert className="border-amber-500/40 bg-amber-500/10">
+            <ShieldOff className="h-4 w-4 text-amber-500" />
+            <AlertTitle className="text-amber-500">Not Available</AlertTitle>
+            <AlertDescription className="text-muted-foreground">
+              Windows Firewall management is only available on Windows systems.
+            </AlertDescription>
+          </Alert>
+        )}
+        {isWindows && isAdmin === false && (
+          <Alert className="border-amber-500/40 bg-amber-500/10">
+            <ShieldAlert className="h-4 w-4 text-amber-500" />
+            <AlertTitle className="text-amber-500">Limited Access</AlertTitle>
+            <AlertDescription className="text-muted-foreground">
+              Catalyst is not running with administrator privileges. You can view existing rules, but adding or removing rules requires running as Administrator.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Status alerts */}
         {error && (
           <Alert className="border-destructive/40 bg-destructive/10">
@@ -489,12 +528,12 @@ export function FirewallManager() {
                   <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={loading}>
+                <Button variant="outline" size="sm" onClick={handleSaveSnapshot} disabled={loading || isAdmin === false}>
                   <Save className="h-4 w-4 mr-1" />
                   Save Snapshot
                 </Button>
                 {hasSnapshot && (
-                  <Button variant="outline" size="sm" onClick={handleRollback} disabled={loading}>
+                  <Button variant="outline" size="sm" onClick={handleRollback} disabled={loading || isAdmin === false}>
                     <Undo2 className="h-4 w-4 mr-1" />
                     Rollback
                   </Button>
@@ -504,7 +543,7 @@ export function FirewallManager() {
                     variant="outline"
                     size="sm"
                     onClick={handleDeleteAllRules}
-                    disabled={loading}
+                    disabled={loading || isAdmin === false}
                     className="border-destructive/40 text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="h-4 w-4 mr-1" />
@@ -558,6 +597,7 @@ export function FirewallManager() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDeleteRule(rule.name)}
+                      disabled={isAdmin === false}
                       className="text-destructive hover:bg-destructive/10 ml-2"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -634,7 +674,7 @@ export function FirewallManager() {
                   />
                 </div>
               )}
-              <Button onClick={handleAddRule} disabled={loading}>
+              <Button onClick={handleAddRule} disabled={loading || isAdmin === false}>
                 {loading ? <Spinner className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
                 Add Rule
               </Button>
@@ -677,7 +717,7 @@ export function FirewallManager() {
                   </Select>
                 </div>
               </div>
-              <Button onClick={handleAddCustomWhitelist} disabled={loading}>
+              <Button onClick={handleAddCustomWhitelist} disabled={loading || isAdmin === false}>
                 {loading ? <Spinner className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
                 Add Whitelist Rules
               </Button>
@@ -731,7 +771,7 @@ export function FirewallManager() {
             <div className="flex gap-3">
               <Button
                 onClick={handleTcpShieldLockdown}
-                disabled={loading}
+                disabled={loading || isAdmin === false}
                 className="bg-amber-600 hover:bg-amber-700 text-white"
               >
                 {loading ? (
@@ -742,7 +782,7 @@ export function FirewallManager() {
                 Apply TCPShield Lockdown
               </Button>
               {hasSnapshot && (
-                <Button variant="outline" onClick={handleRollback} disabled={loading}>
+                <Button variant="outline" onClick={handleRollback} disabled={loading || isAdmin === false}>
                   <Undo2 className="h-4 w-4 mr-2" />
                   Rollback to Snapshot
                 </Button>
@@ -865,7 +905,7 @@ export function FirewallManager() {
   )
 }
 
-function TcpShieldIpList() {
+const TcpShieldIpList = memo(function TcpShieldIpList() {
   const [ips, setIps] = useState<string[]>([])
   const [expanded, setExpanded] = useState(false)
 
@@ -894,4 +934,4 @@ function TcpShieldIpList() {
       )}
     </div>
   )
-}
+})

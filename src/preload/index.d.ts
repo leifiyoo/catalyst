@@ -200,6 +200,9 @@ declare global {
       firewallGetAuditLog: FirewallGetAuditLogFn;
       firewallGetTcpShieldIps: FirewallGetTcpShieldIpsFn;
       firewallGenerateCode: FirewallGenerateCodeFn;
+      firewallCheckAdmin: () => Promise<boolean>;
+      // App readiness
+      onAppReady: (handler: () => void) => () => void;
     };
   }
 }

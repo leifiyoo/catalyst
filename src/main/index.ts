@@ -111,6 +111,7 @@ import {
   getAuditLog as firewallGetAuditLog,
   getTcpShieldIpRanges as firewallGetTcpShieldIps,
   generateConfirmationCode as firewallGenerateCode,
+  checkIsAdmin as firewallCheckIsAdmin,
 } from "@/lib/firewall-manager";
 import {
   GetVersionsFn,
@@ -712,6 +713,21 @@ app.whenReady().then(() => {
   ipcMain.handle("firewall:generate-code", async () => {
     return firewallGenerateCode();
   });
+
+  ipcMain.handle("firewall:check-admin", async () => {
+    return firewallCheckIsAdmin();
+  });
+
+  // Signal renderer that the main process is ready
+  const mainWinForReady = BrowserWindow.getAllWindows()[0];
+  if (mainWinForReady) {
+    mainWinForReady.webContents.once("did-finish-load", () => {
+      // Small delay to ensure preload scripts are fully initialized
+      setTimeout(() => {
+        mainWinForReady.webContents.send("app-ready");
+      }, 500);
+    });
+  }
 
 });
 

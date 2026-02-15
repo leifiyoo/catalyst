@@ -275,7 +275,7 @@ try {
       ipcRenderer.invoke("tcpshield:get-tutorial-steps"),
 
     // Firewall
-    firewallListRules: (): Promise<{ success: boolean; rules?: FirewallRule[]; error?: string }> =>
+    firewallListRules: (): Promise<{ success: boolean; rules?: FirewallRule[]; error?: string; isAdmin?: boolean }> =>
       ipcRenderer.invoke("firewall:list-rules"),
     firewallDeleteRule: (ruleName: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke("firewall:delete-rule", ruleName),
@@ -303,6 +303,15 @@ try {
       ipcRenderer.invoke("firewall:get-tcpshield-ips"),
     firewallGenerateCode: (): Promise<string> =>
       ipcRenderer.invoke("firewall:generate-code"),
+    firewallCheckAdmin: (): Promise<boolean> =>
+      ipcRenderer.invoke("firewall:check-admin"),
+
+    // App readiness event
+    onAppReady: (handler: () => void) => {
+      const listener = () => handler();
+      ipcRenderer.on("app-ready", listener);
+      return () => ipcRenderer.removeListener("app-ready", listener);
+    },
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

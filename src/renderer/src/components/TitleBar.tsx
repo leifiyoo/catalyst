@@ -1,10 +1,11 @@
+import { memo } from "react"
 import minimizeIcon from "../assets/titlebar/minimieren.svg"
 import closeIcon from "../assets/titlebar/close.svg"
 import fullscreenIcon from "../assets/titlebar/fullscreen.svg"
 import restoreIcon from "../assets/titlebar/kleiner.svg"
 import titlebarLogo from "../assets/transparentlogo.png"
 
-export const TitleBar = ({ isMaximized }: { isMaximized: boolean }) => {
+export const TitleBar = memo(({ isMaximized }: { isMaximized: boolean }) => {
     const handleControl = (action: "minimize" | "toggle-maximize" | "close") => {
         window.context?.windowControl?.(action);
     };
@@ -61,4 +62,4 @@ export const TitleBar = ({ isMaximized }: { isMaximized: boolean }) => {
             </div>
         </div>
     );
-};
+})

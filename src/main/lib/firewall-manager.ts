@@ -14,6 +14,31 @@ import { app } from "electron";
 
 const execFileAsync = promisify(execFile);
 
+// ---- Admin check ----
+
+let _isAdmin: boolean | null = null;
+
+export async function checkIsAdmin(): Promise<boolean> {
+  if (_isAdmin !== null) return _isAdmin;
+  if (process.platform !== "win32") {
+    _isAdmin = false;
+    return false;
+  }
+  try {
+    await execFileAsync("net", ["session"], { timeout: 5000, windowsHide: true });
+    _isAdmin = true;
+  } catch {
+    _isAdmin = false;
+  }
+  return _isAdmin;
+}
+
+function requireWindows(): void {
+  if (process.platform !== "win32") {
+    throw new Error("Firewall management is only available on Windows");
+  }
+}
+
 // ---- TCPShield published IP ranges ----
 // Source: https://docs.tcpshield.com/misc/ip-addresses
 const TCPSHIELD_IP_RANGES = [
@@ -207,17 +232,33 @@ export async function listCatalystRules(): Promise<{
   success: boolean;
   rules?: FirewallRule[];
   error?: string;
+  isAdmin?: boolean;
 }> {
+  requireWindows();
   try {
-    const output = await runNetsh([
-      "advfirewall", "firewall", "show", "rule", "name=all", "verbose",
-    ]);
+    const admin = await checkIsAdmin();
+
+    // Query only Catalyst-prefixed rules instead of all rules
+    let output: string;
+    try {
+      output = await runNetsh([
+        "advfirewall", "firewall", "show", "rule", `name=${RULE_PREFIX}`, "verbose",
+      ]);
+    } catch (err: any) {
+      // netsh returns error when no rules match the prefix — treat as empty
+      if (err?.message?.includes("No rules match")) {
+        logAudit("listRules", "No Catalyst rules found", true);
+        return { success: true, rules: [], isAdmin: admin };
+      }
+      throw err;
+    }
 
     const allRules = parseCatalystRules(output);
+    // Double-check prefix filter in case netsh returns partial matches
     const catalystRules = allRules.filter((r) => r.name.startsWith(RULE_PREFIX));
 
     logAudit("listRules", `Found ${catalystRules.length} Catalyst rules`, true);
-    return { success: true, rules: catalystRules };
+    return { success: true, rules: catalystRules, isAdmin: admin };
   } catch (err: any) {
     const message = err?.message || "Failed to list firewall rules";
     logAudit("listRules", "Failed to list rules", false, message);
@@ -228,8 +269,14 @@ export async function listCatalystRules(): Promise<{
 export async function deleteRule(
   ruleName: string
 ): Promise<{ success: boolean; error?: string }> {
+  requireWindows();
   if (!ruleName.startsWith(RULE_PREFIX)) {
     return { success: false, error: "Can only delete Catalyst-managed rules" };
+  }
+
+  const admin = await checkIsAdmin();
+  if (!admin) {
+    return { success: false, error: "Administrator privileges required to modify firewall rules" };
   }
 
   try {
@@ -292,11 +339,17 @@ export async function addAllowRule(
   protocol: "TCP" | "UDP" = "TCP",
   label?: string
 ): Promise<{ success: boolean; ruleName?: string; error?: string }> {
+  requireWindows();
   if (!isValidIpOrCidr(ip)) {
     return { success: false, error: `Invalid IP or CIDR: ${ip}` };
   }
   if (!isValidPort(port)) {
     return { success: false, error: `Invalid port: ${port}` };
+  }
+
+  const admin = await checkIsAdmin();
+  if (!admin) {
+    return { success: false, error: "Administrator privileges required to modify firewall rules" };
   }
 
   const safeName = (label || ip).replace(/[^a-zA-Z0-9_.\-\/]/g, "_");
@@ -323,8 +376,14 @@ export async function addBlockRule(
   port: number,
   protocol: "TCP" | "UDP" = "TCP"
 ): Promise<{ success: boolean; ruleName?: string; error?: string }> {
+  requireWindows();
   if (!isValidPort(port)) {
     return { success: false, error: `Invalid port: ${port}` };
+  }
+
+  const admin = await checkIsAdmin();
+  if (!admin) {
+    return { success: false, error: "Administrator privileges required to modify firewall rules" };
   }
 
   const ruleName = `${RULE_PREFIX}Block_All_${port}_${protocol}`;

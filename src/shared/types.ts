@@ -479,7 +479,7 @@ export type FirewallAuditEntry = {
   error?: string;
 };
 
-export type FirewallListRulesFn = () => Promise<{ success: boolean; rules?: FirewallRule[]; error?: string }>;
+export type FirewallListRulesFn = () => Promise<{ success: boolean; rules?: FirewallRule[]; error?: string; isAdmin?: boolean }>;
 export type FirewallDeleteRuleFn = (ruleName: string) => Promise<{ success: boolean; error?: string }>;
 export type FirewallDeleteAllRulesFn = () => Promise<{ success: boolean; deletedCount: number; error?: string }>;
 export type FirewallAddAllowRuleFn = (ip: string, port: number, protocol: "TCP" | "UDP", label?: string) => Promise<{ success: boolean; ruleName?: string; error?: string }>;
