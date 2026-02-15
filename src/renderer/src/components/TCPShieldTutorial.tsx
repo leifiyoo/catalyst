@@ -137,20 +137,20 @@ export function TCPShieldTutorial() {
                             ) : (
                                 <Shield className="h-5 w-5 text-primary" />
                             )}
-                            TCPShield Einrichtung
+                            TCPShield Setup
                         </CardTitle>
                         <div className="flex items-center gap-2">
                             <Badge variant={isCompleted ? "default" : "secondary"}>
                                 {isCompleted
-                                    ? "Abgeschlossen"
-                                    : `Schritt ${currentStep + 1} von ${totalSteps}`}
+                                    ? "Completed"
+                                    : `Step ${currentStep + 1} of ${totalSteps}`}
                             </Badge>
                             {(config?.tutorialStatus === "in-progress" || isCompleted) && (
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleReset}
-                                    title="Tutorial zurücksetzen"
+                                    title="Reset tutorial"
                                 >
                                     <RotateCcw className="h-4 w-4" />
                                 </Button>
@@ -158,7 +158,7 @@ export function TCPShieldTutorial() {
                         </div>
                     </div>
                     <CardDescription>
-                        Schritt-für-Schritt Anleitung zur Einrichtung von TCPShield DDoS-Schutz
+                        Step-by-step guide to setting up TCPShield DDoS protection
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -198,21 +198,22 @@ export function TCPShieldTutorial() {
                                     <p
                                         key={idx}
                                         className={`text-sm ${
-                                            instruction === ""
-                                                ? "h-2"
-                                                : instruction.startsWith("  →")
-                                                  ? "pl-4 text-muted-foreground font-mono text-xs"
-                                                  : instruction.startsWith("Kein eigener") || instruction.startsWith("Tipp:")
-                                                    ? "text-primary italic"
-                                                    : "text-foreground"
-                                        }`}
-                                    >
-                                        {instruction !== "" && (
-                                            <>
-                                                {!instruction.startsWith("  →") &&
-                                                    !instruction.startsWith("Kein eigener") &&
-                                                    !instruction.startsWith("Tipp:") &&
-                                                    instruction !== "" && (
+                                                instruction === ""
+                                                    ? "h-2"
+                                                    : instruction.startsWith("  →")
+                                                      ? "pl-4 text-muted-foreground font-mono text-xs"
+                                                      : instruction.startsWith("Don't have") || instruction.startsWith("Tip:") || instruction.startsWith("Note:")
+                                                        ? "text-primary italic"
+                                                        : "text-foreground"
+                                            }`}
+                                        >
+                                            {instruction !== "" && (
+                                                <>
+                                                    {!instruction.startsWith("  →") &&
+                                                        !instruction.startsWith("Don't have") &&
+                                                        !instruction.startsWith("Tip:") &&
+                                                        !instruction.startsWith("Note:") &&
+                                                        instruction !== "" && (
                                                         <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
                                                             {idx + 1}
                                                         </span>
@@ -247,7 +248,7 @@ export function TCPShieldTutorial() {
                                 <div className="space-y-3">
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">
-                                            Server-IP
+                                            Server IP
                                         </label>
                                         <Input
                                             placeholder={step.inputPlaceholder}
@@ -287,7 +288,7 @@ export function TCPShieldTutorial() {
                                     className="gap-2"
                                 >
                                     <ExternalLink className="h-4 w-4" />
-                                    {step.externalLinkLabel || "Link öffnen"}
+                                    {step.externalLinkLabel || "Open link"}
                                 </Button>
                             )}
 
@@ -297,12 +298,12 @@ export function TCPShieldTutorial() {
                                     <div className="flex items-center gap-2">
                                         <CheckCircle2 className="h-5 w-5 text-green-500" />
                                         <p className="font-medium text-green-500">
-                                            Einrichtung abgeschlossen!
+                                            Setup complete!
                                         </p>
                                     </div>
                                     {config?.protectedCname && (
                                         <p className="text-sm text-muted-foreground">
-                                            Spieler verbinden sich über:{" "}
+                                            Players connect via:{" "}
                                             <code className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">
                                                 {config.protectedCname}
                                             </code>
@@ -330,7 +331,7 @@ export function TCPShieldTutorial() {
                             className="gap-1"
                         >
                             <ChevronLeft className="h-4 w-4" />
-                            Zurück
+                            Back
                         </Button>
 
                         {currentStep < totalSteps - 1 ? (
@@ -343,7 +344,7 @@ export function TCPShieldTutorial() {
                                     <Spinner className="h-4 w-4" />
                                 ) : (
                                     <>
-                                        Weiter
+                                        Next
                                         <ChevronRight className="h-4 w-4" />
                                     </>
                                 )}
@@ -364,7 +365,7 @@ export function TCPShieldTutorial() {
                                 ) : (
                                     <>
                                         <CheckCircle2 className="h-4 w-4" />
-                                        Abschließen
+                                        Finish
                                     </>
                                 )}
                             </Button>
@@ -381,11 +382,11 @@ export function TCPShieldTutorial() {
                             <Shield className="h-5 w-5 text-primary" />
                         </div>
                         <div className="space-y-1">
-                            <p className="font-medium text-foreground/80">Über TCPShield</p>
+                            <p className="font-medium text-foreground/80">About TCPShield</p>
                             <p className="text-sm text-muted-foreground">
-                                TCPShield bietet DDoS-Schutz für Minecraft-Server auf Enterprise-Niveau.
-                                Es fungiert als Reverse-Proxy und filtert schädlichen Traffic, bevor er deinen Server erreicht.
-                                Die Einrichtung erfolgt über das TCPShield Panel — es wird kein API-Key benötigt.
+                                TCPShield provides enterprise-grade DDoS protection for Minecraft servers.
+                                It acts as a reverse proxy and filters malicious traffic before it reaches your server.
+                                Setup is done through the TCPShield panel — no API key required.
                             </p>
                         </div>
                     </div>
