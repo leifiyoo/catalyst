@@ -70,6 +70,10 @@ import {
   ListTCPShieldNetworksFn,
   AddTCPShieldBackendFn,
   RemoveTCPShieldBackendFn,
+  GetTCPShieldTutorialConfigFn,
+  SetTCPShieldTutorialConfigFn,
+  ResetTCPShieldTutorialFn,
+  TCPShieldTutorialStep,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -162,6 +166,11 @@ declare global {
       tcpshieldListNetworks: ListTCPShieldNetworksFn;
       tcpshieldAddBackend: AddTCPShieldBackendFn;
       tcpshieldRemoveBackend: RemoveTCPShieldBackendFn;
+      // TCPShield Tutorial
+      tcpshieldGetTutorialConfig: GetTCPShieldTutorialConfigFn;
+      tcpshieldSetTutorialConfig: SetTCPShieldTutorialConfigFn;
+      tcpshieldResetTutorial: ResetTCPShieldTutorialFn;
+      tcpshieldGetTutorialSteps: () => Promise<TCPShieldTutorialStep[]>;
     };
   }
 }

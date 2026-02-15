@@ -30,6 +30,8 @@ import {
   TCPShieldStatus,
   TCPShieldNetwork,
   TCPShieldBackend,
+  TCPShieldTutorialConfig,
+  TCPShieldTutorialStep,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -258,6 +260,16 @@ try {
       ipcRenderer.invoke("tcpshield:add-backend", networkId, address, port),
     tcpshieldRemoveBackend: (networkId: number, backendId: number): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke("tcpshield:remove-backend", networkId, backendId),
+
+    // TCPShield Tutorial
+    tcpshieldGetTutorialConfig: (): Promise<TCPShieldTutorialConfig> =>
+      ipcRenderer.invoke("tcpshield:get-tutorial-config"),
+    tcpshieldSetTutorialConfig: (config: Partial<TCPShieldTutorialConfig>): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:set-tutorial-config", config),
+    tcpshieldResetTutorial: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:reset-tutorial"),
+    tcpshieldGetTutorialSteps: (): Promise<TCPShieldTutorialStep[]> =>
+      ipcRenderer.invoke("tcpshield:get-tutorial-steps"),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);
