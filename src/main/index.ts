@@ -78,6 +78,19 @@ import {
   removeNgrokAuthtoken
 } from "@/lib/ngrok-manager";
 import {
+  validateApiKey as validateProtectionApiKey,
+  addServerProtection,
+  removeServerProtection,
+  getProtectionStatus,
+  enableProtection,
+  disableProtection,
+} from "@/lib/tcpshield-manager";
+import {
+  setProtectionApiKey,
+  getProtectionApiKeyCensored,
+  removeProtectionApiKey,
+} from "@/lib/protection-config";
+import {
   GetVersionsFn,
   WindowControlAction,
   CreateServerParams,
@@ -543,6 +556,43 @@ app.whenReady().then(() => {
   // System info IPC handler (for RAM limit validation)
   ipcMain.handle("getSystemInfo", () => {
     return getSystemInfo();
+  });
+
+  // TCPShield Protection IPC handlers
+  ipcMain.handle("validateProtectionApiKey", async (_event, apiKey: string) => {
+    return validateProtectionApiKey(apiKey);
+  });
+
+  ipcMain.handle("setProtectionApiKey", async (_event, apiKey: string) => {
+    return setProtectionApiKey(apiKey);
+  });
+
+  ipcMain.handle("getProtectionApiKeyCensored", async () => {
+    return getProtectionApiKeyCensored();
+  });
+
+  ipcMain.handle("removeProtectionApiKey", async () => {
+    return removeProtectionApiKey();
+  });
+
+  ipcMain.handle("getProtectionStatus", async (_event, serverId: string) => {
+    return getProtectionStatus(serverId);
+  });
+
+  ipcMain.handle("addServerProtection", async (_event, serverId: string, serverName: string, serverAddress: string, serverPort: number) => {
+    return addServerProtection(serverId, serverName, serverAddress, serverPort);
+  });
+
+  ipcMain.handle("removeServerProtection", async (_event, serverId: string) => {
+    return removeServerProtection(serverId);
+  });
+
+  ipcMain.handle("enableProtection", async (_event, serverId: string) => {
+    return enableProtection(serverId);
+  });
+
+  ipcMain.handle("disableProtection", async (_event, serverId: string) => {
+    return disableProtection(serverId);
   });
 
 });

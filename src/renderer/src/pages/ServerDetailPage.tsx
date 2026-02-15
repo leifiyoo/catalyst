@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { ConsoleTab } from "@/components/ConsoleTab"
+import { ProtectionTab } from "@/components/ProtectionTab"
 import { useParams, useNavigate } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1229,6 +1230,7 @@ export function ServerDetailPage() {
                         <TabsTrigger value="settings" onClick={loadBackups}>Settings</TabsTrigger>
                         <TabsTrigger value="properties" onClick={() => { handleLoadProperties(); handleLoadWhitelist(); handleLoadBanlist(); }}>Properties</TabsTrigger>
                         <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                        <TabsTrigger value="protection">Protection</TabsTrigger>
                     </TabsList>
                 </div>
 
@@ -2714,6 +2716,11 @@ export function ServerDetailPage() {
                 {/* Analytics Tab */}
                 <TabsContent value="analytics" className="mt-0 px-10 pt-6 max-h-[75vh] overflow-y-auto pr-2">
                     <AnalyticsTab serverId={id || ""} />
+                </TabsContent>
+
+                {/* Protection Tab */}
+                <TabsContent value="protection" className="mt-0 px-10 pt-6 max-h-[75vh] overflow-y-auto pr-2">
+                    <ProtectionTab serverId={id || ""} serverName={server?.name || ""} />
                 </TabsContent>
             </Tabs>
 

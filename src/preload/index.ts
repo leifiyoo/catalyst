@@ -230,6 +230,26 @@ try {
     // System info
     getSystemInfo: (): Promise<{ totalMemoryMB: number; maxRamMB: number }> =>
       ipcRenderer.invoke("getSystemInfo"),
+
+    // TCPShield Protection
+    validateProtectionApiKey: (apiKey: string): Promise<{ valid: boolean; error?: string }> =>
+      ipcRenderer.invoke("validateProtectionApiKey", apiKey),
+    setProtectionApiKey: (apiKey: string): Promise<void> =>
+      ipcRenderer.invoke("setProtectionApiKey", apiKey),
+    getProtectionApiKeyCensored: (): Promise<string | null> =>
+      ipcRenderer.invoke("getProtectionApiKeyCensored"),
+    removeProtectionApiKey: (): Promise<void> =>
+      ipcRenderer.invoke("removeProtectionApiKey"),
+    getProtectionStatus: (serverId: string) =>
+      ipcRenderer.invoke("getProtectionStatus", serverId),
+    addServerProtection: (serverId: string, serverName: string, serverAddress: string, serverPort: number) =>
+      ipcRenderer.invoke("addServerProtection", serverId, serverName, serverAddress, serverPort),
+    removeServerProtection: (serverId: string) =>
+      ipcRenderer.invoke("removeServerProtection", serverId),
+    enableProtection: (serverId: string) =>
+      ipcRenderer.invoke("enableProtection", serverId),
+    disableProtection: (serverId: string) =>
+      ipcRenderer.invoke("disableProtection", serverId),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

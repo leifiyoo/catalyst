@@ -370,3 +370,25 @@ export type AnalyticsData = {
 };
 
 export type GetAnalyticsDataFn = (serverId: string) => Promise<{ success: boolean; data?: AnalyticsData; error?: string }>;
+
+// ---- TCPShield / Protection Types ----
+
+export type TCPShieldProtectionStatus = {
+  configured: boolean;
+  enabled: boolean;
+  networkId?: number;
+  networkName?: string;
+  domainName?: string;
+  backendAddress?: string;
+  error?: string;
+};
+
+export type GetProtectionStatusFn = (serverId: string) => Promise<TCPShieldProtectionStatus>;
+export type AddServerProtectionFn = (serverId: string, serverName: string, serverAddress: string, serverPort: number) => Promise<{ success: boolean; error?: string }>;
+export type RemoveServerProtectionFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
+export type EnableProtectionFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
+export type DisableProtectionFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
+export type ValidateProtectionApiKeyFn = (apiKey: string) => Promise<{ valid: boolean; error?: string }>;
+export type SetProtectionApiKeyFn = (apiKey: string) => Promise<void>;
+export type GetProtectionApiKeyCensoredFn = () => Promise<string | null>;
+export type RemoveProtectionApiKeyFn = () => Promise<void>;

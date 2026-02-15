@@ -61,6 +61,15 @@ import {
   OnNgrokUrlChangedFn,
   GetLocalIpFn,
   GetAnalyticsDataFn,
+  GetProtectionStatusFn,
+  AddServerProtectionFn,
+  RemoveServerProtectionFn,
+  EnableProtectionFn,
+  DisableProtectionFn,
+  ValidateProtectionApiKeyFn,
+  SetProtectionApiKeyFn,
+  GetProtectionApiKeyCensoredFn,
+  RemoveProtectionApiKeyFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -141,6 +150,15 @@ declare global {
       removeNgrokAuthtoken: () => Promise<{ success: boolean; error?: string }>;
       getAnalyticsData: GetAnalyticsDataFn;
       getSystemInfo: () => Promise<{ totalMemoryMB: number; maxRamMB: number }>;
+      validateProtectionApiKey: ValidateProtectionApiKeyFn;
+      setProtectionApiKey: SetProtectionApiKeyFn;
+      getProtectionApiKeyCensored: GetProtectionApiKeyCensoredFn;
+      removeProtectionApiKey: RemoveProtectionApiKeyFn;
+      getProtectionStatus: GetProtectionStatusFn;
+      addServerProtection: AddServerProtectionFn;
+      removeServerProtection: RemoveServerProtectionFn;
+      enableProtection: EnableProtectionFn;
+      disableProtection: DisableProtectionFn;
     };
   }
 }
