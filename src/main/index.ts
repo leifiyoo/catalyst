@@ -5,7 +5,11 @@ if (process.platform === 'linux') {
 
 import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { electronApp, is } from "@electron-toolkit/utils";
+
+const execFileAsync = promisify(execFile);
 
 // Disable Chromium sandbox on Linux to avoid SUID sandbox helper errors (FATAL:setuid_sandbox_host.cc)
 if (process.platform === "linux") {
@@ -719,6 +723,31 @@ app.whenReady().then(() => {
 
   ipcMain.handle("firewall:is-admin", async () => {
     return firewallIsAdmin();
+  });
+
+  ipcMain.handle("firewall:request-elevation", async () => {
+    if (process.platform !== "win32") {
+      return { success: false, error: "Elevation is only supported on Windows" };
+    }
+    try {
+      const execPath = app.getPath("exe");
+      // Use PowerShell Start-Process with -Verb RunAs to relaunch the app elevated
+      await execFileAsync("powershell", [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command",
+        `Start-Process -FilePath '${execPath.replace(/'/g, "''")}' -Verb RunAs`,
+      ], { timeout: 30000, windowsHide: true });
+      // Quit the current (non-elevated) instance
+      app.quit();
+      return { success: true };
+    } catch (err: any) {
+      const message = err?.message || "Failed to request elevation";
+      if (message.includes("canceled") || message.includes("The operation was canceled")) {
+        return { success: false, error: "UAC prompt was cancelled by the user." };
+      }
+      return { success: false, error: message };
+    }
   });
 
   // Signal app readiness to renderer for splash screen dismissal.
