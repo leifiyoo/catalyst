@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
     Card,
     CardContent,
@@ -34,6 +34,13 @@ import { TCPShieldSettings } from "@/components/TCPShieldSettings"
 import { FirewallManager } from "@/components/FirewallManager"
 
 export function SettingsPage() {
+    const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => {
+        return () => {
+            if (successTimerRef.current) clearTimeout(successTimerRef.current)
+        }
+    }, [])
+
     const [theme, setTheme] = useState<ThemeMode>("dark")
     // Ngrok settings state
     const [ngrokEnabled, setNgrokEnabledState] = useState(true)
@@ -113,7 +120,8 @@ export function SettingsPage() {
         setShowTokenDialog(false)
         setNewToken("")
         setTokenSuccess(true)
-        setTimeout(() => setTokenSuccess(false), 3000)
+        if (successTimerRef.current) clearTimeout(successTimerRef.current)
+        successTimerRef.current = setTimeout(() => setTokenSuccess(false), 3000)
         
         // Reload settings
         await loadNgrokSettings()
