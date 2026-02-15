@@ -26,6 +26,10 @@ import {
   LogToMainFn,
   NgrokTunnelInfo,
   AnalyticsData,
+  TCPShieldConfig,
+  TCPShieldStatus,
+  TCPShieldNetwork,
+  TCPShieldBackend,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -230,6 +234,30 @@ try {
     // System info
     getSystemInfo: (): Promise<{ totalMemoryMB: number; maxRamMB: number }> =>
       ipcRenderer.invoke("getSystemInfo"),
+
+    // TCPShield
+    tcpshieldSetApiKey: (apiKey: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:set-api-key", apiKey),
+    tcpshieldRemoveApiKey: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:remove-api-key"),
+    tcpshieldGetApiKeyCensored: (): Promise<string | null> =>
+      ipcRenderer.invoke("tcpshield:get-api-key-censored"),
+    tcpshieldGetStatus: (): Promise<TCPShieldStatus> =>
+      ipcRenderer.invoke("tcpshield:get-status"),
+    tcpshieldEnable: (serverId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:enable", serverId),
+    tcpshieldDisable: (serverId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:disable", serverId),
+    tcpshieldGetConfig: (): Promise<TCPShieldConfig | null> =>
+      ipcRenderer.invoke("tcpshield:get-config"),
+    tcpshieldSetConfig: (config: Partial<TCPShieldConfig>): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:set-config", config),
+    tcpshieldListNetworks: (): Promise<{ success: boolean; networks?: TCPShieldNetwork[]; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:list-networks"),
+    tcpshieldAddBackend: (networkId: number, address: string, port: number): Promise<{ success: boolean; backend?: TCPShieldBackend; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:add-backend", networkId, address, port),
+    tcpshieldRemoveBackend: (networkId: number, backendId: number): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("tcpshield:remove-backend", networkId, backendId),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

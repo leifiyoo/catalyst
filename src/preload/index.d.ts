@@ -61,6 +61,15 @@ import {
   OnNgrokUrlChangedFn,
   GetLocalIpFn,
   GetAnalyticsDataFn,
+  SetTCPShieldApiKeyFn,
+  GetTCPShieldStatusFn,
+  EnableTCPShieldFn,
+  DisableTCPShieldFn,
+  GetTCPShieldConfigFn,
+  SetTCPShieldConfigFn,
+  ListTCPShieldNetworksFn,
+  AddTCPShieldBackendFn,
+  RemoveTCPShieldBackendFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -141,6 +150,18 @@ declare global {
       removeNgrokAuthtoken: () => Promise<{ success: boolean; error?: string }>;
       getAnalyticsData: GetAnalyticsDataFn;
       getSystemInfo: () => Promise<{ totalMemoryMB: number; maxRamMB: number }>;
+      // TCPShield
+      tcpshieldSetApiKey: SetTCPShieldApiKeyFn;
+      tcpshieldRemoveApiKey: () => Promise<{ success: boolean; error?: string }>;
+      tcpshieldGetApiKeyCensored: () => Promise<string | null>;
+      tcpshieldGetStatus: GetTCPShieldStatusFn;
+      tcpshieldEnable: EnableTCPShieldFn;
+      tcpshieldDisable: DisableTCPShieldFn;
+      tcpshieldGetConfig: GetTCPShieldConfigFn;
+      tcpshieldSetConfig: SetTCPShieldConfigFn;
+      tcpshieldListNetworks: ListTCPShieldNetworksFn;
+      tcpshieldAddBackend: AddTCPShieldBackendFn;
+      tcpshieldRemoveBackend: RemoveTCPShieldBackendFn;
     };
   }
 }

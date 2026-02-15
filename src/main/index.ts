@@ -78,10 +78,24 @@ import {
   removeNgrokAuthtoken
 } from "@/lib/ngrok-manager";
 import {
+  setApiKey as tcpshieldSetApiKey,
+  getProtectionStatus as tcpshieldGetStatus,
+  enableProtection as tcpshieldEnable,
+  disableProtection as tcpshieldDisable,
+  getConfig as tcpshieldGetConfig,
+  setConfig as tcpshieldSetConfig,
+  listNetworks as tcpshieldListNetworks,
+  addBackend as tcpshieldAddBackend,
+  removeBackend as tcpshieldRemoveBackend,
+  removeApiKey as tcpshieldRemoveApiKey,
+} from "@/lib/tcpshield-manager";
+import { getApiKeyCensored as tcpshieldGetApiKeyCensored } from "@/lib/protection-config";
+import {
   GetVersionsFn,
   WindowControlAction,
   CreateServerParams,
   ServerProperty,
+  TCPShieldConfig,
 } from "@shared/types";
 
 function createWindow(): void {
@@ -543,6 +557,51 @@ app.whenReady().then(() => {
   // System info IPC handler (for RAM limit validation)
   ipcMain.handle("getSystemInfo", () => {
     return getSystemInfo();
+  });
+
+  // TCPShield IPC handlers
+  ipcMain.handle("tcpshield:set-api-key", async (_event, apiKey: string) => {
+    return tcpshieldSetApiKey(apiKey);
+  });
+
+  ipcMain.handle("tcpshield:remove-api-key", async () => {
+    return tcpshieldRemoveApiKey();
+  });
+
+  ipcMain.handle("tcpshield:get-api-key-censored", async () => {
+    return tcpshieldGetApiKeyCensored();
+  });
+
+  ipcMain.handle("tcpshield:get-status", async () => {
+    return tcpshieldGetStatus();
+  });
+
+  ipcMain.handle("tcpshield:enable", async (_event, serverId: string) => {
+    return tcpshieldEnable(serverId);
+  });
+
+  ipcMain.handle("tcpshield:disable", async (_event, serverId: string) => {
+    return tcpshieldDisable(serverId);
+  });
+
+  ipcMain.handle("tcpshield:get-config", async () => {
+    return tcpshieldGetConfig();
+  });
+
+  ipcMain.handle("tcpshield:set-config", async (_event, config: Partial<TCPShieldConfig>) => {
+    return tcpshieldSetConfig(config);
+  });
+
+  ipcMain.handle("tcpshield:list-networks", async () => {
+    return tcpshieldListNetworks();
+  });
+
+  ipcMain.handle("tcpshield:add-backend", async (_event, networkId: number, address: string, port: number) => {
+    return tcpshieldAddBackend(networkId, address, port);
+  });
+
+  ipcMain.handle("tcpshield:remove-backend", async (_event, networkId: number, backendId: number) => {
+    return tcpshieldRemoveBackend(networkId, backendId);
   });
 
 });
