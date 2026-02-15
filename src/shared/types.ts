@@ -370,3 +370,47 @@ export type AnalyticsData = {
 };
 
 export type GetAnalyticsDataFn = (serverId: string) => Promise<{ success: boolean; data?: AnalyticsData; error?: string }>;
+
+// ---- TCPShield Types ----
+
+export type TCPShieldNetwork = {
+  id: number;
+  name: string;
+  connections_per_second_threshold: number;
+  client_ban_seconds: number;
+  client_allow_seconds: number;
+};
+
+export type TCPShieldBackend = {
+  id: number;
+  network_id: number;
+  address: string;
+  port: number;
+  online: boolean;
+};
+
+export type TCPShieldStatus = {
+  enabled: boolean;
+  connected: boolean;
+  networkId?: number;
+  networkName?: string;
+  backends: TCPShieldBackend[];
+  error?: string;
+};
+
+export type TCPShieldConfig = {
+  apiKey: string;
+  enabled: boolean;
+  debug: boolean;
+  networkId?: number;
+};
+
+export type SetTCPShieldApiKeyFn = (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+export type GetTCPShieldStatusFn = () => Promise<TCPShieldStatus>;
+export type EnableTCPShieldFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
+export type DisableTCPShieldFn = (serverId: string) => Promise<{ success: boolean; error?: string }>;
+export type GetTCPShieldConfigFn = () => Promise<TCPShieldConfig | null>;
+export type SetTCPShieldConfigFn = (config: Partial<TCPShieldConfig>) => Promise<{ success: boolean; error?: string }>;
+export type ListTCPShieldNetworksFn = () => Promise<{ success: boolean; networks?: TCPShieldNetwork[]; error?: string }>;
+export type AddTCPShieldBackendFn = (networkId: number, address: string, port: number) => Promise<{ success: boolean; backend?: TCPShieldBackend; error?: string }>;
+export type RemoveTCPShieldBackendFn = (networkId: number, backendId: number) => Promise<{ success: boolean; error?: string }>;
