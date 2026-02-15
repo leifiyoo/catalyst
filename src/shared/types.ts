@@ -452,3 +452,44 @@ export type SetTCPShieldConfigFn = (config: Partial<TCPShieldConfig>) => Promise
 export type ListTCPShieldNetworksFn = () => Promise<{ success: boolean; networks?: TCPShieldNetwork[]; error?: string }>;
 export type AddTCPShieldBackendFn = (networkId: number, address: string, port: number) => Promise<{ success: boolean; backend?: TCPShieldBackend; error?: string }>;
 export type RemoveTCPShieldBackendFn = (networkId: number, backendId: number) => Promise<{ success: boolean; error?: string }>;
+
+// ---- Firewall Types ----
+
+export type FirewallRule = {
+  name: string;
+  enabled: boolean;
+  direction: "In" | "Out";
+  action: "Allow" | "Block";
+  protocol: string;
+  localPort: string;
+  remoteAddress: string;
+  profile: string;
+};
+
+export type FirewallRuleSnapshot = {
+  timestamp: string;
+  rules: FirewallRule[];
+};
+
+export type FirewallAuditEntry = {
+  timestamp: string;
+  action: string;
+  details: string;
+  success: boolean;
+  error?: string;
+};
+
+export type FirewallListRulesFn = () => Promise<{ success: boolean; rules?: FirewallRule[]; error?: string }>;
+export type FirewallDeleteRuleFn = (ruleName: string) => Promise<{ success: boolean; error?: string }>;
+export type FirewallDeleteAllRulesFn = () => Promise<{ success: boolean; deletedCount: number; error?: string }>;
+export type FirewallAddAllowRuleFn = (ip: string, port: number, protocol: "TCP" | "UDP", label?: string) => Promise<{ success: boolean; ruleName?: string; error?: string }>;
+export type FirewallAddBlockRuleFn = (port: number, protocol: "TCP" | "UDP") => Promise<{ success: boolean; ruleName?: string; error?: string }>;
+export type FirewallAddTcpShieldRulesFn = (port: number, protocol: "TCP" | "UDP") => Promise<{ success: boolean; addedCount: number; error?: string }>;
+export type FirewallTcpShieldLockdownFn = (port: number, protocol: "TCP" | "UDP") => Promise<{ success: boolean; error?: string }>;
+export type FirewallAddCustomWhitelistFn = (ips: string[], port: number, protocol: "TCP" | "UDP") => Promise<{ success: boolean; addedCount: number; error?: string }>;
+export type FirewallSaveSnapshotFn = () => Promise<{ success: boolean; error?: string }>;
+export type FirewallLoadSnapshotFn = () => Promise<{ success: boolean; snapshot?: FirewallRuleSnapshot; error?: string }>;
+export type FirewallRollbackFn = () => Promise<{ success: boolean; error?: string }>;
+export type FirewallGetAuditLogFn = () => Promise<FirewallAuditEntry[]>;
+export type FirewallGetTcpShieldIpsFn = () => Promise<string[]>;
+export type FirewallGenerateCodeFn = () => Promise<string>;

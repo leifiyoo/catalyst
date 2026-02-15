@@ -32,6 +32,9 @@ import {
   TCPShieldBackend,
   TCPShieldTutorialConfig,
   TCPShieldTutorialStep,
+  FirewallRule,
+  FirewallRuleSnapshot,
+  FirewallAuditEntry,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -270,6 +273,36 @@ try {
       ipcRenderer.invoke("tcpshield:reset-tutorial"),
     tcpshieldGetTutorialSteps: (): Promise<TCPShieldTutorialStep[]> =>
       ipcRenderer.invoke("tcpshield:get-tutorial-steps"),
+
+    // Firewall
+    firewallListRules: (): Promise<{ success: boolean; rules?: FirewallRule[]; error?: string }> =>
+      ipcRenderer.invoke("firewall:list-rules"),
+    firewallDeleteRule: (ruleName: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("firewall:delete-rule", ruleName),
+    firewallDeleteAllRules: (): Promise<{ success: boolean; deletedCount: number; error?: string }> =>
+      ipcRenderer.invoke("firewall:delete-all-rules"),
+    firewallAddAllowRule: (ip: string, port: number, protocol: "TCP" | "UDP", label?: string): Promise<{ success: boolean; ruleName?: string; error?: string }> =>
+      ipcRenderer.invoke("firewall:add-allow-rule", ip, port, protocol, label),
+    firewallAddBlockRule: (port: number, protocol: "TCP" | "UDP"): Promise<{ success: boolean; ruleName?: string; error?: string }> =>
+      ipcRenderer.invoke("firewall:add-block-rule", port, protocol),
+    firewallAddTcpShieldRules: (port: number, protocol: "TCP" | "UDP"): Promise<{ success: boolean; addedCount: number; error?: string }> =>
+      ipcRenderer.invoke("firewall:add-tcpshield-rules", port, protocol),
+    firewallTcpShieldLockdown: (port: number, protocol: "TCP" | "UDP"): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("firewall:tcpshield-lockdown", port, protocol),
+    firewallAddCustomWhitelist: (ips: string[], port: number, protocol: "TCP" | "UDP"): Promise<{ success: boolean; addedCount: number; error?: string }> =>
+      ipcRenderer.invoke("firewall:add-custom-whitelist", ips, port, protocol),
+    firewallSaveSnapshot: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("firewall:save-snapshot"),
+    firewallLoadSnapshot: (): Promise<{ success: boolean; snapshot?: FirewallRuleSnapshot; error?: string }> =>
+      ipcRenderer.invoke("firewall:load-snapshot"),
+    firewallRollback: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke("firewall:rollback"),
+    firewallGetAuditLog: (): Promise<FirewallAuditEntry[]> =>
+      ipcRenderer.invoke("firewall:get-audit-log"),
+    firewallGetTcpShieldIps: (): Promise<string[]> =>
+      ipcRenderer.invoke("firewall:get-tcpshield-ips"),
+    firewallGenerateCode: (): Promise<string> =>
+      ipcRenderer.invoke("firewall:generate-code"),
   });
 } catch (error) {
   console.error("Error occured when establishing context bridge: ", error);

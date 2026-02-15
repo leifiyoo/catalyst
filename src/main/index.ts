@@ -97,6 +97,22 @@ import {
   getTutorialSteps as tcpshieldGetTutorialSteps,
 } from "@/lib/tcpshield-tutorial";
 import {
+  listCatalystRules as firewallListRules,
+  deleteRule as firewallDeleteRule,
+  deleteAllCatalystRules as firewallDeleteAllRules,
+  addAllowRule as firewallAddAllowRule,
+  addBlockRule as firewallAddBlockRule,
+  addTcpShieldRules as firewallAddTcpShieldRules,
+  tcpShieldLockdown as firewallTcpShieldLockdown,
+  addCustomWhitelistRules as firewallAddCustomWhitelist,
+  saveSnapshot as firewallSaveSnapshot,
+  loadSnapshot as firewallLoadSnapshot,
+  rollbackToSnapshot as firewallRollback,
+  getAuditLog as firewallGetAuditLog,
+  getTcpShieldIpRanges as firewallGetTcpShieldIps,
+  generateConfirmationCode as firewallGenerateCode,
+} from "@/lib/firewall-manager";
+import {
   GetVersionsFn,
   WindowControlAction,
   CreateServerParams,
@@ -638,6 +654,63 @@ app.whenReady().then(() => {
 
   ipcMain.handle("tcpshield:get-tutorial-steps", () => {
     return tcpshieldGetTutorialSteps();
+  });
+
+  // Firewall IPC handlers
+  ipcMain.handle("firewall:list-rules", async () => {
+    return firewallListRules();
+  });
+
+  ipcMain.handle("firewall:delete-rule", async (_event, ruleName: string) => {
+    return firewallDeleteRule(ruleName);
+  });
+
+  ipcMain.handle("firewall:delete-all-rules", async () => {
+    return firewallDeleteAllRules();
+  });
+
+  ipcMain.handle("firewall:add-allow-rule", async (_event, ip: string, port: number, protocol: "TCP" | "UDP", label?: string) => {
+    return firewallAddAllowRule(ip, port, protocol, label);
+  });
+
+  ipcMain.handle("firewall:add-block-rule", async (_event, port: number, protocol: "TCP" | "UDP") => {
+    return firewallAddBlockRule(port, protocol);
+  });
+
+  ipcMain.handle("firewall:add-tcpshield-rules", async (_event, port: number, protocol: "TCP" | "UDP") => {
+    return firewallAddTcpShieldRules(port, protocol);
+  });
+
+  ipcMain.handle("firewall:tcpshield-lockdown", async (_event, port: number, protocol: "TCP" | "UDP") => {
+    return firewallTcpShieldLockdown(port, protocol);
+  });
+
+  ipcMain.handle("firewall:add-custom-whitelist", async (_event, ips: string[], port: number, protocol: "TCP" | "UDP") => {
+    return firewallAddCustomWhitelist(ips, port, protocol);
+  });
+
+  ipcMain.handle("firewall:save-snapshot", async () => {
+    return firewallSaveSnapshot();
+  });
+
+  ipcMain.handle("firewall:load-snapshot", async () => {
+    return firewallLoadSnapshot();
+  });
+
+  ipcMain.handle("firewall:rollback", async () => {
+    return firewallRollback();
+  });
+
+  ipcMain.handle("firewall:get-audit-log", async () => {
+    return firewallGetAuditLog();
+  });
+
+  ipcMain.handle("firewall:get-tcpshield-ips", async () => {
+    return firewallGetTcpShieldIps();
+  });
+
+  ipcMain.handle("firewall:generate-code", async () => {
+    return firewallGenerateCode();
   });
 
 });
