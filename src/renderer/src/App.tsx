@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { motion } from "motion/react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
+import { Spinner } from "@/components/ui/spinner";
 import { SpinnerButton } from "@/components/SpinnerButton";
 import { TitleBar } from "@/components/TitleBar";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
@@ -16,7 +17,7 @@ const UpdateNotifier = lazy(() => import("@/components/UpdateNotifier").then(m =
 
 const PageFallback = () => (
     <div className="flex items-center justify-center h-full min-h-[200px]">
-        <SpinnerButton />
+        <Spinner className="h-5 w-5 text-muted-foreground" />
     </div>
 );
 

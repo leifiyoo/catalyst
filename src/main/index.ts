@@ -730,13 +730,18 @@ app.whenReady().then(() => {
       return { success: false, error: "Elevation is only supported on Windows" };
     }
     try {
-      const execPath = app.getPath("exe");
+      // In packaged mode, process.execPath is the app exe itself.
+      // In dev mode, process.execPath is the electron binary and we need to pass the app directory.
+      const exePath = app.isPackaged ? process.execPath : process.execPath;
+      const args = app.isPackaged ? [] : [app.getAppPath()];
+      const argString = args.map(a => `'${a.replace(/'/g, "''")}'`).join(",");
+      const argsPart = argString ? ` -ArgumentList ${argString}` : "";
       // Use PowerShell Start-Process with -Verb RunAs to relaunch the app elevated
       await execFileAsync("powershell", [
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        `Start-Process -FilePath '${execPath.replace(/'/g, "''")}' -Verb RunAs`,
+        `Start-Process -FilePath '${exePath.replace(/'/g, "''")}'${argsPart} -Verb RunAs`,
       ], { timeout: 30000, windowsHide: true });
       // Quit the current (non-elevated) instance
       app.quit();
