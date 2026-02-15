@@ -14,12 +14,40 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    Copy,
     ExternalLink,
+    Plus,
     RotateCcw,
     Shield,
     ShieldCheck,
+    Trash2,
 } from "lucide-react"
-import type { TCPShieldTutorialConfig, TCPShieldTutorialStep } from "@shared/types"
+import type { TCPShieldTutorialConfig, TCPShieldTutorialStep, TCPShieldBackendEntry } from "@shared/types"
+
+// ---- Validation helpers ----
+
+const CNAME_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/
+const DOMAIN_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/
+const IPV4_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/
+
+function isValidCname(value: string): boolean {
+    return CNAME_REGEX.test(value.trim())
+}
+
+function isValidDomain(value: string): boolean {
+    return DOMAIN_REGEX.test(value.trim())
+}
+
+function isValidAddress(value: string): boolean {
+    const trimmed = value.trim()
+    // Accept IPv4, hostname, or domain
+    return IPV4_REGEX.test(trimmed) || DOMAIN_REGEX.test(trimmed)
+}
+
+function isValidPort(value: string): boolean {
+    const num = parseInt(value, 10)
+    return !isNaN(num) && num >= 1 && num <= 65535
+}
 
 export function TCPShieldTutorial() {
     const [loading, setLoading] = useState(true)
@@ -27,7 +55,12 @@ export function TCPShieldTutorial() {
     const [steps, setSteps] = useState<TCPShieldTutorialStep[]>([])
     const [currentStep, setCurrentStep] = useState(0)
     const [inputValues, setInputValues] = useState<Record<string, string>>({})
+    const [backends, setBackends] = useState<TCPShieldBackendEntry[]>([])
+    const [newBackendAddress, setNewBackendAddress] = useState("")
+    const [newBackendPort, setNewBackendPort] = useState("25565")
     const [saving, setSaving] = useState(false)
+    const [copied, setCopied] = useState(false)
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
     useEffect(() => {
         loadData()
@@ -43,10 +76,10 @@ export function TCPShieldTutorial() {
             setConfig(tutorialConfig)
             setSteps(tutorialSteps)
             setCurrentStep(tutorialConfig.currentStep)
+            setBackends(tutorialConfig.backends || [])
             setInputValues({
                 protectedCname: tutorialConfig.protectedCname || "",
-                backendAddress: tutorialConfig.backendAddress || "",
-                backendPort: String(tutorialConfig.backendPort || 25565),
+                domain: tutorialConfig.domain || "",
             })
         } catch (error) {
             console.error("Failed to load tutorial data:", error)
@@ -71,23 +104,57 @@ export function TCPShieldTutorial() {
         }
     }
 
+    const validateCurrentStep = (): boolean => {
+        const step = steps[currentStep]
+        const errors: Record<string, string> = {}
+
+        if (step?.inputField === "protectedCname") {
+            const val = inputValues.protectedCname?.trim()
+            if (val && !isValidCname(val)) {
+                errors.protectedCname = "Enter a valid CNAME (e.g. xxxxxxxx.tcpshield.com)"
+            }
+        }
+
+        if (step?.inputField === "domain") {
+            const val = inputValues.domain?.trim()
+            if (val && !isValidDomain(val)) {
+                errors.domain = "Enter a valid domain (e.g. mc.example.com)"
+            }
+        }
+
+        if (step?.inputField === "backendAddress") {
+            // Backends are validated when adding, not on next
+        }
+
+        setValidationErrors(errors)
+        return Object.keys(errors).length === 0
+    }
+
     const handleNext = async () => {
         if (currentStep >= steps.length - 1) return
+        if (!validateCurrentStep()) return
 
         const step = steps[currentStep]
         const extraConfig: Partial<TCPShieldTutorialConfig> = {}
 
-        // Save input values for steps that have inputs
         if (step?.inputField === "protectedCname") {
-            extraConfig.protectedCname = inputValues.protectedCname || ""
+            extraConfig.protectedCname = inputValues.protectedCname?.trim() || ""
+        }
+        if (step?.inputField === "domain") {
+            extraConfig.domain = inputValues.domain?.trim() || ""
         }
         if (step?.inputField === "backendAddress") {
-            extraConfig.backendAddress = inputValues.backendAddress || ""
-            extraConfig.backendPort = parseInt(inputValues.backendPort || "25565", 10) || 25565
+            extraConfig.backends = backends
+            // Keep legacy fields in sync with first backend
+            if (backends.length > 0) {
+                extraConfig.backendAddress = backends[0].address
+                extraConfig.backendPort = backends[0].port
+            }
         }
 
         const nextStep = currentStep + 1
         setCurrentStep(nextStep)
+        setValidationErrors({})
         await saveProgress(nextStep, extraConfig)
     }
 
@@ -95,6 +162,7 @@ export function TCPShieldTutorial() {
         if (currentStep <= 0) return
         const prevStep = currentStep - 1
         setCurrentStep(prevStep)
+        setValidationErrors({})
         saveProgress(prevStep)
     }
 
@@ -103,10 +171,62 @@ export function TCPShieldTutorial() {
         setCurrentStep(0)
         setInputValues({
             protectedCname: "",
-            backendAddress: "",
-            backendPort: "25565",
+            domain: "",
         })
+        setBackends([])
+        setNewBackendAddress("")
+        setNewBackendPort("25565")
+        setValidationErrors({})
         await loadData()
+    }
+
+    const handleAddBackend = () => {
+        const address = newBackendAddress.trim()
+        const port = newBackendPort.trim() || "25565"
+
+        const errors: Record<string, string> = {}
+        if (!address) {
+            errors.newBackendAddress = "Server address is required"
+        } else if (!isValidAddress(address)) {
+            errors.newBackendAddress = "Enter a valid IP (e.g. 123.45.67.89) or hostname"
+        }
+        if (!isValidPort(port)) {
+            errors.newBackendPort = "Port must be between 1 and 65535"
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setValidationErrors(errors)
+            return
+        }
+
+        const portNum = parseInt(port, 10)
+        // Check for duplicates
+        const exists = backends.some(b => b.address === address && b.port === portNum)
+        if (exists) {
+            setValidationErrors({ newBackendAddress: "This backend already exists" })
+            return
+        }
+
+        const updated = [...backends, { address, port: portNum }]
+        setBackends(updated)
+        setNewBackendAddress("")
+        setNewBackendPort("25565")
+        setValidationErrors({})
+    }
+
+    const handleRemoveBackend = (index: number) => {
+        setBackends((prev) => prev.filter((_, i) => i !== index))
+    }
+
+    const handleCopy = async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+        } catch {
+            // Fallback: select text approach not needed in Electron
+            console.error("Failed to copy to clipboard")
+        }
     }
 
     const handleOpenExternal = (url: string) => {
@@ -124,6 +244,9 @@ export function TCPShieldTutorial() {
     const step = steps[currentStep]
     const isCompleted = config?.tutorialStatus === "completed"
     const totalSteps = steps.length
+
+    // Determine the player-facing address
+    const playerAddress = config?.domain || config?.protectedCname || ""
 
     return (
         <>
@@ -225,7 +348,7 @@ export function TCPShieldTutorial() {
                                 ))}
                             </div>
 
-                            {/* Input Field */}
+                            {/* Input: Protected CNAME */}
                             {step.hasInput && step.inputField === "protectedCname" && (
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">
@@ -234,48 +357,132 @@ export function TCPShieldTutorial() {
                                     <Input
                                         placeholder={step.inputPlaceholder}
                                         value={inputValues.protectedCname || ""}
-                                        onChange={(e) =>
+                                        onChange={(e) => {
                                             setInputValues((prev) => ({
                                                 ...prev,
                                                 protectedCname: e.target.value,
                                             }))
-                                        }
+                                            setValidationErrors((prev) => {
+                                                const { protectedCname: _, ...rest } = prev
+                                                return rest
+                                            })
+                                        }}
                                     />
+                                    {validationErrors.protectedCname && (
+                                        <p className="text-xs text-red-500">{validationErrors.protectedCname}</p>
+                                    )}
                                 </div>
                             )}
 
+                            {/* Input: Domain */}
+                            {step.hasInput && step.inputField === "domain" && (
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">
+                                        {step.inputLabel}
+                                    </label>
+                                    <Input
+                                        placeholder={step.inputPlaceholder}
+                                        value={inputValues.domain || ""}
+                                        onChange={(e) => {
+                                            setInputValues((prev) => ({
+                                                ...prev,
+                                                domain: e.target.value,
+                                            }))
+                                            setValidationErrors((prev) => {
+                                                const { domain: _, ...rest } = prev
+                                                return rest
+                                            })
+                                        }}
+                                    />
+                                    {validationErrors.domain && (
+                                        <p className="text-xs text-red-500">{validationErrors.domain}</p>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">
+                                        Optional — if you don&apos;t have one yet, you can get one and come back.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Input: Backend Servers (multi) */}
                             {step.hasInput && step.inputField === "backendAddress" && (
                                 <div className="space-y-3">
+                                    {/* Existing backends list */}
+                                    {backends.length > 0 && (
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">
+                                                Added Backends
+                                            </label>
+                                            {backends.map((backend, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
+                                                >
+                                                    <code className="flex-1 text-sm text-foreground">
+                                                        {backend.address}:{backend.port}
+                                                    </code>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleRemoveBackend(idx)}
+                                                        title="Remove backend"
+                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Add new backend */}
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">
-                                            Server IP
+                                            {backends.length > 0 ? "Add Another Server" : "Server IP"}
                                         </label>
-                                        <Input
-                                            placeholder={step.inputPlaceholder}
-                                            value={inputValues.backendAddress || ""}
-                                            onChange={(e) =>
-                                                setInputValues((prev) => ({
-                                                    ...prev,
-                                                    backendAddress: e.target.value,
-                                                }))
-                                            }
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium">
-                                            Port
-                                        </label>
-                                        <Input
-                                            type="number"
-                                            placeholder="25565"
-                                            value={inputValues.backendPort || "25565"}
-                                            onChange={(e) =>
-                                                setInputValues((prev) => ({
-                                                    ...prev,
-                                                    backendPort: e.target.value,
-                                                }))
-                                            }
-                                        />
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 space-y-1">
+                                                <Input
+                                                    placeholder={step.inputPlaceholder}
+                                                    value={newBackendAddress}
+                                                    onChange={(e) => {
+                                                        setNewBackendAddress(e.target.value)
+                                                        setValidationErrors((prev) => {
+                                                            const { newBackendAddress: _, ...rest } = prev
+                                                            return rest
+                                                        })
+                                                    }}
+                                                />
+                                                {validationErrors.newBackendAddress && (
+                                                    <p className="text-xs text-red-500">{validationErrors.newBackendAddress}</p>
+                                                )}
+                                            </div>
+                                            <div className="w-24 space-y-1">
+                                                <Input
+                                                    type="number"
+                                                    placeholder="25565"
+                                                    value={newBackendPort}
+                                                    onChange={(e) => {
+                                                        setNewBackendPort(e.target.value)
+                                                        setValidationErrors((prev) => {
+                                                            const { newBackendPort: _, ...rest } = prev
+                                                            return rest
+                                                        })
+                                                    }}
+                                                />
+                                                {validationErrors.newBackendPort && (
+                                                    <p className="text-xs text-red-500">{validationErrors.newBackendPort}</p>
+                                                )}
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleAddBackend}
+                                                className="h-9 gap-1"
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                Add
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -294,28 +501,57 @@ export function TCPShieldTutorial() {
 
                             {/* Completion Summary */}
                             {isCompleted && currentStep === totalSteps - 1 && (
-                                <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 space-y-2">
+                                <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 space-y-3">
                                     <div className="flex items-center gap-2">
                                         <CheckCircle2 className="h-5 w-5 text-green-500" />
                                         <p className="font-medium text-green-500">
                                             Setup complete!
                                         </p>
                                     </div>
-                                    {config?.protectedCname && (
-                                        <p className="text-sm text-muted-foreground">
-                                            Players connect via:{" "}
-                                            <code className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">
-                                                {config.protectedCname}
-                                            </code>
-                                        </p>
+                                    {playerAddress && (
+                                        <div className="space-y-1">
+                                            <p className="text-sm text-muted-foreground">
+                                                Players connect via:
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <code className="flex-1 rounded bg-primary/10 px-2 py-1.5 text-sm font-medium text-primary">
+                                                    {playerAddress}
+                                                </code>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleCopy(playerAddress)}
+                                                    className="gap-1.5 shrink-0"
+                                                >
+                                                    {copied ? (
+                                                        <>
+                                                            <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                                            Copied
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Copy className="h-3.5 w-3.5" />
+                                                            Copy
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
                                     )}
-                                    {config?.backendAddress && (
-                                        <p className="text-sm text-muted-foreground">
-                                            Backend:{" "}
-                                            <code className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">
-                                                {config.backendAddress}:{config.backendPort || 25565}
-                                            </code>
-                                        </p>
+                                    {backends.length > 0 && (
+                                        <div className="space-y-1">
+                                            <p className="text-sm text-muted-foreground">
+                                                {backends.length === 1 ? "Backend:" : "Backends:"}
+                                            </p>
+                                            {backends.map((b, idx) => (
+                                                <code
+                                                    key={idx}
+                                                    className="block rounded bg-primary/10 px-2 py-1 text-sm text-primary"
+                                                >
+                                                    {b.address}:{b.port}
+                                                </code>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -352,9 +588,15 @@ export function TCPShieldTutorial() {
                         ) : !isCompleted ? (
                             <Button
                                 onClick={async () => {
-                                    await saveProgress(currentStep, {
+                                    const extraConfig: Partial<TCPShieldTutorialConfig> = {
                                         tutorialStatus: "completed" as const,
-                                    })
+                                        backends,
+                                    }
+                                    if (backends.length > 0) {
+                                        extraConfig.backendAddress = backends[0].address
+                                        extraConfig.backendPort = backends[0].port
+                                    }
+                                    await saveProgress(currentStep, extraConfig)
                                     await loadData()
                                 }}
                                 disabled={saving}

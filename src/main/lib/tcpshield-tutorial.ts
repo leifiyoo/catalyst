@@ -6,6 +6,7 @@ import {
   TCPShieldTutorialConfig,
   TCPShieldTutorialStep,
   TCPShieldTutorialStatus,
+  TCPShieldBackendEntry,
 } from "@shared/types";
 
 const CONFIG_DIR = path.join(app.getPath("userData"), "tcpshield");
@@ -16,6 +17,7 @@ const DEFAULT_TUTORIAL_CONFIG: TCPShieldTutorialConfig = {
   currentStep: 0,
   protectedCname: "",
   domain: "",
+  backends: [],
   backendAddress: "",
   backendPort: 25565,
   debug: false,
@@ -79,7 +81,7 @@ export const TUTORIAL_STEPS: TCPShieldTutorialStep[] = [
       "TCPShield requires a domain for DNS-based routing. You need to point a domain to your Protected CNAME via a DNS record.",
     instructions: [
       "You NEED a domain to use TCPShield — it routes traffic via DNS (CNAME records).",
-      "If you already have a domain, skip to the next step.",
+      "If you already have a domain, enter it below and skip to the next step.",
       "",
       "Don't have a domain? Here's how to get one cheaply:",
       "  → Cheap domains (~$1–2/year): Get a .xyz or .online domain from Namecheap or Cloudflare Registrar.",
@@ -87,6 +89,10 @@ export const TUTORIAL_STEPS: TCPShieldTutorialStep[] = [
       "",
       "Tip: This is a one-time setup and only takes a few minutes. A $1 domain works perfectly!",
     ],
+    hasInput: true,
+    inputLabel: "Your Domain",
+    inputPlaceholder: "mc.example.com",
+    inputField: "domain",
     hasExternalLink: true,
     externalLinkUrl: "https://www.namecheap.com/domains/domain-name-search/",
     externalLinkLabel: "Search Cheap Domains (Namecheap)",
@@ -110,18 +116,20 @@ export const TUTORIAL_STEPS: TCPShieldTutorialStep[] = [
   },
   {
     id: 5,
-    title: "Configure Backend",
+    title: "Configure Backend Servers",
     description:
-      "Enter your real server IP and port as the backend in the TCPShield panel. This is the IP you want to protect.",
+      "Add your real server IP(s) and port(s) as backends in the TCPShield panel. These are the servers you want to protect. You can add multiple backends (e.g. lobby, survival, creative).",
     instructions: [
       "Go to 'Backends' in the TCPShield panel.",
-      "Click 'Add Backend'.",
-      "Enter your real server IP and port.",
-      "Save the settings.",
-      "Also enter the same details below so Catalyst knows them.",
+      "Click 'Add Backend' for each server you want to protect.",
+      "Enter the real server IP and port for each one.",
+      "Save the settings in the TCPShield panel.",
+      "Also add the same details below so Catalyst knows them.",
+      "",
+      "Tip: If you only have one server, just add one backend. You can always add more later.",
     ],
     hasInput: true,
-    inputLabel: "Backend Server IP:Port",
+    inputLabel: "Backend Servers",
     inputPlaceholder: "123.456.789.0",
     inputField: "backendAddress",
     hasExternalLink: true,
@@ -164,15 +172,23 @@ export async function loadTutorialConfig(): Promise<TCPShieldTutorialConfig> {
   try {
     ensureConfigDir();
     if (!existsSync(TUTORIAL_FILE)) {
-      return { ...DEFAULT_TUTORIAL_CONFIG };
+      return { ...DEFAULT_TUTORIAL_CONFIG, backends: [] };
     }
     const raw = await fs.readFile(TUTORIAL_FILE, "utf-8");
     const parsed = JSON.parse(raw);
+
+    // Migrate legacy single-backend to backends array
+    let backends: TCPShieldBackendEntry[] = parsed.backends ?? [];
+    if (backends.length === 0 && parsed.backendAddress) {
+      backends = [{ address: parsed.backendAddress, port: parsed.backendPort ?? 25565 }];
+    }
+
     const config: TCPShieldTutorialConfig = {
       tutorialStatus: parsed.tutorialStatus ?? DEFAULT_TUTORIAL_CONFIG.tutorialStatus,
       currentStep: parsed.currentStep ?? DEFAULT_TUTORIAL_CONFIG.currentStep,
       protectedCname: parsed.protectedCname ?? DEFAULT_TUTORIAL_CONFIG.protectedCname,
       domain: parsed.domain ?? DEFAULT_TUTORIAL_CONFIG.domain,
+      backends,
       backendAddress: parsed.backendAddress ?? DEFAULT_TUTORIAL_CONFIG.backendAddress,
       backendPort: parsed.backendPort ?? DEFAULT_TUTORIAL_CONFIG.backendPort,
       debug: parsed.debug ?? DEFAULT_TUTORIAL_CONFIG.debug,
@@ -181,7 +197,7 @@ export async function loadTutorialConfig(): Promise<TCPShieldTutorialConfig> {
     return config;
   } catch (error) {
     console.error("[tcpshield-tutorial] Failed to load config:", error);
-    return { ...DEFAULT_TUTORIAL_CONFIG };
+    return { ...DEFAULT_TUTORIAL_CONFIG, backends: [] };
   }
 }
 
