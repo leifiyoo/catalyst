@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { ConsoleTab } from "@/components/ConsoleTab"
 import { useParams, useNavigate } from "react-router-dom"
@@ -239,6 +239,23 @@ export function ServerDetailPage() {
     const [diskUsage, setDiskUsage] = useState<number | null>(null)
     const [diskUsageLoading, setDiskUsageLoading] = useState(false)
 
+    // Track all auto-clearing timeouts so they can be cleaned up on unmount
+    const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+    useEffect(() => {
+        return () => {
+            timersRef.current.forEach((t) => clearTimeout(t))
+            timersRef.current.clear()
+        }
+    }, [])
+    const safeTimeout = useCallback((fn: () => void, ms: number) => {
+        const t = setTimeout(() => {
+            timersRef.current.delete(t)
+            fn()
+        }, ms)
+        timersRef.current.add(t)
+        return t
+    }, [])
+
     const isOnline = server?.status === "Online"
     const modrinthContext = useMemo(() => {
         if (!server) return null
@@ -357,10 +374,11 @@ export function ServerDetailPage() {
     // Backup completion subscriber
     useEffect(() => {
         if (!id) return
+        let backupDoneTimer: ReturnType<typeof setTimeout> | null = null
         const unsubscribe = window.context.onBackupCompleted(({ serverId }) => {
             if (serverId === id) {
-                // Backup completed - refresh the list
-                setTimeout(() => {
+                // Backup completed - refresh the list after a short delay
+                backupDoneTimer = setTimeout(() => {
                     setCreatingBackup(false);
                     setBackupPercent(0);
                     setBackupStage('idle');
@@ -369,7 +387,10 @@ export function ServerDetailPage() {
                 }, 1000);
             }
         })
-        return unsubscribe
+        return () => {
+            unsubscribe()
+            if (backupDoneTimer) clearTimeout(backupDoneTimer)
+        }
     }, [id])
 
     // Stats subscriber
@@ -555,7 +576,7 @@ export function ServerDetailPage() {
         const address = `${localIp}:${port}`
         await navigator.clipboard.writeText(address)
         setIpCopied(true)
-        setTimeout(() => setIpCopied(false), 2000)
+        safeTimeout(() => setIpCopied(false), 2000)
     }
 
     const handleCopyNgrokUrl = async () => {
@@ -563,7 +584,7 @@ export function ServerDetailPage() {
         if (url) {
             await navigator.clipboard.writeText(url)
             setNgrokUrlCopied(true)
-            setTimeout(() => setNgrokUrlCopied(false), 2000)
+            safeTimeout(() => setNgrokUrlCopied(false), 2000)
         }
     }
 
@@ -616,7 +637,7 @@ export function ServerDetailPage() {
         setPropsSaving(false)
         if (result.success) {
             setPropsSuccess(true)
-            setTimeout(() => setPropsSuccess(false), 3000)
+            safeTimeout(() => setPropsSuccess(false), 3000)
         }
     }
 
@@ -960,7 +981,7 @@ export function ServerDetailPage() {
                 } : prev
             )
             setSettingsSuccess(true)
-            setTimeout(() => setSettingsSuccess(false), 3000)
+            safeTimeout(() => setSettingsSuccess(false), 3000)
         }
     }
 
@@ -1038,7 +1059,7 @@ export function ServerDetailPage() {
         if (result.success) {
             // maybe refresh file list?
              setSettingsSuccess(true)
-             setTimeout(() => setSettingsSuccess(false), 3000)
+             safeTimeout(() => setSettingsSuccess(false), 3000)
         } else {
              setError(result.error || "Failed to restore backup")
         }

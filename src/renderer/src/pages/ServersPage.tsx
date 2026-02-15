@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -86,6 +86,23 @@ export function ServersPage() {
     
     // Ref to track creation status without dependency cycle in useEffect
     const isCreatingRef = useRef(false)
+
+    // Track auto-clearing timeouts for cleanup on unmount
+    const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+    useEffect(() => {
+        return () => {
+            timersRef.current.forEach((t) => clearTimeout(t))
+            timersRef.current.clear()
+        }
+    }, [])
+    const safeTimeout = useCallback((fn: () => void, ms: number) => {
+        const t = setTimeout(() => {
+            timersRef.current.delete(t)
+            fn()
+        }, ms)
+        timersRef.current.add(t)
+        return t
+    }, [])
 
     // Form state
     const [newServerName, setNewServerName] = useState("")
@@ -182,7 +199,7 @@ export function ServersPage() {
             setShowCreateForm(false)
             setCreationProgress(null)
             setSuccessMessage(`Server "${result.server.name}" was created.`)
-            setTimeout(() => setSuccessMessage(null), 4000)
+            safeTimeout(() => setSuccessMessage(null), 4000)
         } else {
             setCreationError(result.error || "Unknown error occurred")
             setIsCreating(false)
@@ -225,7 +242,7 @@ export function ServersPage() {
             setImportZipPath(null)
             setImportName("")
             setSuccessMessage(`Server "${result.server.name}" was imported successfully.`)
-            setTimeout(() => setSuccessMessage(null), 4000)
+            safeTimeout(() => setSuccessMessage(null), 4000)
         } else {
             setImportError(result.error || "Failed to import server")
         }
@@ -245,7 +262,7 @@ export function ServersPage() {
             setRenameTarget(null)
             setRenameValue("")
             setSuccessMessage(`Server renamed to "${renameValue.trim()}"`)
-            setTimeout(() => setSuccessMessage(null), 4000)
+            safeTimeout(() => setSuccessMessage(null), 4000)
         } else {
             // Could show error toast here
             console.error("Failed to rename server:", result.error)

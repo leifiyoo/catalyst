@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Card,
   CardContent,
@@ -145,9 +145,19 @@ export function FirewallManager() {
     }
   }
 
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clean up success message timer on unmount
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current)
+    }
+  }, [])
+
   const showSuccess = (msg: string) => {
     setSuccess(msg)
-    setTimeout(() => setSuccess(null), 5000)
+    if (successTimerRef.current) clearTimeout(successTimerRef.current)
+    successTimerRef.current = setTimeout(() => setSuccess(null), 5000)
   }
 
   const showConfirmation = async (

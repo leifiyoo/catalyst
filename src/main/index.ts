@@ -189,9 +189,12 @@ app.whenReady().then(() => {
   createWindow();
 
   // Run auto backups checks (every 15 minutes to reduce overhead)
-  setInterval(() => {
+  const autoBackupInterval = setInterval(() => {
     checkAndRunAutoBackups();
   }, 15 * 60 * 1000);
+
+  // Clean up interval on app quit
+  app.on("will-quit", () => clearInterval(autoBackupInterval));
 
   // Clean up stale "Online" statuses from previous session
   const mainWin = BrowserWindow.getAllWindows()[0];
@@ -718,8 +721,16 @@ app.whenReady().then(() => {
     return firewallIsAdmin();
   });
 
-  // Signal app readiness to renderer for splash screen dismissal
+  // Signal app readiness to renderer for splash screen dismissal.
+  // Actually wait for initial data to be loaded so the splash screen
+  // hides only when the dashboard has something to show.
   ipcMain.handle("app:ready", async () => {
+    try {
+      // Pre-load server list so the dashboard renders with data
+      await getServers();
+    } catch {
+      // Non-fatal — the dashboard will show an empty state
+    }
     return { ready: true };
   });
 

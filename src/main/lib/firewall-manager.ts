@@ -8,7 +8,7 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { writeFile, readFile, mkdir } from "fs/promises";
+import { writeFile, readFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { app } from "electron";
 
@@ -153,21 +153,61 @@ async function runNetsh(args: string[]): Promise<string> {
   }
 
   const isAdmin = await checkAdminPrivileges();
-  if (!isAdmin) {
-    throw new Error(
-      "Administrator privileges required. Please restart Catalyst as Administrator to manage firewall rules."
-    );
+
+  if (isAdmin) {
+    // Already elevated — run netsh directly
+    try {
+      const { stdout } = await execFileAsync("netsh", args, {
+        timeout: 30000,
+        windowsHide: true,
+      });
+      return stdout;
+    } catch (err: any) {
+      const message = err?.stderr || err?.message || "Unknown netsh error";
+      throw new Error(`netsh command failed: ${message}`);
+    }
   }
 
+  // Not elevated — use PowerShell Start-Process with -Verb RunAs to request UAC elevation.
+  // We run netsh via a hidden PowerShell process that captures stdout to a temp file.
   try {
-    const { stdout } = await execFileAsync("netsh", args, {
-      timeout: 30000,
-      windowsHide: true,
-    });
-    return stdout;
+    const netshArgs = args.map((a) => `'${a.replace(/'/g, "''")}'`).join(",");
+    // Build a PowerShell script that:
+    //  1. Runs netsh elevated via Start-Process -Verb RunAs
+    //  2. Captures output to a temp file so we can read it back
+    const tmpFile = join(app.getPath("temp"), `catalyst_fw_${Date.now()}.txt`);
+    const psScript = [
+      `$tmp = '${tmpFile.replace(/'/g, "''")}';`,
+      `$p = Start-Process -FilePath 'netsh' -ArgumentList ${netshArgs}`,
+      `-Verb RunAs -WindowStyle Hidden -Wait -PassThru`,
+      `-RedirectStandardOutput $tmp;`,
+      `exit $p.ExitCode`,
+    ].join(" ");
+
+    const { stdout: _psOut } = await execFileAsync(
+      "powershell",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript],
+      { timeout: 60000, windowsHide: true }
+    );
+
+    // Read the captured output
+    try {
+      const output = await readFile(tmpFile, "utf-8");
+      // Clean up temp file (best-effort)
+      unlink(tmpFile).catch(() => {});
+      return output;
+    } catch {
+      // If we can't read the temp file, the command likely still succeeded
+      return "";
+    }
   } catch (err: any) {
-    const message = err?.stderr || err?.message || "Unknown netsh error";
-    throw new Error(`netsh command failed: ${message}`);
+    const message = err?.stderr || err?.message || "Unknown error";
+    if (message.includes("canceled") || message.includes("The operation was canceled")) {
+      throw new Error(
+        "Administrator privileges required. The UAC prompt was cancelled. Please approve the elevation request to manage firewall rules."
+      );
+    }
+    throw new Error(`Elevated netsh command failed: ${message}`);
   }
 }
 

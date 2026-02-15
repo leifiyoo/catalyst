@@ -21,12 +21,12 @@ export function UpdateNotifier() {
     } | null>(null);
 
     useEffect(() => {
-        const check = async () => {
+        let cancelled = false;
+
+        const delayTimer = setTimeout(async () => {
             try {
-                // Wait a bit to ensure the app is fully loaded visually
-                await new Promise(resolve => setTimeout(resolve, 6000));
-                
                 const result = await window.context.checkForUpdates();
+                if (cancelled) return;
                 if (result.updateAvailable) {
                     setUpdateInfo({
                         latestVersion: result.latestVersion,
@@ -39,9 +39,12 @@ export function UpdateNotifier() {
             } catch (err) {
                 console.error("Failed to check for updates:", err);
             }
-        };
+        }, 6000);
 
-        check();
+        return () => {
+            cancelled = true;
+            clearTimeout(delayTimer);
+        };
     }, []);
 
     const handleUpdate = () => {
