@@ -407,12 +407,20 @@ export type TCPShieldConfig = {
 
 export type TCPShieldTutorialStatus = "not-started" | "in-progress" | "completed";
 
+export type TCPShieldBackendEntry = {
+  address: string;
+  port: number;
+};
+
 export type TCPShieldTutorialConfig = {
   tutorialStatus: TCPShieldTutorialStatus;
   currentStep: number;
   protectedCname: string;
   domain: string;
+  backends: TCPShieldBackendEntry[];
+  /** @deprecated Use backends array instead */
   backendAddress: string;
+  /** @deprecated Use backends array instead */
   backendPort: number;
   debug: boolean;
 };
@@ -425,7 +433,7 @@ export type TCPShieldTutorialStep = {
   hasInput?: boolean;
   inputLabel?: string;
   inputPlaceholder?: string;
-  inputField?: keyof Pick<TCPShieldTutorialConfig, "protectedCname" | "backendAddress" | "backendPort">;
+  inputField?: "protectedCname" | "backendAddress" | "backendPort" | "domain";
   hasExternalLink?: boolean;
   externalLinkUrl?: string;
   externalLinkLabel?: string;
