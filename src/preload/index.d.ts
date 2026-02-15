@@ -74,6 +74,20 @@ import {
   SetTCPShieldTutorialConfigFn,
   ResetTCPShieldTutorialFn,
   TCPShieldTutorialStep,
+  FirewallListRulesFn,
+  FirewallDeleteRuleFn,
+  FirewallDeleteAllRulesFn,
+  FirewallAddAllowRuleFn,
+  FirewallAddBlockRuleFn,
+  FirewallAddTcpShieldRulesFn,
+  FirewallTcpShieldLockdownFn,
+  FirewallAddCustomWhitelistFn,
+  FirewallSaveSnapshotFn,
+  FirewallLoadSnapshotFn,
+  FirewallRollbackFn,
+  FirewallGetAuditLogFn,
+  FirewallGetTcpShieldIpsFn,
+  FirewallGenerateCodeFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -171,6 +185,21 @@ declare global {
       tcpshieldSetTutorialConfig: SetTCPShieldTutorialConfigFn;
       tcpshieldResetTutorial: ResetTCPShieldTutorialFn;
       tcpshieldGetTutorialSteps: () => Promise<TCPShieldTutorialStep[]>;
+      // Firewall
+      firewallListRules: FirewallListRulesFn;
+      firewallDeleteRule: FirewallDeleteRuleFn;
+      firewallDeleteAllRules: FirewallDeleteAllRulesFn;
+      firewallAddAllowRule: FirewallAddAllowRuleFn;
+      firewallAddBlockRule: FirewallAddBlockRuleFn;
+      firewallAddTcpShieldRules: FirewallAddTcpShieldRulesFn;
+      firewallTcpShieldLockdown: FirewallTcpShieldLockdownFn;
+      firewallAddCustomWhitelist: FirewallAddCustomWhitelistFn;
+      firewallSaveSnapshot: FirewallSaveSnapshotFn;
+      firewallLoadSnapshot: FirewallLoadSnapshotFn;
+      firewallRollback: FirewallRollbackFn;
+      firewallGetAuditLog: FirewallGetAuditLogFn;
+      firewallGetTcpShieldIps: FirewallGetTcpShieldIpsFn;
+      firewallGenerateCode: FirewallGenerateCodeFn;
     };
   }
 }
