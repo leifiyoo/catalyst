@@ -180,9 +180,8 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     // Loading state
     if (loading && !data) {
         return (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <Spinner className="text-primary h-6 w-6" />
-                <span className="text-muted-foreground text-sm">Loading analytics...</span>
+            <div className="flex items-center justify-center py-20">
+                <Spinner className="text-muted-foreground h-5 w-5" />
             </div>
         )
     }

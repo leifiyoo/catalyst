@@ -44,23 +44,23 @@ Download the latest release from [**GitHub Releases**](../../releases).
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 20+
-- [Bun](https://bun.sh/) (package manager & runtime)
+- [npm](https://www.npmjs.com/) (included with Node.js)
 
 ### Setup
 
 ```bash
 # Install dependencies
-bun install
+npm install
 
 # Start in development mode
-bun run dev
+npm run dev
 ```
 
 ### Build
 
 ```bash
 # Windows
-bun run build:win
+npm run build:win
 
 # Linux
 # 🚧 Coming Soon
@@ -71,10 +71,10 @@ bun run build:win
 
 ```bash
 # Run unit tests
-bun run test:unit
+npm run test:unit
 
 # Run tests with coverage
-bun run coverage
+npm run coverage
 ```
 
 ---
