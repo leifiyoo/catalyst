@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -73,15 +73,15 @@ export function DashboardPage() {
         return unsubscribe
     }, [])
 
-    const handleDeleteServer = async (server: ServerRecord) => {
+    const handleDeleteServer = useCallback(async (server: ServerRecord) => {
         const result = await window.context.deleteServer(server.id)
         if (result.success) {
             setServers((prev) => prev.filter((s) => s.id !== server.id))
         }
         setDeleteTarget(null)
-    }
+    }, [])
 
-    const formatRam = (ramMB: number) => {
+    const formatRam = useCallback((ramMB: number) => {
         if (ramMB >= 1024 && ramMB % 1024 === 0) {
             return `${ramMB / 1024} GB`
         }
@@ -89,11 +89,16 @@ export function DashboardPage() {
             return `${(ramMB / 1024).toFixed(1)} GB`
         }
         return `${ramMB} MB`
-    }
+    }, [])
 
-    const lastCreated = servers.length > 0
-        ? servers.reduce((a, b) => a.createdAt > b.createdAt ? a : b)
-        : null
+    const onlineCount = useMemo(() => servers.filter((s) => s.status === "Online").length, [servers])
+
+    const lastCreated = useMemo(() =>
+        servers.length > 0
+            ? servers.reduce((a, b) => a.createdAt > b.createdAt ? a : b)
+            : null,
+        [servers]
+    )
 
     return (
         <section className="flex flex-col gap-8 px-10 pb-10 pt-6">
@@ -133,7 +138,7 @@ export function DashboardPage() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="text-sm text-muted-foreground">
-                                {servers.filter((s) => s.status === "Online").length}{" "}
+                                {onlineCount}{" "}
                                 online now
                             </CardContent>
                         </Card>

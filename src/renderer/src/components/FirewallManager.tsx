@@ -59,6 +59,7 @@ export function FirewallManager() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabView>("rules")
+  const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null)
 
   // Servers for multi-server support
   const [servers, setServers] = useState<ServerRecord[]>([])
@@ -92,15 +93,18 @@ export function FirewallManager() {
   // Snapshot
   const [hasSnapshot, setHasSnapshot] = useState(false)
 
-  // Load servers
+  // Check admin privileges and load data on mount
   useEffect(() => {
     loadServers()
-  }, [])
-
-  // Load rules when component mounts
-  useEffect(() => {
-    loadRules()
-    checkSnapshot()
+    window.context.firewallIsAdmin().then((admin) => {
+      setIsAdminUser(admin)
+      if (admin) {
+        loadRules()
+        checkSnapshot()
+      }
+    }).catch(() => {
+      setIsAdminUser(false)
+    })
   }, [])
 
   const loadServers = async () => {
@@ -429,6 +433,17 @@ export function FirewallManager() {
               </SelectContent>
             </Select>
           </div>
+        )}
+
+        {/* Admin privilege warning */}
+        {isAdminUser === false && (
+          <Alert className="border-amber-500/40 bg-amber-500/10">
+            <ShieldAlert className="h-4 w-4 text-amber-500" />
+            <AlertTitle className="text-amber-500">Administrator Required</AlertTitle>
+            <AlertDescription className="text-muted-foreground">
+              Firewall management requires administrator privileges. Please restart Catalyst as Administrator to manage firewall rules.
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Status alerts */}
