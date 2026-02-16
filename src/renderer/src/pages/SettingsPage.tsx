@@ -30,8 +30,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { CheckCircle2, ExternalLink, Trash2 } from "lucide-react"
 import { getStoredTheme, setStoredTheme, type ThemeMode } from "@/utils/theme"
-import { TCPShieldSettings } from "@/components/TCPShieldSettings"
-import { FirewallManager } from "@/components/FirewallManager"
 
 export function SettingsPage() {
     const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -269,12 +267,6 @@ export function SettingsPage() {
                             </div>
                         </CardContent>
                     </Card>
-                    
-                    {/* TCPShield Settings */}
-                    <TCPShieldSettings />
-
-                    {/* Windows Firewall Manager */}
-                    <FirewallManager />
 
                     {/* Info Card */}
                     <Card className="bg-card/70">
