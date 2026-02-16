@@ -61,33 +61,6 @@ import {
   OnNgrokUrlChangedFn,
   GetLocalIpFn,
   GetAnalyticsDataFn,
-  SetTCPShieldApiKeyFn,
-  GetTCPShieldStatusFn,
-  EnableTCPShieldFn,
-  DisableTCPShieldFn,
-  GetTCPShieldConfigFn,
-  SetTCPShieldConfigFn,
-  ListTCPShieldNetworksFn,
-  AddTCPShieldBackendFn,
-  RemoveTCPShieldBackendFn,
-  GetTCPShieldTutorialConfigFn,
-  SetTCPShieldTutorialConfigFn,
-  ResetTCPShieldTutorialFn,
-  TCPShieldTutorialStep,
-  FirewallListRulesFn,
-  FirewallDeleteRuleFn,
-  FirewallDeleteAllRulesFn,
-  FirewallAddAllowRuleFn,
-  FirewallAddBlockRuleFn,
-  FirewallAddTcpShieldRulesFn,
-  FirewallTcpShieldLockdownFn,
-  FirewallAddCustomWhitelistFn,
-  FirewallSaveSnapshotFn,
-  FirewallLoadSnapshotFn,
-  FirewallRollbackFn,
-  FirewallGetAuditLogFn,
-  FirewallGetTcpShieldIpsFn,
-  FirewallGenerateCodeFn,
 } from "@shared/types";
 
 // Type definition for the preload process
@@ -168,40 +141,6 @@ declare global {
       removeNgrokAuthtoken: () => Promise<{ success: boolean; error?: string }>;
       getAnalyticsData: GetAnalyticsDataFn;
       getSystemInfo: () => Promise<{ totalMemoryMB: number; maxRamMB: number }>;
-      // TCPShield
-      tcpshieldSetApiKey: SetTCPShieldApiKeyFn;
-      tcpshieldRemoveApiKey: () => Promise<{ success: boolean; error?: string }>;
-      tcpshieldGetApiKeyCensored: () => Promise<string | null>;
-      tcpshieldGetStatus: GetTCPShieldStatusFn;
-      tcpshieldEnable: EnableTCPShieldFn;
-      tcpshieldDisable: DisableTCPShieldFn;
-      tcpshieldGetConfig: GetTCPShieldConfigFn;
-      tcpshieldSetConfig: SetTCPShieldConfigFn;
-      tcpshieldListNetworks: ListTCPShieldNetworksFn;
-      tcpshieldAddBackend: AddTCPShieldBackendFn;
-      tcpshieldRemoveBackend: RemoveTCPShieldBackendFn;
-      // TCPShield Tutorial
-      tcpshieldGetTutorialConfig: GetTCPShieldTutorialConfigFn;
-      tcpshieldSetTutorialConfig: SetTCPShieldTutorialConfigFn;
-      tcpshieldResetTutorial: ResetTCPShieldTutorialFn;
-      tcpshieldGetTutorialSteps: () => Promise<TCPShieldTutorialStep[]>;
-      // Firewall
-      firewallListRules: FirewallListRulesFn;
-      firewallDeleteRule: FirewallDeleteRuleFn;
-      firewallDeleteAllRules: FirewallDeleteAllRulesFn;
-      firewallAddAllowRule: FirewallAddAllowRuleFn;
-      firewallAddBlockRule: FirewallAddBlockRuleFn;
-      firewallAddTcpShieldRules: FirewallAddTcpShieldRulesFn;
-      firewallTcpShieldLockdown: FirewallTcpShieldLockdownFn;
-      firewallAddCustomWhitelist: FirewallAddCustomWhitelistFn;
-      firewallSaveSnapshot: FirewallSaveSnapshotFn;
-      firewallLoadSnapshot: FirewallLoadSnapshotFn;
-      firewallRollback: FirewallRollbackFn;
-      firewallGetAuditLog: FirewallGetAuditLogFn;
-      firewallGetTcpShieldIps: FirewallGetTcpShieldIpsFn;
-      firewallGenerateCode: FirewallGenerateCodeFn;
-      firewallIsAdmin: () => Promise<boolean>;
-      firewallRequestElevation: () => Promise<{ success: boolean; error?: string }>;
       // App readiness
       appReady: () => Promise<{ ready: boolean }>;
     };
