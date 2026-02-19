@@ -364,7 +364,11 @@ export async function refreshServerStatuses(mainWindow: BrowserWindow): Promise<
   const servers = await getServers();
   for (const server of servers) {
     if (server.status === "Online" && !runningServers.has(server.id)) {
-      await updateServerStatus(server.id, "Offline");
+      try {
+        await updateServerStatus(server.id, "Offline");
+      } catch (err) {
+        console.error('[ServerRunner] Failed to update server status in storage:', err);
+      }
       sendStatusUpdate(mainWindow, { serverId: server.id, status: "Offline" });
     }
   }
@@ -430,7 +434,11 @@ export async function startServer(
     runningServers.set(serverId, child);
 
     sendConsoleLine(mainWindow, serverId, "Starting server...", "system");
-    await updateServerStatus(serverId, "Online");
+    try {
+      await updateServerStatus(serverId, "Online");
+    } catch (err) {
+      console.error('[ServerRunner] Failed to update server status in storage:', err);
+    }
     sendStatusUpdate(mainWindow, { serverId, status: "Online" });
     startStatsPolling(serverId, mainWindow, server.ramMB, server.framework);
 
@@ -511,7 +519,11 @@ export async function startServer(
             `Failed to restart server: ${restartResult.error}`,
             "stderr"
           );
-          await updateServerStatus(serverId, "Offline");
+          try {
+            await updateServerStatus(serverId, "Offline");
+          } catch (err) {
+            console.error('[ServerRunner] Failed to update server status in storage:', err);
+          }
           sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
           return;
         }
@@ -539,7 +551,13 @@ export async function startServer(
         return;
       }
       
-      await updateServerStatus(serverId, "Offline");
+      // Update server status to Offline in storage
+      try {
+        await updateServerStatus(serverId, "Offline");
+      } catch (err) {
+        console.error('[ServerRunner] Failed to update server status in storage:', err);
+      }
+      // Always send status update to UI even if storage save failed
       if (!mainWindow.isDestroyed()) {
         sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
       }
@@ -551,7 +569,11 @@ export async function startServer(
       if (!mainWindow.isDestroyed()) {
         sendConsoleLine(mainWindow, serverId, `Error: ${err.message}`, "stderr");
       }
-      await updateServerStatus(serverId, "Offline");
+      try {
+        await updateServerStatus(serverId, "Offline");
+      } catch (err) {
+        console.error('[ServerRunner] Failed to update server status in storage:', err);
+      }
       if (!mainWindow.isDestroyed()) {
         sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
       }
