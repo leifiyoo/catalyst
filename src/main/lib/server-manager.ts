@@ -107,6 +107,82 @@ const SERVERS_JSON = path.join(app.getPath("userData"), "servers.json");
 const SERVERS_JSON_BAK = path.join(app.getPath("userData"), "servers.json.bak");
 const SERVERS_JSON_TMP = path.join(app.getPath("userData"), "servers.json.tmp");
 
+// Backup rotation settings
+const MAX_BACKUP_COUNT = 5;
+const getBackupPath = (index: number) => path.join(app.getPath("userData"), `servers.json.bak.${index}`);
+
+/**
+ * Performs backup rotation:
+ * - Keeps up to MAX_BACKUP_COUNT numbered backups (servers.json.bak.0, .bak.1, etc.)
+ * - The most recent backup is .bak.0, oldest is .bak.MAX_BACKUP_COUNT-1
+ * - Also maintains a single servers.json.bak for compatibility
+ */
+async function rotateBackups(): Promise<void> {
+  try {
+    // First, try to copy current file to .bak.0
+    try {
+      await fs.copyFile(SERVERS_JSON, getBackupPath(0));
+    } catch {
+      // No current file to backup, skip
+    }
+
+    // Shift existing backups: .bak.4 -> .bak.5 (deleted), .bak.3 -> .bak.4, etc.
+    for (let i = MAX_BACKUP_COUNT - 1; i >= 0; i--) {
+      const currentPath = getBackupPath(i);
+      const nextPath = getBackupPath(i + 1);
+
+      try {
+        await fs.access(currentPath);
+        // Current backup exists
+        if (i === MAX_BACKUP_COUNT - 1) {
+          // This is the oldest backup, delete it
+          await fs.unlink(currentPath);
+        } else {
+          // Shift this backup up
+          await fs.copyFile(currentPath, nextPath);
+        }
+      } catch {
+        // Backup doesn't exist, skip
+      }
+    }
+
+    // Also maintain single .bak file for compatibility
+    try {
+      await fs.copyFile(getBackupPath(0), SERVERS_JSON_BAK);
+    } catch {
+      // Ignore if .bak.0 doesn't exist
+    }
+
+  } catch (err) {
+    console.warn('[ServerManager] Backup rotation failed:', err);
+    // Non-fatal, continue anyway
+  }
+}
+
+/**
+ * Tries to load backups in order of recency.
+ */
+async function tryLoadNumberedBackups(): Promise<ServerRecord[] | null> {
+  // Try numbered backups first (most recent first)
+  for (let i = 0; i < MAX_BACKUP_COUNT; i++) {
+    try {
+      const backupPath = getBackupPath(i);
+      const data = await fs.readFile(backupPath, 'utf-8');
+      if (isValidJson(data)) {
+        const records = JSON.parse(data) as unknown[];
+        const validRecords = validateServerRecords(records);
+        if (validRecords.length > 0) {
+          console.log('[ServerManager] Recovered from backup', i, 'with', validRecords.length, 'servers');
+          return validRecords;
+        }
+      }
+    } catch {
+      // Backup doesn't exist or is invalid, try next
+    }
+  }
+  return null;
+}
+
 // ---- Framework Download Resolvers ----
 
 const PAPER_API_BASE = "https://api.papermc.io/v2/projects/paper";
@@ -274,43 +350,264 @@ async function ensureServersJson(): Promise<void> {
   await fs.writeFile(SERVERS_JSON, "[]", "utf-8");
 }
 
-async function loadServerList(): Promise<ServerRecord[]> {
+/**
+ * Validates that a string is valid JSON and can be parsed.
+ * Returns true if valid, false otherwise.
+ */
+function isValidJson(str: string): boolean {
   try {
-    const data = await fs.readFile(SERVERS_JSON, "utf-8");
-    return JSON.parse(data) as ServerRecord[];
+    JSON.parse(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates a server record has required fields.
+ */
+function isValidServerRecord(record: unknown): record is ServerRecord {
+  if (!record || typeof record !== 'object') return false;
+  const r = record as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.name === 'string' &&
+    typeof r.serverPath === 'string' &&
+    typeof r.framework === 'string' &&
+    typeof r.version === 'string'
+  );
+}
+
+/**
+ * Validates a list of server records.
+ * Returns only valid records and logs warnings for invalid ones.
+ */
+function validateServerRecords(records: unknown[]): ServerRecord[] {
+  const valid: ServerRecord[] = [];
+  for (const record of records) {
+    if (isValidServerRecord(record)) {
+      valid.push(record);
+    } else {
+      console.warn('[ServerManager] Invalid server record found and skipped:', record);
+    }
+  }
+  return valid;
+}
+
+/**
+ * Checks if a server's folder exists on disk.
+ * Returns true if exists, false otherwise.
+ */
+async function validateServerFolder(server: ServerRecord): Promise<boolean> {
+  try {
+    await fs.access(server.serverPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Attempts to recover server records from the backup file.
+ */
+async function tryLoadBackup(): Promise<ServerRecord[] | null> {
+  try {
+    const backupData = await fs.readFile(SERVERS_JSON_BAK, 'utf-8');
+    if (isValidJson(backupData)) {
+      const records = JSON.parse(backupData) as unknown[];
+      const validRecords = validateServerRecords(records);
+      if (validRecords.length > 0) {
+        console.log('[ServerManager] Successfully recovered', validRecords.length, 'servers from backup');
+        return validRecords;
+      }
+    }
   } catch (err) {
-    if (isEnoent(err)) {
-      console.debug("No servers.json found, creating default.");
-      await ensureServersJson();
-      return [];
+    console.warn('[ServerManager] Failed to load backup file:', err);
+  }
+  return null;
+}
+
+/**
+ * Attempts to recover server records by scanning the servers directory for orphaned folders.
+ * This is a last-resort recovery mechanism.
+ * Note: This function takes alreadyLoadedServers as a parameter to avoid infinite recursion.
+ */
+async function recoverFromOrphanedFolders(alreadyLoadedServers: ServerRecord[]): Promise<ServerRecord[]> {
+  console.log('[ServerManager] Attempting to recover servers from orphaned folders...');
+  const recovered: ServerRecord[] = [];
+
+  try {
+    const entries = await fs.readdir(SERVERS_DIR, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const serverPath = path.join(SERVERS_DIR, entry.name);
+
+      // Check if this folder might be a server (has server.jar or similar)
+      try {
+        const files = await fs.readdir(serverPath);
+        const hasJar = files.some(f => f.endsWith('.jar'));
+
+        if (hasJar) {
+          // Try to find an existing server with this path
+          const existing = alreadyLoadedServers.find(s => s.serverPath === serverPath);
+
+          if (existing) {
+            recovered.push(existing);
+          } else {
+            // Create a new record for this orphaned folder
+            const newServer: ServerRecord = {
+              id: crypto.randomUUID(),
+              name: entry.name,
+              framework: 'Unknown',
+              version: 'Unknown',
+              ramMB: 2048,
+              status: 'Offline',
+              players: '0/0',
+              createdAt: new Date().toISOString(),
+              serverPath,
+            };
+            console.log('[ServerManager] Recovered orphaned server folder:', serverPath);
+            recovered.push(newServer);
+          }
+        }
+      } catch (err) {
+        console.warn('[ServerManager] Could not scan folder:', serverPath, err);
+      }
     }
-    try {
-      const backup = await fs.readFile(SERVERS_JSON_BAK, "utf-8");
-      return JSON.parse(backup) as ServerRecord[];
-    } catch {
-      console.error("Failed to read servers.json:", err);
-      return [];
+  } catch (err) {
+    console.error('[ServerManager] Failed to scan servers directory for recovery:', err);
+  }
+
+  return recovered;
+}
+
+async function loadServerList(): Promise<ServerRecord[]> {
+  // First, try to load from primary file
+  try {
+    const data = await fs.readFile(SERVERS_JSON, 'utf-8');
+
+    // Validate JSON integrity
+    if (!isValidJson(data)) {
+      console.error('[ServerManager] Primary servers.json is corrupted, trying backup...');
+      throw new Error('Corrupted JSON');
     }
+
+    const records = JSON.parse(data) as unknown[];
+    const validRecords = validateServerRecords(records);
+
+    // Validate each server's folder exists
+    const validatedRecords: ServerRecord[] = [];
+    for (const server of validRecords) {
+      const folderExists = await validateServerFolder(server);
+      if (folderExists) {
+        validatedRecords.push(server);
+      } else {
+        console.warn('[ServerManager] Server folder not found for server:', server.name, server.serverPath);
+        // Don't remove - mark as missing but keep record
+        validatedRecords.push({ ...server, status: 'Offline' as const });
+      }
+    }
+
+    console.log('[ServerManager] Loaded', validatedRecords.length, 'servers from primary file');
+    return validatedRecords;
+
+  } catch (err) {
+    // Primary file failed, try numbered backups first
+    console.warn('[ServerManager] Primary servers.json load failed, trying numbered backups:', err);
+
+    const numberedBackupRecords = await tryLoadNumberedBackups();
+    if (numberedBackupRecords) {
+      return numberedBackupRecords;
+    }
+
+    // Try legacy single backup file
+    console.warn('[ServerManager] Numbered backups failed, trying legacy backup file...');
+    const backupRecords = await tryLoadBackup();
+    if (backupRecords) {
+      return backupRecords;
+    }
+
+    // Backup also failed, try to recover from orphaned folders
+    console.warn('[ServerManager] Backup load failed, attempting recovery from orphaned folders...');
+    const recoveredRecords = await recoverFromOrphanedFolders([]);
+    if (recoveredRecords.length > 0) {
+      // Save recovered records
+      await saveServerList(recoveredRecords);
+      return recoveredRecords;
+    }
+
+    // Everything failed - create new empty file but log error
+    console.error('[ServerManager] ALL recovery attempts failed! Creating new empty server list.');
+    await ensureServersJson();
+    return [];
   }
 }
 
 async function saveServerList(servers: ServerRecord[]): Promise<void> {
   const payload = JSON.stringify(servers, null, 2);
-  await fs.writeFile(SERVERS_JSON_TMP, payload, "utf-8");
 
+  // Step 1: Validate the data is valid JSON before writing
+  if (!isValidJson(payload)) {
+    throw new Error('[ServerManager] Failed to serialize server list to valid JSON');
+  }
+
+  // Step 2: Write to temp file
+  await fs.writeFile(SERVERS_JSON_TMP, payload, 'utf-8');
+
+  // Step 3: Validate temp file was written correctly
+  const tempData = await fs.readFile(SERVERS_JSON_TMP, 'utf-8');
+  if (!isValidJson(tempData)) {
+    // Temp file is corrupted, abort and don't touch original
+    await fs.unlink(SERVERS_JSON_TMP).catch(() => {});
+    throw new Error('[ServerManager] Temp file validation failed, aborting save');
+  }
+
+  // Step 4: Check if current file exists and preserve it as backup BEFORE rename
+  let hadExistingFile = false;
   try {
+    await fs.access(SERVERS_JSON);
+    hadExistingFile = true;
+    // Copy current to backup (only after validating temp)
     await fs.copyFile(SERVERS_JSON, SERVERS_JSON_BAK);
   } catch {
-    // Ignore if there is no prior file
+    // No existing file, that's fine
   }
 
+  // Step 5: Atomically rename temp to current (this is the critical step)
+  // On POSIX systems, rename is atomic if both files are on the same filesystem
   try {
-    await fs.rm(SERVERS_JSON, { force: true });
-  } catch {
-    // Ignore if the file is missing
-  }
+    await fs.rename(SERVERS_JSON_TMP, SERVERS_JSON);
+    console.log('[ServerManager] Successfully saved', servers.length, 'servers');
 
-  await fs.rename(SERVERS_JSON_TMP, SERVERS_JSON);
+    // Step 6: Perform backup rotation after successful save
+    await rotateBackups();
+  } catch (err) {
+    // Rename failed! This is critical.
+    // Try to restore from backup if we had one
+    console.error('[ServerManager] Atomic rename failed, attempting recovery:', err);
+
+    if (hadExistingFile) {
+      try {
+        // Restore backup
+        await fs.copyFile(SERVERS_JSON_BAK, SERVERS_JSON);
+        console.log('[ServerManager] Restored server list from backup');
+      } catch {
+        // Both files might be corrupted, log error
+        console.error('[ServerManager] CRITICAL: Failed to restore from backup!');
+      }
+    }
+
+    // Clean up temp file if it still exists
+    try {
+      await fs.unlink(SERVERS_JSON_TMP);
+    } catch {
+      // Ignore
+    }
+
+    throw err;
+  }
 }
 
 function downloadFile(
