@@ -22,7 +22,6 @@ Catalyst makes it easy to create, configure, and manage multiple Minecraft serve
 - 💾 **Automated Backups** — Configurable backup schedules to keep your worlds safe
 - 🌐 **Ngrok Integration** — Share your server instantly with built-in tunnel support
 - ⚙️ **Server Properties Editor** — Edit server.properties, whitelist, and banlist from the UI
-- 🎨 **Modern Dark UI** — Custom frameless window with a polished, modern interface and 3D splash screen
 - 🔄 **Auto-Updates** — Built-in update checker to stay on the latest version
 - 💻 **Cross-Platform** — Supports Windows (Linux coming soon)
 
