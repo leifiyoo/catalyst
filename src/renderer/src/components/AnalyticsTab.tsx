@@ -25,7 +25,7 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
                 </div>
             }
         >
-            <AnalyticsTabContent serverId={serverId} />
+            <AnalyticsTabContent key={serverId} serverId={serverId} />
         </Suspense>
     )
 }

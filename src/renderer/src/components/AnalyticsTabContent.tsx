@@ -128,11 +128,6 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     }, [serverId])
 
     useEffect(() => {
-        setLoading(true)
-        setData(null)
-        setNoData(false)
-        setServerOffline(false)
-        lastDataRef.current = null
         loadData()
 
         pollRef.current = setInterval(loadData, POLL_INTERVAL)
