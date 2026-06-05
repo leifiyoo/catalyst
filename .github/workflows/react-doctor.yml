@@ -1,0 +1,14 @@
+            - name: React Doctor
+  # You may pin to the exact commit or the version.
+  # uses: millionco/react-doctor@bf21a87d53e09d2c519e72b02fd7bd1680544c93
+  uses: millionco/react-doctor@0.0.1
+  with:
+    # Project directory to scan
+    directory: # optional, default is .
+    # Show file details per rule
+    verbose: # optional, default is true
+    # Workspace project(s) to scan (comma-separated)
+    project: # optional
+    # Node.js version to use
+    node-version: # optional, default is 20
+          
