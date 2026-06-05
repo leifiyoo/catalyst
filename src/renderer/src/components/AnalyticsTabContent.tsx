@@ -98,9 +98,20 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     const [noData, setNoData] = useState(false)
     const [serverOffline, setServerOffline] = useState(false)
     const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+    const [prevServerId, setPrevServerId] = useState(serverId)
     const [showSettings, setShowSettings] = useState(false)
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const lastDataRef = useRef<AnalyticsData | null>(null)
+
+    if (serverId !== prevServerId) {
+        setPrevServerId(serverId)
+        setLoading(true)
+        setData(null)
+        setNoData(false)
+        setServerOffline(false)
+        setLastUpdated(null)
+        lastDataRef.current = null
+    }
 
     const loadData = useCallback(async () => {
         try {
@@ -128,18 +139,13 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     }, [serverId])
 
     useEffect(() => {
-        setLoading(true)
-        setData(null)
-        setNoData(false)
-        setServerOffline(false)
-        lastDataRef.current = null
         loadData()
 
         pollRef.current = setInterval(loadData, POLL_INTERVAL)
         return () => {
             if (pollRef.current) clearInterval(pollRef.current)
         }
-    }, [serverId, loadData])
+    }, [loadData])
 
     const formatPlayTime = (seconds: number) => {
         const hours = Math.floor(seconds / 3600)
