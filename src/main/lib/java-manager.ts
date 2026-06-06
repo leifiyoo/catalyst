@@ -1,8 +1,8 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
-import { createWriteStream } from "fs";
-import { spawn } from "child_process";
+import { createWriteStream, existsSync } from "fs";
+import { spawn, execSync, exec } from "child_process";
 import https from "https";
 import AdmZip from "adm-zip";
 
@@ -27,16 +27,16 @@ export function getRequiredJavaVersion(mcVersion: string): number {
   // Only handle MC 1.x logic
   if (major !== 1) return 8;
 
-  // 1.20+ -> Java 21 ("Compatible with 1.20 and above", "newest optimizations")
-  if (minor >= 20) return 21;
-  
-  // 1.17 - 1.19 -> Java 17 ("Officially recommended", "Best option for 1.17")
+  // 1.20.5+ -> Java 21
+  if (minor > 20 || (minor === 20 && parseInt(match[3] || "0") >= 5)) return 21;
+
+  // 1.17 - 1.20.4 -> Java 17
   if (minor >= 17) return 17;
   
-  // 1.12 - 1.16.5 -> Java 11 ("Java 11 also works well", "improve performance")
+  // 1.12 - 1.16.5 -> Java 11
   if (minor >= 12) return 11;
   
-  // 1.7.10 - 1.11.2 -> Java 8 ("Recommended Java: Java 8")
+  // 1.7.10 - 1.11.2 -> Java 8
   return 8;
 }
 
@@ -57,13 +57,150 @@ function getArchString(): string {
 }
 
 /**
+ * Tests if a Java executable works and returns its major version.
+ */
+export async function getJavaVersion(javaPath: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    // Wrap path in quotes to handle spaces
+    const cmd = process.platform === "win32" ? `"${javaPath}" -version` : `"${javaPath}" -version`;
+    exec(cmd, (error, _stdout, stderr) => {
+      if (error) {
+        // Fallback for some environments
+        exec(`${javaPath} -version`, (error2, _stdout2, stderr2) => {
+          if (error2) return resolve(null);
+          const versionStr = stderr2.split("\n")[0];
+          resolve(parseJavaVersion(versionStr));
+        });
+        return;
+      }
+      const versionStr = stderr.split("\n")[0];
+      resolve(parseJavaVersion(versionStr));
+    });
+  });
+}
+
+function parseJavaVersion(versionStr: string): number | null {
+  // openjdk version "21.0.2" ...
+  // java version "1.8.0_202"
+  const match = versionStr.match(/version "(\d+)/);
+  if (match) {
+    let v = parseInt(match[1]);
+    if (v === 1) {
+      const secondaryMatch = versionStr.match(/version "1\.(\d+)/);
+      if (secondaryMatch) v = parseInt(secondaryMatch[1]);
+    }
+    return v;
+  }
+  return null;
+}
+
+/**
+ * Scan common installation paths for Java runtimes.
+ */
+export async function discoverInstalledJavas(): Promise<Array<{ path: string; version: number }>> {
+  const found: Array<{ path: string; version: number }> = [];
+  const searchPaths = new Set<string>();
+
+  // 1. Check JAVA_HOME
+  if (process.env.JAVA_HOME) {
+    searchPaths.add(path.join(process.env.JAVA_HOME, "bin", process.platform === "win32" ? "java.exe" : "java"));
+  }
+
+  // 2. Check system PATH
+  try {
+    const whichCmd = process.platform === "win32" ? "where java" : "which java";
+    const pathOutput = execSync(whichCmd).toString().trim().split(/\r?\n/);
+    for (const p of pathOutput) {
+        if (p) searchPaths.add(p);
+    }
+  } catch {}
+
+  // 3. Platform specific common paths
+  const platformPaths: string[] = [];
+  if (process.platform === "win32") {
+    const programFiles = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter(Boolean) as string[];
+    const localApps = process.env.LOCALAPPDATA;
+    
+    for (const pf of programFiles) {
+        platformPaths.push(path.join(pf, "Java"));
+        platformPaths.push(path.join(pf, "Eclipse Foundation"));
+        platformPaths.push(path.join(pf, "AdoptOpenJDK"));
+        platformPaths.push(path.join(pf, "Amazon Corretto"));
+        platformPaths.push(path.join(pf, "BellSoft"));
+        platformPaths.push(path.join(pf, "Zulu"));
+    }
+    if (localApps) {
+        platformPaths.push(path.join(localApps, "Programs", "Eclipse Foundation"));
+    }
+  } else if (process.platform === "darwin") {
+    platformPaths.push("/Library/Java/JavaVirtualMachines");
+    platformPaths.push("/System/Library/Java/JavaVirtualMachines");
+  } else if (process.platform === "linux") {
+    platformPaths.push("/usr/lib/jvm");
+    platformPaths.push("/usr/java");
+  }
+
+  const discoveredBins = new Set<string>();
+  for (const basePath of platformPaths) {
+    try {
+      if (existsSync(basePath)) {
+        await findJavaBinaries(basePath, discoveredBins, 0);
+      }
+    } catch {}
+  }
+
+  const allPossiblePaths = new Set([...searchPaths, ...discoveredBins]);
+
+  for (const javaPath of allPossiblePaths) {
+    const version = await getJavaVersion(javaPath);
+    if (version) {
+      found.push({ path: javaPath, version });
+    }
+  }
+
+  // Add catalyst-managed runtimes
+  if (existsSync(RUNTIMES_DIR)) {
+    try {
+        const runtimes = await fs.readdir(RUNTIMES_DIR);
+        for (const r of runtimes) {
+            const rPath = path.join(RUNTIMES_DIR, r);
+            const jdkHome = await findJdkHome(rPath);
+            if (jdkHome) {
+                const bin = path.join(jdkHome, "bin", process.platform === "win32" ? "java.exe" : "java");
+                const version = await getJavaVersion(bin);
+                if (version) found.push({ path: bin, version });
+            }
+        }
+    } catch {}
+  }
+
+  // De-duplicate by path
+  const unique = Array.from(new Map(found.map(j => [j.path, j])).values());
+  return unique.sort((a, b) => b.version - a.version);
+}
+
+async function findJavaBinaries(dir: string, found: Set<string>, depth: number) {
+  if (depth > 4) return;
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await findJavaBinaries(fullPath, found, depth + 1);
+      } else if (entry.isFile() && (entry.name === "java" || entry.name === "java.exe")) {
+        // Only consider if in a bin directory or similar
+        if (fullPath.toLowerCase().includes("bin")) {
+            found.add(fullPath);
+        }
+      }
+    }
+  } catch {}
+}
+
+/**
  * Downloads a file from a URL with timeout and stall detection.
- * - Overall download timeout of 10 minutes
- * - Stall detection: aborts if no data received for 30 seconds
- * - Follows redirects
  */
 async function downloadFile(url: string, destPath: string, onProgress?: (downloaded: number, total: number) => void): Promise<void> {
-  // Use a unique temp path to avoid locking issues during download
   const tempPath = `${destPath}.${Date.now()}.tmp`;
 
   return new Promise((resolve, reject) => {
@@ -77,10 +214,8 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
 
     const file = createWriteStream(tempPath);
 
-    // Overall download timeout
     const overallTimer = setTimeout(() => {
       settle(() => {
-        console.error(`[java-manager] Download timed out after ${DOWNLOAD_TIMEOUT_MS / 1000}s for ${url}`);
         request.destroy();
         file.close();
         fs.unlink(tempPath).catch(() => {});
@@ -88,17 +223,15 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
       });
     }, DOWNLOAD_TIMEOUT_MS);
 
-    // Stall detection timer — reset on each data chunk
     let stallTimer: ReturnType<typeof setTimeout> | null = null;
     const resetStallTimer = () => {
       if (stallTimer) clearTimeout(stallTimer);
       stallTimer = setTimeout(() => {
         settle(() => {
-          console.error(`[java-manager] Download stalled (no data for ${DOWNLOAD_STALL_TIMEOUT_MS / 1000}s)`);
           request.destroy();
           file.close();
           fs.unlink(tempPath).catch(() => {});
-          reject(new Error(`Download stalled — no data received for ${DOWNLOAD_STALL_TIMEOUT_MS / 1000} seconds`));
+          reject(new Error(`Download stalled \u2014 no data received for ${DOWNLOAD_STALL_TIMEOUT_MS / 1000} seconds`));
         });
       }, DOWNLOAD_STALL_TIMEOUT_MS);
     };
@@ -109,7 +242,6 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
     };
 
     const request = https.get(url, (response) => {
-      // Handle redirects
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         cleanupTimers();
         file.close();
@@ -118,7 +250,6 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
         return;
       }
 
-      // Handle HTTP errors
       if (response.statusCode && (response.statusCode < 200 || response.statusCode >= 300)) {
         cleanupTimers();
         file.close();
@@ -130,7 +261,6 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
       const totalBytes = parseInt(response.headers['content-length'] || "0", 10);
       let downloadedBytes = 0;
 
-      // Start stall detection
       resetStallTimer();
 
       response.on('data', (chunk) => {
@@ -148,9 +278,7 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
                 settle(() => reject(err));
                 return;
             }
-            // Move to final destination safely
             try {
-                // Try to remove destination if it exists
                 try { await fs.rm(destPath, { force: true }); } catch {}
                 await fs.rename(tempPath, destPath);
                 settle(() => resolve());
@@ -171,21 +299,12 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
   });
 }
 
-/**
- * Extracts an archive to the destination directory.
- * - Windows (.zip): Uses adm-zip for reliable, synchronous extraction (no PowerShell dependency)
- * - Linux/macOS (.tar.gz): Uses tar with timeout and stderr capture
- */
 function extractArchive(archivePath: string, destDir: string): Promise<void> {
   if (process.platform === "win32") {
-    // Use adm-zip for Windows .zip extraction — much more reliable than PowerShell Expand-Archive
-    // which can hang or fail silently with encoded commands
     return new Promise((resolve, reject) => {
       try {
-        console.log(`[java-manager] Extracting ${archivePath} to ${destDir} using adm-zip`);
         const zip = new AdmZip(archivePath);
-        zip.extractAllTo(destDir, true); // true = overwrite existing files
-        console.log(`[java-manager] Extraction complete`);
+        zip.extractAllTo(destDir, true);
         resolve();
       } catch (err) {
         reject(new Error(`ZIP extraction failed: ${err instanceof Error ? err.message : String(err)}`));
@@ -193,7 +312,6 @@ function extractArchive(archivePath: string, destDir: string): Promise<void> {
     });
   }
 
-  // Unix (tar) - use -xzf for .tar.gz archives with proper error handling and timeout
   return new Promise((resolve, reject) => {
     let settled = false;
     const settle = (fn: () => void) => {
@@ -203,10 +321,7 @@ function extractArchive(archivePath: string, destDir: string): Promise<void> {
       }
     };
 
-    console.log(`[java-manager] Extracting ${archivePath} to ${destDir} using tar`);
     const proc = spawn("tar", ["-xzf", archivePath, "-C", destDir]);
-
-    // Capture stderr for error diagnostics
     let stderrOutput = "";
     if (proc.stderr) {
       proc.stderr.on("data", (data) => {
@@ -214,9 +329,7 @@ function extractArchive(archivePath: string, destDir: string): Promise<void> {
       });
     }
 
-    // Timeout: kill tar if it takes too long
     const timer = setTimeout(() => {
-      console.error(`[java-manager] tar extraction timed out after ${EXTRACTION_TIMEOUT_MS / 1000}s`);
       proc.kill("SIGKILL");
       settle(() => reject(new Error(`Extraction timed out after ${EXTRACTION_TIMEOUT_MS / 1000} seconds`)));
     }, EXTRACTION_TIMEOUT_MS);
@@ -224,7 +337,6 @@ function extractArchive(archivePath: string, destDir: string): Promise<void> {
     proc.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        console.log(`[java-manager] tar extraction complete`);
         settle(() => resolve());
       } else {
         const errMsg = stderrOutput.trim() ? `: ${stderrOutput.trim()}` : "";
@@ -239,10 +351,6 @@ function extractArchive(archivePath: string, destDir: string): Promise<void> {
   });
 }
 
-/**
- * Find the JDK home directory (the directory containing bin/, lib/, etc.)
- * by looking for the bin/ directory with the java executable.
- */
 async function findJdkHome(dir: string): Promise<string | null> {
   const executableName = process.platform === "win32" ? "java.exe" : "java";
   try {
@@ -250,10 +358,9 @@ async function findJdkHome(dir: string): Promise<string | null> {
     const candidate = path.join(binDir, executableName);
     try {
       await fs.access(candidate);
-      return dir; // This directory IS the JDK home
+      return dir;
     } catch {}
 
-    // Check subdirectories (Adoptium extracts into a nested folder like jdk-21.0.10+7)
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) {
@@ -266,60 +373,56 @@ async function findJdkHome(dir: string): Promise<string | null> {
 }
 
 /**
- * Downloads and sets up the required Java runtime.
- * Returns the path to the java executable.
- * Sets JAVA_HOME-relative paths correctly so jvm.cfg can be found.
- *
- * Improvements:
- * - Full try/catch with meaningful error messages and cleanup of partial files
- * - Validates downloaded archive size before extraction
- * - Logs progress at each stage for debugging
- *
- * @param version Java version (e.g. 8, 11, 17)
- * @param onProgress Callback used to report download/extraction progress
+ * Downloads and sets up the required Java runtime if no suitable version is found locally.
  */
 export async function ensureJavaInstalled(
     version: number,
-    onProgress?: (stage: 'downloading' | 'extracting', percent: number, downloaded?: number, total?: number) => void
+    onProgress?: (stage: 'downloading' | 'extracting' | 'discovering', percent: number, downloaded?: number, total?: number) => void
 ): Promise<string> {
+  // 1. Discover existing javas first
+  if (onProgress) onProgress('discovering', 0);
+  const installed = await discoverInstalledJavas();
+  
+  // Find a compatible version (exact or higher within reasonable limits)
+  // For Java 8, we want 8. For 17, 17 or 21. For 21, 21.
+  const bestMatch = installed.find(j => {
+      if (version === 8) return j.version === 8;
+      return j.version >= version;
+  });
+
+  if (bestMatch) {
+    if (onProgress) onProgress('discovering', 100);
+    console.log(`[java-manager] Found suitable local Java ${bestMatch.version} at ${bestMatch.path}`);
+    return bestMatch.path;
+  }
+
+  // Not found, proceed with download
   const runtimeName = `java-${version}`;
   const runtimePath = path.join(RUNTIMES_DIR, runtimeName);
   const executableName = process.platform === "win32" ? "java.exe" : "java";
-
-  // Adoptium delivers .zip on Windows, .tar.gz on Linux/macOS
   const archiveExt = process.platform === "win32" ? ".zip" : ".tar.gz";
   const archiveName = `java-${version}${archiveExt}`;
   const archivePath = path.join(RUNTIMES_DIR, archiveName);
 
   try {
-    // Ensure runtimes directory exists
-    console.log(`[java-manager] Ensuring runtimes directory exists: ${RUNTIMES_DIR}`);
     await fs.mkdir(RUNTIMES_DIR, { recursive: true });
 
-    // Check if existing installation is valid
+    // Double check managed runtimes dir specifically
     try {
-      const jdkHome = await findJdkHome(runtimePath);
-      if (jdkHome) {
-        const existingBin = path.join(jdkHome, "bin", executableName);
-        await fs.access(existingBin);
-        console.log(`[java-manager] Java ${version} already installed at ${existingBin}`);
-        if (onProgress) onProgress('downloading', 100);
-        return existingBin;
-      }
-    } catch {
-      // Not installed or invalid — proceed with download
-    }
+        const jdkHome = await findJdkHome(runtimePath);
+        if (jdkHome) {
+            const bin = path.join(jdkHome, "bin", executableName);
+            await fs.access(bin);
+            if (onProgress) onProgress('downloading', 100);
+            return bin;
+        }
+    } catch {}
 
     // Download Java
-    console.log(`[java-manager] Downloading Java ${version}...`);
     if (onProgress) onProgress('downloading', 0, 0, 0);
-    
     const platform = getPlatformString();
     const arch = getArchString();
     const url = `https://api.adoptium.net/v3/binary/latest/${version}/ga/${platform}/${arch}/jdk/hotspot/normal/eclipse`;
-
-    console.log(`[java-manager] Download URL: ${url}`);
-    console.log(`[java-manager] Archive path: ${archivePath}`);
 
     await downloadFile(url, archivePath, (downloaded, total) => {
       let percent = 0;
@@ -327,76 +430,29 @@ export async function ensureJavaInstalled(
       if (onProgress) onProgress('downloading', percent, downloaded, total);
     });
 
-    // Validate that the archive was actually downloaded and has content
-    const archiveStat = await fs.stat(archivePath);
-    if (archiveStat.size === 0) {
-      await fs.unlink(archivePath).catch(() => {});
-      throw new Error(`Downloaded archive is empty (0 bytes). Download may have failed silently.`);
-    }
-    console.log(`[java-manager] Download complete: ${archiveStat.size} bytes`);
-
     // Extract
-    console.log(`[java-manager] Extracting Java ${version}...`);
     if (onProgress) onProgress('extracting', 0);
-    
-    // Remove old runtime directory if it exists (clean install)
     try { await fs.rm(runtimePath, { recursive: true, force: true }); } catch {}
     await fs.mkdir(runtimePath, { recursive: true });
-    
     await extractArchive(archivePath, runtimePath);
-    
-    // Clean up archive after successful extraction
-    console.log(`[java-manager] Cleaning up archive: ${archivePath}`);
     await fs.unlink(archivePath).catch(() => {});
 
-    // Find the JDK home (handles nested directory from extraction)
     const jdkHome = await findJdkHome(runtimePath);
-    if (!jdkHome) throw new Error(`Java ${version} installed but JDK home not found in ${runtimePath}`);
+    if (!jdkHome) throw new Error(`JDK home not found after extraction`);
 
     const bin = path.join(jdkHome, "bin", executableName);
-    try {
-      await fs.access(bin);
-    } catch {
-      throw new Error(`Java ${version} installed but binary not found at ${bin}`);
-    }
-    
-    // Verify lib/jvm.cfg exists (critical for Java to start)
-    const jvmCfg = path.join(jdkHome, "lib", "jvm.cfg");
-    try {
-      await fs.access(jvmCfg);
-    } catch {
-      throw new Error(`Java ${version} extraction incomplete: lib/jvm.cfg not found at ${jvmCfg}`);
-    }
-    
-    // Set executable permissions on Unix
-    if (process.platform !== "win32") {
-      await fs.chmod(bin, 0o755);
-    }
+    await fs.access(bin);
+    if (process.platform !== "win32") await fs.chmod(bin, 0o755);
 
-    console.log(`[java-manager] Java ${version} ready at ${bin}`);
     if (onProgress) onProgress('extracting', 100);
     return bin;
-
   } catch (err) {
-    // Clean up partial files on failure
-    console.error(`[java-manager] Failed to install Java ${version}:`, err);
-
-    // Remove partial archive if it exists
     await fs.unlink(archivePath).catch(() => {});
-    // Remove partial runtime directory if it exists
     await fs.rm(runtimePath, { recursive: true, force: true }).catch(() => {});
-
-    throw new Error(
-      `Failed to install Java ${version}: ${err instanceof Error ? err.message : String(err)}`
-    );
+    throw new Error(`Failed to install Java ${version}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-/**
- * Derives JAVA_HOME from a java binary path.
- * e.g. /path/to/jdk-21/bin/java -> /path/to/jdk-21
- */
 export function getJavaHome(javaBinaryPath: string): string {
-  // java binary is at <JAVA_HOME>/bin/java
   return path.dirname(path.dirname(javaBinaryPath));
 }
