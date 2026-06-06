@@ -28,9 +28,17 @@ export function ServerMultiSelect({ servers }: ServerMultiSelectProps) {
       } else {
         newSet.add(serverId)
       }
+      
+      // Sync selectAll checkbox when individual servers are deselected
+      if (newSet.size !== servers.length) {
+        setSelectAll(false)
+      } else if (newSet.size === servers.length && servers.length > 0) {
+        setSelectAll(true)
+      }
+      
       return newSet
     })
-  }, [])
+  }, [servers.length])
 
   const toggleSelectAll = useCallback(() => {
     if (selectAll) {
@@ -46,18 +54,21 @@ export function ServerMultiSelect({ servers }: ServerMultiSelectProps) {
     const selectedIds = Array.from(selectedServers)
     await Promise.all(selectedIds.map((id) => startServer(id)))
     setSelectedServers(new Set())
+    setSelectAll(false)
   }, [selectedServers, startServer])
 
   const bulkStop = useCallback(async () => {
     const selectedIds = Array.from(selectedServers)
     await Promise.all(selectedIds.map((id) => stopServer(id)))
     setSelectedServers(new Set())
+    setSelectAll(false)
   }, [selectedServers, stopServer])
 
   const bulkRestart = useCallback(async () => {
     const selectedIds = Array.from(selectedServers)
     await Promise.all(selectedIds.map((id) => restartServer(id)))
     setSelectedServers(new Set())
+    setSelectAll(false)
   }, [selectedServers, restartServer])
 
   const bulkBackup = useCallback(async () => {
@@ -117,7 +128,10 @@ export function ServerMultiSelect({ servers }: ServerMultiSelectProps) {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => setSelectedServers(new Set())}
+                  onClick={() => {
+                    setSelectedServers(new Set())
+                    setSelectAll(false)
+                  }}
                   className="gap-2"
                 >
                   <Trash2 className="h-4 w-4" />
