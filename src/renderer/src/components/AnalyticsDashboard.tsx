@@ -15,12 +15,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { useServerStore } from '../stores/serverStore'
 import { Activity, Users, Zap, Clock } from 'lucide-react'
 
+interface HistoryDataPoint {
+  time: string;
+  tps: number;
+  players: number;
+  memory: number;
+  cpu: number;
+}
+
 export function AnalyticsDashboard() {
   const { servers } = useServerStore()
 
   // Generate mock data for the 24-hour period
-  const historyData = useMemo(() => {
-    const data: any[] = []
+  const historyData = useMemo<HistoryDataPoint[]>(() => {
+    const data: HistoryDataPoint[] = []
     const now = new Date()
     for (let i = 24; i >= 0; i--) {
       const time = new Date(now.getTime() - i * 60 * 60 * 1000)

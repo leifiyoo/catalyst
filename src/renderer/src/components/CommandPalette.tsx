@@ -20,7 +20,7 @@ export function CommandPalette() {
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
   const { servers, startServer, stopServer, restartServer } = useServerStore()
-  const { preferences } = usePreferences()
+  usePreferences() // preferences removed as it was unused
 
   // Global keyboard shortcut handler
   useEffect(() => {

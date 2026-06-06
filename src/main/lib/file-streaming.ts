@@ -12,4 +12,378 @@ import path from "path";
 const CHUNK_SIZE = 256 * 1024; // 256 KB chunks for streaming reads
 const MAX_STREAMED_FILE_SIZE = 100 * 1024 * 1024; // 100 MB max for streaming mode
 
-export interface StreamingFileReadResult {\n  success: boolean;\n  content?: string;\n  totalLines?: number;\n  hasMoreLines?: boolean;\n  startLine?: number;\n  endLine?: number;\n  error?: string;\n}\n\nexport interface StreamingFileWriteResult {\n  success: boolean;\n  bytesWritten?: number;\n  error?: string;\n}\n\nexport interface FileMetadata {\n  size: number;\n  lineCount: number;\n  estimatedChunks: number;\n}\n\n/**\n * Count the number of lines in a file without loading entire file into memory.\n * Useful for large files to determine pagination needs.\n */\nexport async function countFileLines(filePath: string): Promise<number> {\n  return new Promise((resolve, reject) => {\n    let lineCount = 0;\n    let lastWasNewline = true;\n\n    const stream = createReadStream(filePath, { encoding: \"utf8\" });\n    let buffer = \"\";\n\n    stream.on(\"data\", (chunk: string) => {\n      buffer += chunk;\n      const newlines = buffer.match(/\\n/g);\n      if (newlines) {\n        lineCount += newlines.length;\n        lastWasNewline = buffer[buffer.length - 1] === \"\\n\";\n      }\n    });\n\n    stream.on(\"end\", () => {\n      // If last character wasn't a newline, increment count for final line\n      if (buffer.length > 0 && !lastWasNewline) {\n        lineCount++;\n      }\n      resolve(lineCount);\n    });\n\n    stream.on(\"error\", (err) => {\n      reject(err);\n    });\n  });\n}\n\n/**\n * Get metadata about a file (size, line count, estimated chunks needed).\n */\nexport async function getFileMetadata(filePath: string): Promise<FileMetadata> {\n  try {\n    const stat = await fs.stat(filePath);\n    const lineCount = await countFileLines(filePath);\n    const estimatedChunks = Math.ceil(stat.size / CHUNK_SIZE);\n\n    return {\n      size: stat.size,\n      lineCount,\n      estimatedChunks,\n    };\n  } catch (err) {\n    throw new Error(`Failed to get file metadata: ${err instanceof Error ? err.message : String(err)}`);\n  }\n}\n\n/**\n * Stream-read a file starting from a specific line number.\n * Returns up to maxLines from the file.\n * \n * @param filePath Path to the file\n * @param startLine Line number to start from (0-indexed)\n * @param maxLines Maximum number of lines to read (default: 500)\n * @returns Streaming read result with content and pagination info\n */\nexport async function streamReadFile(\n  filePath: string,\n  startLine: number = 0,\n  maxLines: number = 500\n): Promise<StreamingFileReadResult> {\n  try {\n    // First, check if file exists and get its size\n    const stat = await fs.stat(filePath);\n    if (stat.isDirectory()) {\n      return { success: false, error: \"Cannot read a directory\" };\n    }\n\n    // For small files, just read normally (faster)\n    if (stat.size <= 2 * 1024 * 1024) {\n      const content = await fs.readFile(filePath, \"utf-8\");\n      const lines = content.split(\"\\n\");\n      const totalLines = lines.length;\n\n      // Handle pagination\n      const endLine = Math.min(startLine + maxLines, totalLines);\n      const paginatedContent = lines.slice(startLine, endLine).join(\"\\n\");\n\n      return {\n        success: true,\n        content: paginatedContent,\n        totalLines,\n        hasMoreLines: endLine < totalLines,\n        startLine,\n        endLine,\n      };\n    }\n\n    // For large files, use streaming\n    return new Promise((resolve) => {\n      let currentLine = 0;\n      let collectedLines: string[] = [];\n      let buffer = \"\";\n      let totalLines = 0;\n      let stream: NodeJS.ReadableStream | null = null;\n\n      // First pass: count total lines and find the starting position\n      stream = createReadStream(filePath, { encoding: \"utf8\" });\n\n      stream.on(\"data\", (chunk: string) => {\n        const newlines = chunk.match(/\\n/g);\n        if (newlines) {\n          totalLines += newlines.length;\n        }\n      });\n\n      stream.on(\"end\", () => {\n        // Second pass: read the requested lines\n        if (!buffer && collectedLines.length === 0) {\n          // If we haven't started reading yet, do it now\n          readRequestedLines();\n        }\n      });\n\n      stream.on(\"error\", (err) => {\n        resolve({\n          success: false,\n          error: `Failed to read file: ${err.message}`,\n        });\n      });\n\n      function readRequestedLines() {\n        currentLine = 0;\n        collectedLines = [];\n        buffer = \"\";\n\n        const readStream = createReadStream(filePath, { encoding: \"utf8\" });\n        let skipMode = startLine > 0;\n        let linesSeen = 0;\n\n        readStream.on(\"data\", (chunk: string) => {\n          buffer += chunk;\n          const lines = buffer.split(\"\\n\");\n          buffer = lines.pop() || \"\"; // Keep last incomplete line in buffer\n\n          for (const line of lines) {\n            if (skipMode) {\n              if (linesSeen >= startLine) {\n                skipMode = false;\n                collectedLines.push(line);\n              }\n              linesSeen++;\n            } else if (collectedLines.length < maxLines) {\n              collectedLines.push(line);\n            } else {\n              // We have enough lines, pause the stream\n              readStream.pause();\n              return;\n            }\n          }\n        });\n\n        readStream.on(\"end\", () => {\n          // Add any remaining content in buffer\n          if (buffer.length > 0 && collectedLines.length < maxLines) {\n            collectedLines.push(buffer);\n          }\n\n          const content = collectedLines.join(\"\\n\");\n          resolve({\n            success: true,\n            content,\n            totalLines,\n            hasMoreLines: startLine + collectedLines.length < totalLines,\n            startLine,\n            endLine: startLine + collectedLines.length,\n          });\n        });\n\n        readStream.on(\"error\", (err) => {\n          resolve({\n            success: false,\n            error: `Failed to read file: ${err.message}`,\n          });\n        });\n      }\n    });\n  } catch (err) {\n    return {\n      success: false,\n      error: `Error reading file: ${err instanceof Error ? err.message : String(err)}`,\n    };\n  }\n}\n\n/**\n * Stream-write content to a file in chunks.\n * Useful for writing large amounts of data without loading everything into memory.\n * \n * @param filePath Path to the file\n * @param content Content to write\n * @param append If true, append to existing file; if false, overwrite\n * @returns Write result with bytes written info\n */\nexport async function streamWriteFile(\n  filePath: string,\n  content: string,\n  append: boolean = false\n): Promise<StreamingFileWriteResult> {\n  try {\n    // For reasonable-sized writes, just use normal write\n    if (content.length <= 5 * 1024 * 1024) {\n      const flags = append ? \"a\" : \"w\";\n      await fs.writeFile(filePath, content, { flag: flags, encoding: \"utf-8\" });\n      return {\n        success: true,\n        bytesWritten: Buffer.byteLength(content, \"utf-8\"),\n      };\n    }\n\n    // For very large writes, use streaming to reduce memory pressure\n    return new Promise((resolve) => {\n      const flags = append ? \"a\" : \"w\";\n      const writeStream = createWriteStream(filePath, { flags, encoding: \"utf-8\" });\n\n      let bytesWritten = 0;\n      const chunkSize = CHUNK_SIZE;\n      let offset = 0;\n\n      writeStream.on(\"finish\", () => {\n        resolve({\n          success: true,\n          bytesWritten,\n        });\n      });\n\n      writeStream.on(\"error\", (err) => {\n        resolve({\n          success: false,\n          error: `Failed to write file: ${err.message}`,\n        });\n      });\n\n      // Write in chunks\n      const writeChunk = () => {\n        if (offset >= content.length) {\n          writeStream.end();\n          return;\n        }\n\n        const chunk = content.slice(offset, offset + chunkSize);\n        const canContinue = writeStream.write(chunk);\n        bytesWritten += Buffer.byteLength(chunk, \"utf-8\");\n        offset += chunkSize;\n\n        if (canContinue) {\n          setImmediate(writeChunk);\n        } else {\n          writeStream.once(\"drain\", writeChunk);\n        }\n      };\n\n      writeChunk();\n    });\n  } catch (err) {\n    return {\n      success: false,\n      error: `Error writing file: ${err instanceof Error ? err.message : String(err)}`,\n    };\n  }\n}\n\n/**\n * Efficiently read and modify a large file line-by-line.\n * Passes each line to a transform function and writes results back.\n * \n * @param filePath Path to the file\n * @param transformFn Function that transforms each line\n * @returns Result with number of lines processed\n */\nexport async function transformFile(\n  filePath: string,\n  transformFn: (line: string, lineNum: number) => string\n): Promise<{ success: boolean; linesProcessed?: number; error?: string }> {\n  try {\n    return new Promise((resolve) => {\n      const tempPath = `${filePath}.tmp`;\n      let linesProcessed = 0;\n      let buffer = \"\";\n\n      const readStream = createReadStream(filePath, { encoding: \"utf8\" });\n      const writeStream = createWriteStream(tempPath, { encoding: \"utf8\" });\n\n      readStream.on(\"data\", (chunk: string) => {\n        buffer += chunk;\n        const lines = buffer.split(\"\\n\");\n        buffer = lines.pop() || \"\";\n\n        for (const line of lines) {\n          const transformed = transformFn(line, linesProcessed++);\n          writeStream.write(transformed + \"\\n\");\n        }\n      });\n\n      readStream.on(\"end\", () => {\n        // Process any remaining content in buffer\n        if (buffer.length > 0) {\n          const transformed = transformFn(buffer, linesProcessed++);\n          writeStream.write(transformed);\n        }\n        writeStream.end();\n      });\n\n      writeStream.on(\"finish\", async () => {\n        try {\n          // Atomic replace: rename temp to original\n          await fs.rename(tempPath, filePath);\n          resolve({\n            success: true,\n            linesProcessed,\n          });\n        } catch (err) {\n          // Clean up temp file if rename fails\n          await fs.unlink(tempPath).catch(() => {});\n          resolve({\n            success: false,\n            error: `Failed to save file: ${err instanceof Error ? err.message : String(err)}`,\n          });\n        }\n      });\n\n      readStream.on(\"error\", (err) => {\n        writeStream.destroy();\n        fs.unlink(tempPath).catch(() => {});\n        resolve({\n          success: false,\n          error: `Read error: ${err.message}`,\n        });\n      });\n\n      writeStream.on(\"error\", (err) => {\n        readStream.destroy();\n        fs.unlink(tempPath).catch(() => {});\n        resolve({\n          success: false,\n          error: `Write error: ${err.message}`,\n        });\n      });\n    });\n  } catch (err) {\n    return {\n      success: false,\n      error: `Error transforming file: ${err instanceof Error ? err.message : String(err)}`,\n    };\n  }\n}\n
+export interface StreamingFileReadResult {
+  success: boolean;
+  content?: string;
+  totalLines?: number;
+  hasMoreLines?: boolean;
+  startLine?: number;
+  endLine?: number;
+  error?: string;
+}
+
+export interface StreamingFileWriteResult {
+  success: boolean;
+  bytesWritten?: number;
+  error?: string;
+}
+
+export interface FileMetadata {
+  size: number;
+  lineCount: number;
+  estimatedChunks: number;
+}
+
+/**
+ * Count the number of lines in a file without loading entire file into memory.
+ * Useful for large files to determine pagination needs.
+ */
+export async function countFileLines(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let lineCount = 0;
+    let lastWasNewline = true;
+
+    const stream = createReadStream(filePath, { encoding: "utf8" });
+    let buffer = "";
+
+    stream.on("data", (chunk: string) => {
+      buffer += chunk;
+      const newlines = buffer.match(/\n/g);
+      if (newlines) {
+        lineCount += newlines.length;
+        lastWasNewline = buffer[buffer.length - 1] === "\n";
+      }
+    });
+
+    stream.on("end", () => {
+      // If last character wasn't a newline, increment count for final line
+      if (buffer.length > 0 && !lastWasNewline) {
+        lineCount++;
+      }
+      resolve(lineCount);
+    });
+
+    stream.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Get metadata about a file (size, line count, estimated chunks needed).
+ */
+export async function getFileMetadata(filePath: string): Promise<FileMetadata> {
+  try {
+    const stat = await fs.stat(filePath);
+    const lineCount = await countFileLines(filePath);
+    const estimatedChunks = Math.ceil(stat.size / CHUNK_SIZE);
+
+    return {
+      size: stat.size,
+      lineCount,
+      estimatedChunks,
+    };
+  } catch (err) {
+    throw new Error(`Failed to get file metadata: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Stream-read a file starting from a specific line number.
+ * Returns up to maxLines from the file.
+ * 
+ * @param filePath Path to the file
+ * @param startLine Line number to start from (0-indexed)
+ * @param maxLines Maximum number of lines to read (default: 500)
+ * @returns Streaming read result with content and pagination info
+ */
+export async function streamReadFile(
+  filePath: string,
+  startLine: number = 0,
+  maxLines: number = 500
+): Promise<StreamingFileReadResult> {
+  try {
+    // First, check if file exists and get its size
+    const stat = await fs.stat(filePath);
+    if (stat.isDirectory()) {
+      return { success: false, error: "Cannot read a directory" };
+    }
+
+    // For small files, just read normally (faster)
+    if (stat.size <= 2 * 1024 * 1024) {
+      const content = await fs.readFile(filePath, "utf-8");
+      const lines = content.split("\n");
+      const totalLines = lines.length;
+
+      // Handle pagination
+      const endLine = Math.min(startLine + maxLines, totalLines);
+      const paginatedContent = lines.slice(startLine, endLine).join("\n");
+
+      return {
+        success: true,
+        content: paginatedContent,
+        totalLines,
+        hasMoreLines: endLine < totalLines,
+        startLine,
+        endLine,
+      };
+    }
+
+    // For large files, use streaming
+    return new Promise((resolve) => {
+      let currentLine = 0;
+      let collectedLines: string[] = [];
+      let buffer = "";
+      let totalLines = 0;
+      let stream: NodeJS.ReadableStream | null = null;
+
+      // First pass: count total lines and find the starting position
+      stream = createReadStream(filePath, { encoding: "utf8" });
+
+      stream.on("data", (chunk: string) => {
+        const newlines = chunk.match(/\n/g);
+        if (newlines) {
+          totalLines += newlines.length;
+        }
+      });
+
+      stream.on("end", () => {
+        // Second pass: read the requested lines
+        if (!buffer && collectedLines.length === 0) {
+          // If we haven't started reading yet, do it now
+          readRequestedLines();
+        }
+      });
+
+      stream.on("error", (err) => {
+        resolve({
+          success: false,
+          error: `Failed to read file: ${err.message}`,
+        });
+      });
+
+      function readRequestedLines() {
+        currentLine = 0;
+        collectedLines = [];
+        buffer = "";
+
+        const readStream = createReadStream(filePath, { encoding: "utf8" });
+        let skipMode = startLine > 0;
+        let linesSeen = 0;
+
+        readStream.on("data", (chunk: string) => {
+          buffer += chunk;
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep last incomplete line in buffer
+
+          for (const line of lines) {
+            if (skipMode) {
+              if (linesSeen >= startLine) {
+                skipMode = false;
+                collectedLines.push(line);
+              }
+              linesSeen++;
+            } else if (collectedLines.length < maxLines) {
+              collectedLines.push(line);
+            } else {
+              // We have enough lines, pause the stream
+              readStream.pause();
+              return;
+            }
+          }
+        });
+
+        readStream.on("end", () => {
+          // Add any remaining content in buffer
+          if (buffer.length > 0 && collectedLines.length < maxLines) {
+            collectedLines.push(buffer);
+          }
+
+          const content = collectedLines.join("\n");
+          resolve({
+            success: true,
+            content,
+            totalLines,
+            hasMoreLines: startLine + collectedLines.length < totalLines,
+            startLine,
+            endLine: startLine + collectedLines.length,
+          });
+        });
+
+        readStream.on("error", (err) => {
+          resolve({
+            success: false,
+            error: `Failed to read file: ${err.message}`,
+          });
+        });
+      }
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: `Error reading file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Stream-write content to a file in chunks.
+ * Useful for writing large amounts of data without loading everything into memory.
+ * 
+ * @param filePath Path to the file
+ * @param content Content to write
+ * @param append If true, append to existing file; if false, overwrite
+ * @returns Write result with bytes written info
+ */
+export async function streamWriteFile(
+  filePath: string,
+  content: string,
+  append: boolean = false
+): Promise<StreamingFileWriteResult> {
+  try {
+    // For reasonable-sized writes, just use normal write
+    if (content.length <= 5 * 1024 * 1024) {
+      const flags = append ? "a" : "w";
+      await fs.writeFile(filePath, content, { flag: flags, encoding: "utf-8" });
+      return {
+        success: true,
+        bytesWritten: Buffer.byteLength(content, "utf-8"),
+      };
+    }
+
+    // For very large writes, use streaming to reduce memory pressure
+    return new Promise((resolve) => {
+      const flags = append ? "a" : "w";
+      const writeStream = createWriteStream(filePath, { flags, encoding: "utf-8" });
+
+      let bytesWritten = 0;
+      const chunkSize = CHUNK_SIZE;
+      let offset = 0;
+
+      writeStream.on("finish", () => {
+        resolve({
+          success: true,
+          bytesWritten,
+        });
+      });
+
+      writeStream.on("error", (err) => {
+        resolve({
+          success: false,
+          error: `Failed to write file: ${err.message}`,
+        });
+      });
+
+      // Write in chunks
+      const writeChunk = () => {
+        if (offset >= content.length) {
+          writeStream.end();
+          return;
+        }
+
+        const chunk = content.slice(offset, offset + chunkSize);
+        const canContinue = writeStream.write(chunk);
+        bytesWritten += Buffer.byteLength(chunk, "utf-8");
+        offset += chunkSize;
+
+        if (canContinue) {
+          setImmediate(writeChunk);
+        } else {
+          writeStream.once("drain", writeChunk);
+        }
+      };
+
+      writeChunk();
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: `Error writing file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Efficiently read and modify a large file line-by-line.
+ * Passes each line to a transform function and writes results back.
+ * 
+ * @param filePath Path to the file
+ * @param transformFn Function that transforms each line
+ * @returns Result with number of lines processed
+ */
+export async function transformFile(
+  filePath: string,
+  transformFn: (line: string, lineNum: number) => string
+): Promise<{ success: boolean; linesProcessed?: number; error?: string }> {
+  try {
+    return new Promise((resolve) => {
+      const tempPath = `${filePath}.tmp`;
+      let linesProcessed = 0;
+      let buffer = "";
+
+      const readStream = createReadStream(filePath, { encoding: "utf8" });
+      const writeStream = createWriteStream(tempPath, { encoding: "utf8" });
+
+      readStream.on("data", (chunk: string) => {
+        buffer += chunk;
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const transformed = transformFn(line, linesProcessed++);
+          writeStream.write(transformed + "\n");
+        }
+      });
+
+      readStream.on("end", () => {
+        // Process any remaining content in buffer
+        if (buffer.length > 0) {
+          const transformed = transformFn(buffer, linesProcessed++);
+          writeStream.write(transformed);
+        }
+        writeStream.end();
+      });
+
+      writeStream.on("finish", async () => {
+        try {
+          // Atomic replace: rename temp to original
+          await fs.rename(tempPath, filePath);
+          resolve({
+            success: true,
+            linesProcessed,
+          });
+        } catch (err) {
+          // Clean up temp file if rename fails
+          await fs.unlink(tempPath).catch(() => {});
+          resolve({
+            success: false,
+            error: `Failed to save file: ${err instanceof Error ? err.message : String(err)}`
+          });
+        }
+      });
+
+      readStream.on("error", (err) => {
+        writeStream.destroy();
+        fs.unlink(tempPath).catch(() => {});
+        resolve({
+          success: false,
+          error: `Read error: ${err.message}`,
+        });
+      });
+
+      writeStream.on("error", (err) => {
+        readStream.destroy();
+        fs.unlink(tempPath).catch(() => {});
+        resolve({
+          success: false,
+          error: `Write error: ${err.message}`,
+        });
+      });
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: `Error transforming file: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
