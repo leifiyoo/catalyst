@@ -12,6 +12,8 @@ export type SetAlwaysOnTopFn = (value: boolean) => Promise<void>;
 
 // ---- Server Types ----
 
+export type ProcessPriority = "Low" | "Normal" | "High";
+
 export type ServerRecord = {
   id: string;
   name: string;
@@ -25,6 +27,7 @@ export type ServerRecord = {
   eulaAccepted?: boolean;
   jarFile?: string;
   javaPath?: string;
+  priority?: ProcessPriority;
   backupConfig?: BackupConfig;
   useNgrok?: boolean;
   ngrokUrl?: string;
@@ -220,7 +223,7 @@ export type GetWhitelistFn = (id: string) => Promise<string[]>;
 export type SaveWhitelistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
 export type GetBanlistFn = (id: string) => Promise<string[]>;
 export type SaveBanlistFn = (id: string, players: string[]) => Promise<{ success: boolean; error?: string }>;
-export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; backupConfig?: BackupConfig; useNgrok?: boolean; ngrokUrl?: string; name?: string; analyticsEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>;
+export type UpdateServerSettingsFn = (id: string, settings: { ramMB?: number; javaPath?: string; priority?: ProcessPriority; backupConfig?: BackupConfig; useNgrok?: boolean; ngrokUrl?: string; name?: string; analyticsEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>;
 export type CreateBackupFn = (serverId: string, name?: string) => Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }>;
 export type GetBackupsFn = (serverId: string) => Promise<BackupEntry[]>;
 export type DeleteBackupFn = (serverId: string, filename: string) => Promise<{ success: boolean; error?: string }>;
