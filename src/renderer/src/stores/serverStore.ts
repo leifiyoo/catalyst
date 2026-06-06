@@ -25,8 +25,8 @@ export const useServerStore = create<ServerStore>((set) => ({
   setServers: (servers) => set({ servers }),
   
   startServer: async (id) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // Call actual IPC to main process for server lifecycle
+    await window.electron.ipcRenderer.invoke('server:start', id)
     set((state) => ({
       servers: state.servers.map((server) =>
         server.id === id
@@ -37,8 +37,8 @@ export const useServerStore = create<ServerStore>((set) => ({
   },
   
   stopServer: async (id) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // Call actual IPC to main process for server lifecycle
+    await window.electron.ipcRenderer.invoke('server:stop', id)
     set((state) => ({
       servers: state.servers.map((server) =>
         server.id === id
@@ -49,8 +49,8 @@ export const useServerStore = create<ServerStore>((set) => ({
   },
   
   restartServer: async (id) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // Call actual IPC to main process for server lifecycle
+    await window.electron.ipcRenderer.invoke('server:restart', id)
     set((state) => ({
       servers: state.servers.map((server) =>
         server.id === id
