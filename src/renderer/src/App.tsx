@@ -6,6 +6,7 @@ import { SpinnerButton } from "@/components/SpinnerButton";
 import { TitleBar } from "@/components/TitleBar";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ErrorPage } from "@/components/ErrorPage";
+import { CommandPalette } from "@/components/CommandPalette";
 import catalystLogo from "@/assets/catalystwithlogotransparent.png";
 
 // Lazy-load heavy page components for better initial load performance
@@ -13,6 +14,7 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ de
 const ServersPage = lazy(() => import("@/pages/ServersPage").then(m => ({ default: m.ServersPage })));
 const ServerDetailPage = lazy(() => import("@/pages/ServerDetailPage").then(m => ({ default: m.ServerDetailPage })));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
+const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage").then(m => ({ default: m.AnalyticsPage })));
 const UpdateNotifier = lazy(() => import("@/components/UpdateNotifier").then(m => ({ default: m.UpdateNotifier })));
 
 const PageFallback = () => (
@@ -56,6 +58,7 @@ const router = createHashRouter([
             { index: true, element: <Suspense fallback={<PageFallback />}><DashboardPage /></Suspense>, errorElement: <ErrorPage /> },
             { path: "servers", element: <Suspense fallback={<PageFallback />}><ServersPage /></Suspense>, errorElement: <ErrorPage /> },
             { path: "servers/:id", element: <Suspense fallback={<PageFallback />}><ServerDetailPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "analytics", element: <Suspense fallback={<PageFallback />}><AnalyticsPage /></Suspense>, errorElement: <ErrorPage /> },
             { path: "settings", element: <Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>, errorElement: <ErrorPage /> },
         ],
     },
@@ -150,6 +153,7 @@ const App = () => {
                     transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 >
                     <RouterProvider router={router} />
+                    <CommandPalette />
                     <Suspense fallback={null}>
                         <UpdateNotifier />
                     </Suspense>
