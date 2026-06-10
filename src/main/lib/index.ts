@@ -66,6 +66,7 @@ export {
 export {
   searchModrinthProjects,
   getModrinthProjectDetails,
+  listModrinthVersions,
   listModrinthInstalls,
   installModrinthProject,
   updateModrinthInstall,

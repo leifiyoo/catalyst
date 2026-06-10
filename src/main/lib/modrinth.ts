@@ -42,9 +42,22 @@ export type ModrinthInstallRequest = {
   projectType: ModrinthProjectType;
   loader?: string;
   gameVersion?: string;
+  versionId?: string;
   title?: string;
   slug?: string;
   iconUrl?: string;
+};
+
+export type ModrinthVersionOption = {
+  id: string;
+  name: string;
+  versionNumber: string;
+  versionType: "release" | "beta" | "alpha";
+  datePublished: string;
+  loaders: string[];
+  gameVersions: string[];
+  fileName: string;
+  fileSize?: number;
 };
 
 export type ModrinthInstallEntry = {
@@ -103,15 +116,82 @@ type ModrinthVersionFile = {
   url: string;
   filename: string;
   primary?: boolean;
+  size?: number;
 };
 
 type ModrinthVersion = {
   id: string;
   name: string;
   version_number: string;
+  version_type: "release" | "beta" | "alpha";
   date_published: string;
+  loaders: string[];
+  game_versions: string[];
   files: ModrinthVersionFile[];
 };
+
+function buildVersionsUrl(projectId: string, loader?: string, gameVersion?: string): URL {
+  const url = new URL(`${MODRINTH_API_BASE}/project/${projectId}/version`);
+  if (loader) {
+    url.searchParams.set("loaders", JSON.stringify([loader]));
+  }
+  if (gameVersion) {
+    url.searchParams.set("game_versions", JSON.stringify([gameVersion]));
+  }
+  return url;
+}
+
+async function fetchModrinthVersions(
+  projectId: string,
+  loader?: string,
+  gameVersion?: string
+): Promise<ModrinthVersion[]> {
+  const res = await fetch(buildVersionsUrl(projectId, loader, gameVersion).toString(), {
+    headers: {
+      "User-Agent": "Catalyst/1.0 (Modrinth API)",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Modrinth versions failed: ${res.status}`);
+  }
+
+  const versions = (await res.json()) as ModrinthVersion[];
+  versions.sort((a, b) =>
+    new Date(b.date_published).getTime() - new Date(a.date_published).getTime()
+  );
+  return versions;
+}
+
+export async function listModrinthVersions(
+  projectId: string,
+  loader?: string,
+  gameVersion?: string
+): Promise<ModrinthVersionOption[]> {
+  let versions = await fetchModrinthVersions(projectId, loader, gameVersion);
+  if (versions.length === 0 && gameVersion) {
+    versions = await fetchModrinthVersions(projectId, loader);
+  }
+  if (versions.length === 0 && loader) {
+    versions = await fetchModrinthVersions(projectId, undefined, gameVersion);
+  }
+  if (versions.length === 0) {
+    versions = await fetchModrinthVersions(projectId);
+  }
+  return versions.map((version) => {
+    const file = version.files.find((f) => f.primary) ?? version.files[0];
+    return {
+      id: version.id,
+      name: version.name,
+      versionNumber: version.version_number,
+      versionType: version.version_type,
+      datePublished: version.date_published,
+      loaders: version.loaders ?? [],
+      gameVersions: version.game_versions ?? [],
+      fileName: file?.filename ?? "No primary file",
+      fileSize: file?.size,
+    };
+  });
+}
 
 function getManifestPath(serverPath: string): string {
   return path.join(serverPath, META_DIR_NAME, MANIFEST_NAME);
@@ -315,28 +395,26 @@ async function getLatestVersion(
   loader?: string,
   gameVersion?: string
 ): Promise<ModrinthVersion> {
-  const url = new URL(`${MODRINTH_API_BASE}/project/${projectId}/version`);
-  if (loader) {
-    url.searchParams.set("loaders", JSON.stringify([loader]));
-  }
-  if (gameVersion) {
-    url.searchParams.set("game_versions", JSON.stringify([gameVersion]));
-  }
-
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`Modrinth versions failed: ${res.status}`);
-  }
-
-  const versions = (await res.json()) as ModrinthVersion[];
+  const versions = await fetchModrinthVersions(projectId, loader, gameVersion);
   if (versions.length === 0) {
     throw new Error("No compatible versions found");
   }
 
-  versions.sort((a, b) =>
-    new Date(b.date_published).getTime() - new Date(a.date_published).getTime()
-  );
   return versions[0];
+}
+
+async function getVersionById(
+  projectId: string,
+  versionId: string,
+  _loader?: string,
+  _gameVersion?: string
+): Promise<ModrinthVersion> {
+  const versions = await fetchModrinthVersions(projectId);
+  const version = versions.find((candidate) => candidate.id === versionId);
+  if (!version) {
+    throw new Error("Selected version was not found on Modrinth");
+  }
+  return version;
 }
 
 async function downloadFile(url: string, filePath: string): Promise<void> {
@@ -378,11 +456,9 @@ export async function installModrinthProject(
   request: ModrinthInstallRequest
 ): Promise<ModrinthInstallResult> {
   try {
-    const version = await getLatestVersion(
-      request.projectId,
-      request.loader,
-      request.gameVersion
-    );
+    const version = request.versionId
+      ? await getVersionById(request.projectId, request.versionId, request.loader, request.gameVersion)
+      : await getLatestVersion(request.projectId, request.loader, request.gameVersion);
     const file = version.files.find((f) => f.primary) ?? version.files[0];
     if (!file) {
       return { success: false, error: "No downloadable file available" };

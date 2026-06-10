@@ -38,6 +38,7 @@ import {
   GetServerLogsFn,
   SearchModrinthFn,
   GetModrinthProjectFn,
+  ListModrinthVersionsFn,
   ListModrinthInstallsFn,
   InstallModrinthProjectFn,
   UpdateModrinthInstallFn,
@@ -109,6 +110,7 @@ declare global {
       copyServerFile: CopyServerFileFn;
       searchModrinth: SearchModrinthFn;
       getModrinthProject: GetModrinthProjectFn;
+      listModrinthVersions: ListModrinthVersionsFn;
       listModrinthInstalls: ListModrinthInstallsFn;
       installModrinthProject: InstallModrinthProjectFn;
       updateModrinthInstall: UpdateModrinthInstallFn;

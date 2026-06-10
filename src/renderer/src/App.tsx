@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import { Component, type ReactNode, useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { motion } from "motion/react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
@@ -6,7 +6,6 @@ import { SpinnerButton } from "@/components/SpinnerButton";
 import { TitleBar } from "@/components/TitleBar";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ErrorPage } from "@/components/ErrorPage";
-import { CommandPalette } from "@/components/CommandPalette";
 import catalystLogo from "@/assets/catalystwithlogotransparent.png";
 
 // Lazy-load heavy page components for better initial load performance
@@ -16,6 +15,41 @@ const ServerDetailPage = lazy(() => import("@/pages/ServerDetailPage").then(m =>
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage").then(m => ({ default: m.AnalyticsPage })));
 const UpdateNotifier = lazy(() => import("@/components/UpdateNotifier").then(m => ({ default: m.UpdateNotifier })));
+
+class DashboardErrorBoundary extends Component<
+    { children: ReactNode },
+    { error: Error | null }
+> {
+    state: { error: Error | null } = { error: null };
+
+    static getDerivedStateFromError(error: Error) {
+        return { error };
+    }
+
+    componentDidCatch(error: Error) {
+        console.error("Dashboard render failed", error);
+    }
+
+    render() {
+        if (this.state.error) {
+            return (
+                <div className="flex min-h-screen w-full items-center justify-center bg-background p-6 text-foreground">
+                    <div className="w-full max-w-xl rounded-lg border border-border bg-card p-6 shadow-sm">
+                        <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
+                            Renderer error
+                        </p>
+                        <h1 className="mt-3 text-2xl font-semibold">Dashboard failed to render</h1>
+                        <pre className="mt-4 max-h-72 overflow-auto rounded-md bg-muted p-4 text-xs text-muted-foreground">
+                            {this.state.error.stack || this.state.error.message}
+                        </pre>
+                    </div>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
 
 const PageFallback = () => (
     <div className="flex items-center justify-center h-full min-h-[200px]">
@@ -152,11 +186,12 @@ const App = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 >
-                    <RouterProvider router={router} />
-                    <CommandPalette />
-                    <Suspense fallback={null}>
-                        <UpdateNotifier />
-                    </Suspense>
+                    <DashboardErrorBoundary>
+                        <RouterProvider router={router} />
+                        <Suspense fallback={null}>
+                            <UpdateNotifier />
+                        </Suspense>
+                    </DashboardErrorBoundary>
                 </motion.div>
             )}
         </div>

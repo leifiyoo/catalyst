@@ -71,10 +71,10 @@ const ConsoleLineRow = memo(function ConsoleLineRow({
         <div
             className={
                 line.type === "stderr"
-                    ? "text-destructive"
+                    ? "whitespace-pre text-[hsl(0_62%_62%)]"
                     : line.type === "system"
-                      ? "text-primary"
-                      : "text-[#e8e4df]"
+                      ? "whitespace-pre text-[hsl(152_55%_55%)]"
+                      : "whitespace-pre text-[hsl(220_12%_88%)]"
             }
         >
             {renderAnsiText(line.text)}
@@ -179,7 +179,7 @@ export function ConsoleTab({ serverId, isOnline }: ConsoleTabProps) {
                 />
             </div>
             <div className="rounded-xl border border-border overflow-hidden">
-                <div className="h-[420px] bg-[#2c2b28] font-mono text-xs text-[#e8e4df] select-text p-4">
+                <div className="console-surface h-[420px] overflow-x-auto font-mono text-xs select-text p-4">
                     {consoleLines.length === 0 ? (
                         <p className="text-muted-foreground">
                             {isOnline

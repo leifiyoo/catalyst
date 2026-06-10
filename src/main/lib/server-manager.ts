@@ -340,10 +340,6 @@ function isPathWithin(targetPath: string, rootPath: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
-function isEnoent(err: unknown): boolean {
-  return err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT";
-}
-
 async function ensureServersJson(): Promise<void> {
   const dir = path.dirname(SERVERS_JSON);
   await fs.mkdir(dir, { recursive: true });
@@ -866,7 +862,7 @@ export async function getServer(id: string): Promise<ServerRecord | null> {
 
 export async function updateServerStatus(
   id: string,
-  status: "Online" | "Offline",
+  status: ServerRecord["status"],
   players?: string
 ): Promise<void> {
   const servers = await loadServerList();

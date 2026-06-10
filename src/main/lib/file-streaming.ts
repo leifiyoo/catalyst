@@ -7,10 +7,8 @@
 
 import fs from "fs/promises";
 import { createReadStream, createWriteStream } from "fs";
-import path from "path";
 
 const CHUNK_SIZE = 256 * 1024; // 256 KB chunks for streaming reads
-const MAX_STREAMED_FILE_SIZE = 100 * 1024 * 1024; // 100 MB max for streaming mode
 
 export interface StreamingFileReadResult {
   success: boolean;
@@ -46,8 +44,8 @@ export async function countFileLines(filePath: string): Promise<number> {
     const stream = createReadStream(filePath, { encoding: "utf8" });
     let buffer = "";
 
-    stream.on("data", (chunk: string) => {
-      buffer += chunk;
+    stream.on("data", (chunk: string | Buffer) => {
+      buffer += chunk.toString();
       const newlines = buffer.match(/\n/g);
       if (newlines) {
         lineCount += newlines.length;
@@ -131,7 +129,6 @@ export async function streamReadFile(
 
     // For large files, use streaming
     return new Promise((resolve) => {
-      let currentLine = 0;
       let collectedLines: string[] = [];
       let buffer = "";
       let totalLines = 0;
@@ -140,8 +137,9 @@ export async function streamReadFile(
       // First pass: count total lines and find the starting position
       stream = createReadStream(filePath, { encoding: "utf8" });
 
-      stream.on("data", (chunk: string) => {
-        const newlines = chunk.match(/\n/g);
+      stream.on("data", (chunk: string | Buffer) => {
+        const content = chunk.toString();
+        const newlines = content.match(/\n/g);
         if (newlines) {
           totalLines += newlines.length;
         }
@@ -163,7 +161,6 @@ export async function streamReadFile(
       });
 
       function readRequestedLines() {
-        currentLine = 0;
         collectedLines = [];
         buffer = "";
 
@@ -171,8 +168,8 @@ export async function streamReadFile(
         let skipMode = startLine > 0;
         let linesSeen = 0;
 
-        readStream.on("data", (chunk: string) => {
-          buffer += chunk;
+        readStream.on("data", (chunk: string | Buffer) => {
+          buffer += chunk.toString();
           const lines = buffer.split("\n");
           buffer = lines.pop() || ""; // Keep last incomplete line in buffer
 
@@ -324,8 +321,8 @@ export async function transformFile(
       const readStream = createReadStream(filePath, { encoding: "utf8" });
       const writeStream = createWriteStream(tempPath, { encoding: "utf8" });
 
-      readStream.on("data", (chunk: string) => {
-        buffer += chunk;
+      readStream.on("data", (chunk: string | Buffer) => {
+        buffer += chunk.toString();
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 

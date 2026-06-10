@@ -131,7 +131,7 @@ function sendStats(mainWindow: BrowserWindow, stats: ServerStats) {
   mainWindow.webContents.send("serverStats", stats);
 }
 
-function parseStatsFromLine(serverId: string, line: string): void {
+function parseStatsFromLine(serverId: string, line: string, mainWindow: BrowserWindow): void {
   const stats = serverStatsData.get(serverId);
   if (!stats) return;
 
@@ -139,7 +139,16 @@ function parseStatsFromLine(serverId: string, line: string): void {
 
   // Detect server fully loaded: "Done (X.XXXs)! For help, type "help""
   if (/Done \(\d+\.\d+s\)/.test(normalizedLine)) {
+    const wasReady = serverReady.get(serverId);
     serverReady.set(serverId, true);
+    if (!wasReady) {
+      updateServerStatus(serverId, "Online", `${stats.playerCount}/${stats.maxPlayers}`).catch(() => {});
+      sendStatusUpdate(mainWindow, {
+        serverId,
+        status: "Online",
+        players: `${stats.playerCount}/${stats.maxPlayers}`,
+      });
+    }
   }
 
   // Detect server restart command issued (for auto-restart on exit)
@@ -286,7 +295,7 @@ function startStatsPolling(
     maxPlayers: 20,
   });
 
-  // Poll every 10 seconds to reduce CPU overhead (was 3s)
+  // Poll often enough that the UI feels live while staying light on CPU.
   const timer = setInterval(async () => {
     const stats = serverStatsData.get(serverId);
     if (!stats) return;
@@ -321,7 +330,7 @@ function startStatsPolling(
 
     // Send current stats to renderer
     sendStats(mainWindow, { ...stats });
-  }, 10000);
+  }, 5000);
 
   serverStatsTimers.set(serverId, timer);
 
@@ -363,9 +372,9 @@ function stopStatsPolling(serverId: string): void {
 export async function refreshServerStatuses(mainWindow: BrowserWindow): Promise<void> {
   const servers = await getServers();
   for (const server of servers) {
-    if (server.status === "Online" && !runningServers.has(server.id)) {
-      await updateServerStatus(server.id, "Offline");
-      sendStatusUpdate(mainWindow, { serverId: server.id, status: "Offline" });
+    if ((server.status === "Starting" || server.status === "Online" || server.status === "Stopping") && !runningServers.has(server.id)) {
+      await updateServerStatus(server.id, "Offline", "0/20");
+      sendStatusUpdate(mainWindow, { serverId: server.id, status: "Offline", players: "0/20" });
     }
   }
 }
@@ -430,8 +439,8 @@ export async function startServer(
     runningServers.set(serverId, child);
 
     sendConsoleLine(mainWindow, serverId, "Starting server...", "system");
-    await updateServerStatus(serverId, "Online");
-    sendStatusUpdate(mainWindow, { serverId, status: "Online" });
+    await updateServerStatus(serverId, "Starting");
+    sendStatusUpdate(mainWindow, { serverId, status: "Starting" });
     startStatsPolling(serverId, mainWindow, server.ramMB, server.framework);
 
     // Line-buffered stdout
@@ -443,7 +452,7 @@ export async function startServer(
       for (const line of lines) {
         if (line.trim()) {
           const cleanedLine = stripAnsi(line);
-          parseStatsFromLine(serverId, cleanedLine);
+          parseStatsFromLine(serverId, cleanedLine, mainWindow);
           if (
             isStatsLine(serverId, cleanedLine) &&
             /Unknown command\. Type "\/help" for help\./.test(cleanedLine)
@@ -511,8 +520,8 @@ export async function startServer(
             `Failed to restart server: ${restartResult.error}`,
             "stderr"
           );
-          await updateServerStatus(serverId, "Offline");
-          sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
+          await updateServerStatus(serverId, "Offline", "0/20");
+          sendStatusUpdate(mainWindow, { serverId, status: "Offline", players: "0/20" });
           return;
         }
         
@@ -539,9 +548,9 @@ export async function startServer(
         return;
       }
       
-      await updateServerStatus(serverId, "Offline");
+      await updateServerStatus(serverId, "Offline", "0/20");
       if (!mainWindow.isDestroyed()) {
-        sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
+        sendStatusUpdate(mainWindow, { serverId, status: "Offline", players: "0/20" });
       }
     });
 
@@ -551,9 +560,9 @@ export async function startServer(
       if (!mainWindow.isDestroyed()) {
         sendConsoleLine(mainWindow, serverId, `Error: ${err.message}`, "stderr");
       }
-      await updateServerStatus(serverId, "Offline");
+      await updateServerStatus(serverId, "Offline", "0/20");
       if (!mainWindow.isDestroyed()) {
-        sendStatusUpdate(mainWindow, { serverId, status: "Offline" });
+        sendStatusUpdate(mainWindow, { serverId, status: "Offline", players: "0/20" });
       }
     });
 
@@ -565,11 +574,21 @@ export async function startServer(
 }
 
 export async function stopServer(
-  serverId: string
+  serverId: string,
+  mainWindow?: BrowserWindow
 ): Promise<{ success: boolean; error?: string }> {
   const child = runningServers.get(serverId);
   if (!child) {
-    return { success: false, error: "Server is not running" };
+    await updateServerStatus(serverId, "Offline", "0/20");
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      sendStatusUpdate(mainWindow, { serverId, status: "Offline", players: "0/20" });
+    }
+    return { success: true };
+  }
+
+  await updateServerStatus(serverId, "Stopping");
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    sendStatusUpdate(mainWindow, { serverId, status: "Stopping" });
   }
 
   return new Promise((resolve) => {
@@ -612,9 +631,7 @@ export function isRunning(serverId: string): boolean {
 }
 
 export async function stopAllServers(): Promise<void> {
-  const stopPromises = Array.from(runningServers.keys()).map((id) =>
-    stopServer(id)
-  );
+  const stopPromises = Array.from(runningServers.keys()).map((id) => stopServer(id));
   await Promise.all(stopPromises);
 }
 
@@ -635,7 +652,7 @@ export async function restartServer(
   sendConsoleLine(mainWindow, serverId, "Restarting server...", "system");
 
   // Stop the server gracefully
-  const stopResult = await stopServer(serverId);
+  const stopResult = await stopServer(serverId, mainWindow);
   if (!stopResult.success) {
     return { success: false, error: stopResult.error || "Failed to stop server" };
   }

@@ -5,17 +5,14 @@ if (process.platform === 'linux') {
 
 import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { electronApp, is } from "@electron-toolkit/utils";
-
-const execFileAsync = promisify(execFile);
 
 // Disable Chromium sandbox on Linux to avoid SUID sandbox helper errors (FATAL:setuid_sandbox_host.cc)
 if (process.platform === "linux") {
   app.commandLine.appendSwitch("no-sandbox");
   app.commandLine.appendSwitch("disable-gpu-sandbox");
 }
+
 import icon from "../../resources/logoonly.png?asset";
 import {
   getVersions,
@@ -50,6 +47,7 @@ import {
   getServerDiskUsage,
   searchModrinthProjects,
   getModrinthProjectDetails,
+  listModrinthVersions,
   listModrinthInstalls,
   installModrinthProject,
   updateModrinthInstall,
@@ -107,13 +105,27 @@ function createWindow(): void {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: true,
       contextIsolation: true,
-      devTools: false,
+      devTools: is.dev,
     },
   });
 
   mainWindow.on("ready-to-show", () => {
     mainWindow.show();
   });
+
+  if (is.dev) {
+    mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+      console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+    });
+
+    mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+      console.error(`[renderer:load-failed] ${errorCode} ${errorDescription} ${validatedURL}`);
+    });
+
+    mainWindow.webContents.on("render-process-gone", (_event, details) => {
+      console.error("[renderer:gone]", details);
+    });
+  }
 
   const sendWindowState = () => {
     mainWindow.webContents.send("windowStateChanged", {
@@ -254,7 +266,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("stopServer", async (_event, id: string) => {
-    return stopServer(id);
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    return stopServer(id, mainWindow);
   });
 
   ipcMain.handle("restartServer", async (_event, id: string) => {
@@ -399,6 +412,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle("getModrinthProject", async (_event, projectId: string) => {
     return getModrinthProjectDetails(projectId);
+  });
+
+  ipcMain.handle("listModrinthVersions", async (_event, projectId: string, loader?: string, gameVersion?: string) => {
+    return listModrinthVersions(projectId, loader, gameVersion);
   });
 
   ipcMain.handle("listModrinthInstalls", async (_event, id: string, projectType) => {

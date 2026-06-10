@@ -22,6 +22,7 @@ import {
   ModrinthSearchResult,
   ModrinthInstallEntry,
   ModrinthProjectDetails,
+  ModrinthVersionOption,
   BackupEntry,
   LogToMainFn,
   NgrokTunnelInfo,
@@ -137,6 +138,12 @@ try {
       ipcRenderer.invoke("searchModrinth", params),
     getModrinthProject: (projectId: string): Promise<ModrinthProjectDetails> =>
       ipcRenderer.invoke("getModrinthProject", projectId),
+    listModrinthVersions: (
+      projectId: string,
+      loader?: string,
+      gameVersion?: string
+    ): Promise<ModrinthVersionOption[]> =>
+      ipcRenderer.invoke("listModrinthVersions", projectId, loader, gameVersion),
     listModrinthInstalls: (
       serverId: string,
       projectType: ModrinthProjectType

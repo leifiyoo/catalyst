@@ -39,6 +39,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { RadialGauge } from "@/components/ui/radial-gauge"
 import {
     Tooltip,
     TooltipContent,
@@ -70,7 +71,6 @@ import {
     ChevronLeft,
     FileText,
     Download,
-    ExternalLink,
     Search,
     Globe,
     Heart,
@@ -93,13 +93,47 @@ import type {
     ModrinthInstallEntry,
     ModrinthProjectType,
     ModrinthProjectDetails,
+    ModrinthVersionOption,
     BackupEntry,
     NgrokStatus,
 } from "@shared/types"
+import { useServerStore } from "@/stores/serverStore"
+
+type ModrinthInstallTarget = {
+    projectId: string
+    slug?: string
+    title: string
+    description?: string
+    iconUrl?: string
+    downloads?: number
+    follows?: number
+    author?: string
+    dateModified?: string
+}
+
+const SERVER_STATUS_STYLES: Record<ServerRecord["status"], string> = {
+    Starting: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+    Online: "border-primary/30 bg-primary/10 text-primary",
+    Stopping: "border-orange-500/30 bg-orange-500/10 text-orange-300",
+    Offline: "text-muted-foreground",
+    Idle: "text-muted-foreground",
+}
+
+const SERVER_STATUS_DOT: Record<ServerRecord["status"], string> = {
+    Starting: "status-dot-starting",
+    Online: "status-dot-online",
+    Stopping: "status-dot-stopping",
+    Offline: "status-dot-offline",
+    Idle: "status-dot-idle",
+}
 
 export function ServerDetailPage() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
+    const storeStats = useServerStore((state) => (id ? state.stats[id] : undefined))
+    const storeServer = useServerStore((state) => state.servers.find((entry) => entry.id === id))
+    const refreshServers = useServerStore((state) => state.refresh)
+    const removeServerFromStore = useServerStore((state) => state.removeServer)
 
     const [server, setServer] = useState<ServerRecord | null>(null)
     const [loading, setLoading] = useState(true)
@@ -228,6 +262,12 @@ export function ServerDetailPage() {
     const [modrinthDetailLoading, setModrinthDetailLoading] = useState(false)
     const [modrinthDetailError, setModrinthDetailError] = useState<string | null>(null)
     const [modrinthDetail, setModrinthDetail] = useState<ModrinthProjectDetails | null>(null)
+    const [modrinthInstallOpen, setModrinthInstallOpen] = useState(false)
+    const [modrinthInstallTarget, setModrinthInstallTarget] = useState<ModrinthInstallTarget | null>(null)
+    const [modrinthVersions, setModrinthVersions] = useState<ModrinthVersionOption[]>([])
+    const [modrinthVersionsLoading, setModrinthVersionsLoading] = useState(false)
+    const [modrinthVersionsError, setModrinthVersionsError] = useState<string | null>(null)
+    const [selectedModrinthVersionId, setSelectedModrinthVersionId] = useState<string>("")
 
     const [starting, setStarting] = useState(false)
     const [stopping, setStopping] = useState(false)
@@ -256,7 +296,11 @@ export function ServerDetailPage() {
         return t
     }, [])
 
-    const isOnline = server?.status === "Online"
+    const currentStatus = storeServer?.status ?? server?.status ?? "Offline"
+    const isStarting = currentStatus === "Starting"
+    const isOnline = currentStatus === "Online"
+    const isStopping = currentStatus === "Stopping"
+    const canStart = currentStatus === "Offline" || currentStatus === "Idle"
     const modrinthContext = useMemo(() => {
         if (!server) return null
         if (["Paper", "Purpur"].includes(server.framework)) {
@@ -279,6 +323,7 @@ export function ServerDetailPage() {
     // Load server
     useEffect(() => {
         if (!id) return
+        refreshServers()
         window.context.getServer(id).then((s) => {
             setServer(s)
             setLoading(false)
@@ -306,7 +351,7 @@ export function ServerDetailPage() {
                 })
             }
         })
-    }, [id])
+    }, [id, refreshServers])
 
     // Load system info for RAM limits
     useEffect(() => {
@@ -467,9 +512,11 @@ export function ServerDetailPage() {
         if (!id) return
         setStarting(true)
         setError(null)
+        setServer((prev) => prev ? { ...prev, status: "Starting" } : prev)
         const result = await window.context.startServer(id)
         if (!result.success) {
             setError(result.error || "Failed to start server")
+            setServer((prev) => prev ? { ...prev, status: "Offline" } : prev)
         } else if (withNgrok) {
             // Start ngrok tunnel after server starts
             const port = properties.find(p => p.key === "server-port")?.value || "25565"
@@ -592,9 +639,12 @@ export function ServerDetailPage() {
         if (!id) return
         setStopping(true)
         setError(null)
+        setStats(null)
+        setServer((prev) => prev ? { ...prev, status: "Stopping", players: "0/20" } : prev)
         const result = await window.context.stopServer(id)
         if (!result.success) {
             setError(result.error || "Failed to stop server")
+            await refreshServers()
         }
         setStopping(false)
     }
@@ -608,6 +658,7 @@ export function ServerDetailPage() {
         const result = await window.context.restartServer(id)
         if (!result.success) {
             setError(result.error || "Failed to restart server")
+            await refreshServers()
         }
         setRestarting(false)
     }
@@ -876,24 +927,64 @@ export function ServerDetailPage() {
         }
     }, [modrinthContext])
 
-    const handleInstallModrinth = async (hit: ModrinthSearchHit) => {
+    const performInstallModrinth = async (target: ModrinthInstallTarget, versionId: string) => {
         if (!id || !modrinthContext || !server) return
-        setModrinthInstalling((prev) => ({ ...prev, [hit.projectId]: true }))
+        setModrinthInstalling((prev) => ({ ...prev, [target.projectId]: true }))
         const result = await window.context.installModrinthProject(id, {
-            projectId: hit.projectId,
+            projectId: target.projectId,
             projectType: modrinthContext.projectType,
             loader: modrinthContext.loader,
             gameVersion: server.version,
-            title: hit.title,
-            slug: hit.slug,
-            iconUrl: hit.iconUrl,
+            versionId,
+            title: target.title,
+            slug: target.slug,
+            iconUrl: target.iconUrl,
         })
-        setModrinthInstalling((prev) => ({ ...prev, [hit.projectId]: false }))
+        setModrinthInstalling((prev) => ({ ...prev, [target.projectId]: false }))
         if (!result.success) {
             setError(result.error || "Failed to install")
             return
         }
+        setModrinthInstallOpen(false)
+        setModrinthInstallTarget(null)
         await loadModrinthInstalls()
+    }
+
+    const handleOpenModrinthInstall = async (target: ModrinthInstallTarget) => {
+        if (!modrinthContext || !server) return
+        if (!target.projectId) {
+            setError("Modrinth project is missing an id.")
+            return
+        }
+        setModrinthDetailOpen(false)
+        setModrinthInstallTarget(target)
+        setModrinthInstallOpen(true)
+        setModrinthVersions([])
+        setSelectedModrinthVersionId("")
+        setModrinthVersionsError(null)
+        setModrinthVersionsLoading(true)
+        try {
+            const versions = await window.context.listModrinthVersions(
+                target.projectId,
+                modrinthContext.loader,
+                server.version
+            )
+            setModrinthVersions(versions)
+            setSelectedModrinthVersionId(versions[0]?.id ?? "")
+            if (versions.length === 0) {
+                setModrinthVersionsError("No compatible versions found for this server.")
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to load versions"
+            setModrinthVersionsError(msg)
+        } finally {
+            setModrinthVersionsLoading(false)
+        }
+    }
+
+    const handleConfirmModrinthInstall = async () => {
+        if (!modrinthInstallTarget || !selectedModrinthVersionId) return
+        await performInstallModrinth(modrinthInstallTarget, selectedModrinthVersionId)
     }
 
     const handleUpdateModrinth = async (entry: ModrinthInstallEntry) => {
@@ -927,18 +1018,17 @@ export function ServerDetailPage() {
         await loadModrinthInstalls()
     }
 
-    const handleOpenModrinth = (entry: { slug: string; projectType: ModrinthProjectType }) => {
-        const url = `https://modrinth.com/${entry.projectType}/${entry.slug}`
-        window.context.openExternal(url)
-    }
-
-    const handleOpenModrinthDetails = async (hit: ModrinthSearchHit) => {
+    const handleOpenModrinthDetails = async (project: { projectId: string }) => {
+        if (!project.projectId) {
+            setError("Modrinth project is missing an id.")
+            return
+        }
         setModrinthDetailOpen(true)
         setModrinthDetail(null)
         setModrinthDetailError(null)
         setModrinthDetailLoading(true)
         try {
-            const detail = await window.context.getModrinthProject(hit.projectId)
+            const detail = await window.context.getModrinthProject(project.projectId)
             setModrinthDetail(detail)
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Failed to load details"
@@ -1072,6 +1162,7 @@ export function ServerDetailPage() {
             setError(result.error || "Failed to delete server")
             return
         }
+        removeServerFromStore(id)
         navigate("/servers")
     }
 
@@ -1107,16 +1198,18 @@ export function ServerDetailPage() {
             })
     }, [properties, propsFilter])
 
-    const memoryMax = stats?.memoryMaxMB ?? server?.ramMB ?? null
-    const memoryUsed = stats?.memoryUsedMB ?? null
+    const liveStats = storeStats ?? stats ?? null
+    const memoryMax = liveStats?.memoryMaxMB ?? server?.ramMB ?? null
+    const memoryUsed = liveStats?.memoryUsedMB ?? null
     const memoryPercent =
         memoryUsed != null && memoryMax
             ? Math.min(100, Math.max(0, Math.round((memoryUsed / memoryMax) * 100)))
             : null
+    const selectedModrinthVersion = modrinthVersions.find((version) => version.id === selectedModrinthVersionId)
 
     if (loading) {
         return (
-            <section className="flex items-center justify-center h-full">
+            <section className="flex flex-1 items-center justify-center">
                 <Spinner className="text-primary" />
             </section>
         )
@@ -1124,7 +1217,7 @@ export function ServerDetailPage() {
 
     if (!server) {
         return (
-            <section className="flex flex-col items-center justify-center gap-4 h-full">
+            <section className="flex flex-1 flex-col items-center justify-center gap-4">
                 <p className="text-muted-foreground">Server not found</p>
                 <Button variant="ghost" onClick={() => navigate("/servers")}>
                     <ArrowLeft className="h-4 w-4 mr-2" />
@@ -1135,13 +1228,13 @@ export function ServerDetailPage() {
     }
 
     return (
-        <section className="flex flex-col gap-0 pb-10">
+        <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-0 pb-10">
             {/* Header */}
-            <header className="px-10 pt-6 pb-5">
+            <header className="px-8 pt-6 pb-5">
                 {/* Back link */}
                 <button
                     onClick={() => navigate("/servers")}
-                    className="text-sm text-primary hover:underline flex items-center gap-1.5 mb-4"
+                    className="mb-4 inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
                 >
                     <ArrowLeft className="h-3.5 w-3.5" />
                     All servers
@@ -1187,8 +1280,18 @@ export function ServerDetailPage() {
                                             {stopping ? "Stopping..." : "Stop"}
                                         </Button>
                                     </>
+                                ) : isStarting ? (
+                                    <Button variant="outline" size="sm" disabled>
+                                        <Spinner className="mr-1.5 h-3.5 w-3.5" />
+                                        Starting...
+                                    </Button>
+                                ) : isStopping ? (
+                                    <Button variant="outline" size="sm" disabled>
+                                        <Spinner className="mr-1.5 h-3.5 w-3.5" />
+                                        Stopping...
+                                    </Button>
                                 ) : (
-                                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90" size="sm" onClick={handleStart} disabled={starting}>
+                                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90" size="sm" onClick={handleStart} disabled={starting || !canStart}>
                                         {starting ? <Spinner className="mr-1.5 h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
                                         {starting ? "Starting..." : "Start"}
                                     </Button>
@@ -1212,7 +1315,7 @@ export function ServerDetailPage() {
                                 <Globe className="h-3 w-3" />
                                 {ipCopied ? "Copied!" : `${localIp}:${properties.find(p => p.key === "server-port")?.value || "25565"}`}
                             </Badge>
-                            {server.status === "Online" && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
+                            {isOnline && (server.ngrokUrl || ngrokStatus?.publicUrl) && (
                                 <Badge
                                     variant="outline"
                                     className="gap-1.5 font-normal text-primary cursor-pointer hover:text-primary/80 transition-colors border-primary/30"
@@ -1222,9 +1325,12 @@ export function ServerDetailPage() {
                                     {ngrokUrlCopied ? "Copied!" : (server.ngrokUrl || ngrokStatus?.publicUrl)}
                                 </Badge>
                             )}
-                            <Badge variant={isOnline ? "default" : "outline"} className={`gap-1.5 ${isOnline ? "" : "text-muted-foreground"}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-primary-foreground" : "bg-muted-foreground"}`} />
-                                {server.status}
+                            <Badge
+                                variant="outline"
+                                className={`gap-1.5 font-medium ${SERVER_STATUS_STYLES[currentStatus]}`}
+                            >
+                                <span className={`status-dot !h-1.5 !w-1.5 ${SERVER_STATUS_DOT[currentStatus]}`} />
+                                {currentStatus === "Idle" ? "Offline" : currentStatus}
                             </Badge>
                         </div>
                     </div>
@@ -1232,7 +1338,7 @@ export function ServerDetailPage() {
             </header>
 
             {error && (
-                <div className="px-10">
+                <div className="px-8">
                     <Alert variant="destructive">
                         <AlertTitle>Error</AlertTitle>
                         <AlertDescription>{error}</AlertDescription>
@@ -1242,7 +1348,7 @@ export function ServerDetailPage() {
 
             {/* Tabs */}
             <Tabs defaultValue="overview" className="flex flex-col">
-                <div className="px-10 border-b border-border">
+                <div className="px-8 border-b border-border">
                     <TabsList>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="library">Content</TabsTrigger>
@@ -1254,82 +1360,71 @@ export function ServerDetailPage() {
                 </div>
 
                 {/* Overview Tab */}
-                <TabsContent value="overview" className="mt-0 px-10 pt-6">
+                <TabsContent value="overview" className="mt-0 px-8 pt-6">
                     {/* Stats cards */}
                     <div className="grid grid-cols-3 gap-4 mb-6">
                         {/* Players card */}
                         <Card className="overflow-hidden">
-                            <CardContent className="p-5 relative">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <span className="text-3xl font-bold tabular-nums">
-                                            {isOnline
-                                                ? stats ? `${stats.playerCount}` : "0"
-                                                : "—"}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground ml-1">
-                                            / {isOnline && stats ? stats.maxPlayers : "20"}
-                                        </span>
-                                    </div>
-                                    <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center">
-                                        <Users className="h-4.5 w-4.5 text-muted-foreground" />
-                                    </div>
+                            <CardContent className="p-6">
+                                <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                                    <Users className="h-3.5 w-3.5" />
+                                    Players online
+                                </p>
+                                <div className="mt-2.5 flex items-baseline gap-1.5">
+                                    <span className={`font-data text-[32px] font-medium leading-none tracking-tight ${isOnline && liveStats && liveStats.playerCount > 0 ? "text-primary" : "text-foreground"}`}>
+                                        {isOnline ? (liveStats ? liveStats.playerCount : 0) : "—"}
+                                    </span>
+                                    <span className="font-data text-sm text-muted-foreground">
+                                        / {isOnline && liveStats ? liveStats.maxPlayers : "20"}
+                                    </span>
                                 </div>
-                                <p className="text-xs text-muted-foreground">Players online</p>
-                                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
+                                <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-muted">
                                     <div
                                         className="h-full rounded-full bg-primary transition-all duration-500"
-                                        style={{ width: isOnline && stats ? `${Math.min(100, (stats.playerCount / stats.maxPlayers) * 100)}%` : "0%" }}
+                                        style={{ width: isOnline && liveStats ? `${Math.min(100, (liveStats.playerCount / liveStats.maxPlayers) * 100)}%` : "0%" }}
                                     />
                                 </div>
                             </CardContent>
                         </Card>
 
-                        {/* Memory card */}
+                        {/* Memory card — segmented gauge */}
                         <Card className="overflow-hidden">
-                            <CardContent className="p-5 relative">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <span className={`text-3xl font-bold tabular-nums ${isOnline && memoryPercent != null && memoryPercent > 85 ? "text-destructive" : ""}`}>
-                                            {isOnline && memoryPercent != null
-                                                ? `${memoryPercent}%`
-                                                : isOnline ? "..." : "—"}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground ml-1">
-                                            {isOnline && memoryUsed != null ? `${memoryUsed} / ${memoryMax ?? "?"} MB` : formatRam(server.ramMB)}
-                                        </span>
+                            <CardContent className="flex items-center justify-between gap-3 p-6">
+                                <div className="min-w-0">
+                                    <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                                        <MemoryStick className="h-3.5 w-3.5" />
+                                        Memory usage
+                                    </p>
+                                    <div className={`mt-2.5 font-data text-[32px] font-medium leading-none tracking-tight ${isOnline && memoryPercent != null && memoryPercent > 85 ? "text-destructive" : isOnline && memoryPercent != null ? "text-primary" : "text-foreground"}`}>
+                                        {isOnline && memoryPercent != null ? `${memoryPercent}%` : "—"}
                                     </div>
-                                    <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center">
-                                        <MemoryStick className="h-4.5 w-4.5 text-muted-foreground" />
-                                    </div>
+                                    <p className="mt-2.5 truncate font-data text-[12px] text-muted-foreground">
+                                        {isOnline && memoryUsed != null
+                                            ? `${memoryUsed} MB process / ${memoryMax ?? "?"} MB heap`
+                                            : `${formatRam(server.ramMB)} heap limit`}
+                                    </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground">Memory usage</p>
-                                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-500 ${isOnline && memoryPercent != null && memoryPercent > 85 ? "bg-destructive" : "bg-primary"}`}
-                                        style={{ width: isOnline && memoryPercent != null ? `${memoryPercent}%` : "0%" }}
-                                    />
-                                </div>
+                                <RadialGauge
+                                    value={isOnline && memoryPercent != null ? memoryPercent : 0}
+                                    display=""
+                                    size={86}
+                                    segments={20}
+                                    className="shrink-0"
+                                />
                             </CardContent>
                         </Card>
 
                         {/* Storage card */}
                         <Card className="overflow-hidden">
-                            <CardContent className="p-5 relative">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <span className="text-3xl font-bold tabular-nums">
-                                            {diskUsage !== null ? formatBytes(diskUsage) : diskUsageLoading ? "..." : "—"}
-                                        </span>
-                                    </div>
-                                    <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center">
-                                        <Archive className="h-4.5 w-4.5 text-muted-foreground" />
-                                    </div>
+                            <CardContent className="p-6">
+                                <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                                    <Archive className="h-3.5 w-3.5" />
+                                    Storage usage
+                                </p>
+                                <div className="mt-2.5 font-data text-[32px] font-medium leading-none tracking-tight text-foreground">
+                                    {diskUsage !== null ? formatBytes(diskUsage) : diskUsageLoading ? "..." : "—"}
                                 </div>
-                                <p className="text-xs text-muted-foreground">Storage usage</p>
-                                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <div className="h-full rounded-full bg-primary/40" style={{ width: "0%" }} />
-                                </div>
+                                <p className="mt-2.5 font-data text-[12px] text-muted-foreground">on disk</p>
                             </CardContent>
                         </Card>
                     </div>
@@ -1339,7 +1434,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Properties Tab */}
-                <TabsContent value="properties" className="mt-0 px-10 pt-6">
+                <TabsContent value="properties" className="mt-0 px-8 pt-6">
                     <Card>
                         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
@@ -1392,7 +1487,7 @@ export function ServerDetailPage() {
                                 </div>
                             ) : (
                                 <div>
-                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-[12px] text-muted-foreground">
                                         <span>Property</span>
                                         <span>Value</span>
                                     </div>
@@ -1433,7 +1528,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Players Tab */}
-                <TabsContent value="players" className="mt-0 px-10 pt-6">
+                <TabsContent value="players" className="mt-0 px-8 pt-6">
                     <div className="grid grid-cols-2 gap-4">
                         {/* Whitelist */}
                         <Card>
@@ -1626,7 +1721,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Library Tab */}
-                <TabsContent value="library" className="mt-0 px-10 pt-6 max-h-[740px] overflow-auto pr-1">
+                <TabsContent value="library" className="mt-0 px-8 pt-6 max-h-[740px] overflow-auto pr-1">
                     {!modrinthContext ? (
                         <Card>
                             <CardHeader>
@@ -1714,7 +1809,7 @@ export function ServerDetailPage() {
                                                     }}
                                                 >
                                                     {/* Left: Icon Frame */}
-                                                    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-muted p-2 border border-border/50 overflow-hidden">
+                                                    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-muted p-2 border border-border overflow-hidden">
                                                          <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-muted-foreground/20 z-0 select-none">
                                                             {hit.title.charAt(0).toUpperCase()}
                                                          </div>
@@ -1846,7 +1941,14 @@ export function ServerDetailPage() {
                                                                     Downloading
                                                                 </Button>
                                                             ) : (
-                                                                <Button size="sm" className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => handleInstallModrinth(hit)}>
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleOpenModrinthInstall(hit)
+                                                                    }}
+                                                                >
                                                                     <Download className="h-3.5 w-3.5 mr-1.5" />
                                                                     Install
                                                                 </Button>
@@ -1941,7 +2043,13 @@ export function ServerDetailPage() {
                                             {modrinthInstalls.map((entry) => (
                                                 <div
                                                     key={entry.projectId}
-                                                    className="flex items-center justify-between rounded-xl border border-border bg-muted/50 px-3 py-3"
+                                                    className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-muted/50 px-3 py-3 transition-colors hover:bg-muted"
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={() => handleOpenModrinthDetails(entry)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") handleOpenModrinthDetails(entry)
+                                                    }}
                                                 >
                                                     <div className="flex items-center gap-3 min-w-0">
                                                         <div className="relative h-10 w-10 shrink-0">
@@ -1967,19 +2075,13 @@ export function ServerDetailPage() {
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        {entry.slug && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() => handleOpenModrinth({ slug: entry.slug!, projectType: entry.projectType })}
-                                                            >
-                                                                <ExternalLink className="h-4 w-4" />
-                                                            </Button>
-                                                        )}
                                                         <Button
                                                             size="sm"
                                                             variant="ghost"
-                                                            onClick={() => handleUpdateModrinth(entry)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleUpdateModrinth(entry)
+                                                            }}
                                                             disabled={modrinthUpdating[entry.projectId]}
                                                         >
                                                             {modrinthUpdating[entry.projectId] ? (
@@ -1991,7 +2093,10 @@ export function ServerDetailPage() {
                                                         <Button
                                                             size="sm"
                                                             variant="ghost"
-                                                            onClick={() => handleRemoveModrinth(entry)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleRemoveModrinth(entry)
+                                                            }}
                                                             disabled={modrinthRemoving[entry.projectId]}
                                                         >
                                                             {modrinthRemoving[entry.projectId] ? (
@@ -2012,7 +2117,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Files Tab */}
-                <TabsContent value="files" className="mt-0 px-10 pt-6">
+                <TabsContent value="files" className="mt-0 px-8 pt-6">
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between">
@@ -2183,7 +2288,7 @@ export function ServerDetailPage() {
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="rounded-xl border border-border bg-[#2c2b28]">
+                                        <div className="console-surface rounded-xl border border-border">
                                             {fileLoading ? (
                                                 <div className="flex items-center justify-center py-16">
                                                     <Spinner className="text-primary" />
@@ -2314,7 +2419,7 @@ export function ServerDetailPage() {
                 </Dialog>
 
                 {/* Settings Tab */}
-                <TabsContent value="settings" className="mt-0 px-10 pt-6 space-y-8 pb-10 max-h-[75vh] overflow-y-auto pr-2">
+                <TabsContent value="settings" className="mt-0 px-8 pt-6 space-y-8 pb-10 max-h-[75vh] overflow-y-auto pr-2">
                     
                     {/* Fixed Success Alert */}
                     {settingsSuccess && (
@@ -2338,7 +2443,7 @@ export function ServerDetailPage() {
 
                     {/* Section: General */}
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                        <div className="flex items-center gap-2 pb-2 border-b border-border">
                             <Info className="h-5 w-5 text-primary" />
                             <h3 className="text-lg font-semibold tracking-tight">General Information</h3>
                         </div>
@@ -2411,7 +2516,7 @@ export function ServerDetailPage() {
 
                     {/* Section: Performance */}
                     <div className="space-y-4">
-                         <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                         <div className="flex items-center gap-2 pb-2 border-b border-border">
                             <Gauge className="h-5 w-5 text-primary" />
                             <h3 className="text-lg font-semibold tracking-tight">Performance</h3>
                         </div>
@@ -2426,7 +2531,7 @@ export function ServerDetailPage() {
                                 <CardContent className="flex flex-col gap-6">
                                     <div className="grid gap-3">
                                         <div className="flex items-center gap-2">
-                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                                            <label className="text-[12.5px] font-medium text-muted-foreground">
                                                 Allocated Memory (RAM)
                                             </label>
                                             <TooltipProvider>
@@ -2475,7 +2580,7 @@ export function ServerDetailPage() {
                                         </div>
                                     </div>
                                     <div className="grid gap-3">
-                                        <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                                        <label className="text-[12.5px] font-medium text-muted-foreground">
                                             Java Executable
                                         </label>
                                         <Input
@@ -2504,8 +2609,8 @@ export function ServerDetailPage() {
                 
                     {/* Section: Backups */}
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-border/50">
-                            <Archive className="h-5 w-5 text-amber-500" />
+                        <div className="flex items-center gap-2 pb-2 border-b border-border">
+                            <Archive className="h-5 w-5 text-primary" />
                             <h3 className="text-lg font-semibold tracking-tight">Backups</h3>
                         </div>
 
@@ -2517,7 +2622,7 @@ export function ServerDetailPage() {
                                     <CardDescription>Automated backup schedule</CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex flex-col gap-4">
-                                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50">
+                                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border">
                                         <div className="space-y-0.5">
                                             <div className="text-sm font-medium">Automatic Backups</div>
                                             <div className="text-xs text-muted-foreground">{autoBackupEnabled ? "Active" : "Paused"}</div>
@@ -2537,7 +2642,7 @@ export function ServerDetailPage() {
                                     </div>
                                     {autoBackupEnabled && (
                                         <div className="grid gap-2">
-                                            <label className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                                            <label className="text-[12.5px] font-medium text-muted-foreground">
                                                 Interval
                                             </label>
                                             <div className="flex items-center gap-2">
@@ -2575,12 +2680,12 @@ export function ServerDetailPage() {
                                 </CardHeader>
                                 <CardContent className="flex flex-col justify-center gap-4">
                                     {/* Work in Progress Warning */}
-                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
+                                    <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-3">
                                         <div className="flex items-start gap-2">
-                                            <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                                            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
                                             <div className="text-sm">
-                                                <span className="font-semibold text-amber-800">Work in Progress:</span>
-                                                <span className="text-amber-700/80 ml-1">Backup functionality is currently under development and may not work correctly.</span>
+                                                <span className="font-semibold text-amber-700 dark:text-amber-300">Work in progress:</span>
+                                                <span className="ml-1 text-amber-700/80 dark:text-amber-300/70">Backup functionality is currently under development and may not work correctly.</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2589,7 +2694,7 @@ export function ServerDetailPage() {
                                             {/* Progress Bar */}
                                             <div className="w-full bg-muted rounded-full h-2.5">
                                                 <div
-                                                    className="bg-amber-500 h-2.5 rounded-full transition-all duration-300"
+                                                    className="bg-primary h-2.5 rounded-full transition-all duration-300"
                                                     style={{ width: `${Math.max(0, backupPercent)}%` }}
                                                 ></div>
                                             </div>
@@ -2623,7 +2728,7 @@ export function ServerDetailPage() {
                                         </div>
                                     ) : (
                                         <Button
-                                            className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
+                                            className="h-12 w-full"
                                             onClick={() => setCreateBackupDialogOpen(true)}
                                         >
                                             <Plus className="h-4 w-4 mr-2" />
@@ -2665,7 +2770,7 @@ export function ServerDetailPage() {
                                         {backups.map((backup) => (
                                             <div key={backup.filename} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border group hover:border-border transition-all">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`h-8 w-8 rounded-md flex items-center justify-center ${backup.type === 'auto' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                                                    <div className={`h-8 w-8 rounded-md flex items-center justify-center ${backup.type === 'auto' ? 'bg-[hsl(var(--chart-3))]/10 text-[hsl(var(--chart-3))]' : 'bg-primary/10 text-primary'}`}>
                                                         {backup.type === 'auto' ? <Clock className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
                                                     </div>
                                                     <div>
@@ -2708,7 +2813,7 @@ export function ServerDetailPage() {
                     </div>
 
                     {/* Section: Danger Zone */}
-                    <div className="space-y-4 pt-4 border-t border-border/50">
+                    <div className="space-y-4 pt-4 border-t border-border">
                         <div className="flex items-center gap-2 pb-2">
                              <h3 className="text-lg font-semibold tracking-tight text-destructive">Danger Zone</h3>
                         </div>
@@ -2733,7 +2838,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Analytics Tab */}
-                <TabsContent value="analytics" className="mt-0 px-10 pt-6 max-h-[75vh] overflow-y-auto pr-2">
+                <TabsContent value="analytics" className="mt-0 px-8 pt-6 max-h-[75vh] overflow-y-auto pr-2">
                     <AnalyticsTab serverId={id || ""} />
                 </TabsContent>
             </Tabs>
@@ -2760,14 +2865,14 @@ export function ServerDetailPage() {
                             {/* Header Section */}
                             <div className="flex items-start gap-4">
                                 <div className="relative h-20 w-20 shrink-0">
-                                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-muted text-2xl font-bold text-muted-foreground/20 border border-border/50">
+                                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-muted text-2xl font-bold text-muted-foreground/20 border border-border">
                                         {modrinthDetail.title.charAt(0).toUpperCase()}
                                     </div>
                                     {modrinthDetail.iconUrl && (
                                         <img
                                             src={modrinthDetail.iconUrl}
                                             alt={modrinthDetail.title}
-                                            className="relative h-20 w-20 rounded-2xl object-contain bg-muted border border-border/50"
+                                            className="relative h-20 w-20 rounded-2xl object-contain bg-muted border border-border"
                                             onError={(e) => {
                                                 e.currentTarget.style.opacity = "0"
                                             }}
@@ -2819,7 +2924,7 @@ export function ServerDetailPage() {
                                         <Button
                                             className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
                                             onClick={() =>
-                                                handleInstallModrinth({
+                                                handleOpenModrinthInstall({
                                                     projectId: modrinthDetail.projectId,
                                                     slug: modrinthDetail.slug,
                                                     title: modrinthDetail.title,
@@ -2836,22 +2941,12 @@ export function ServerDetailPage() {
                                             Install
                                         </Button>
                                     )}
-                                    {modrinthDetail.slug && (
-                                        <Button
-                                            variant="ghost"
-                                            className="w-full justify-start text-muted-foreground hover:text-foreground"
-                                            onClick={() => handleOpenModrinth({ slug: modrinthDetail.slug, projectType: modrinthContext?.projectType ?? "plugin" })}
-                                        >
-                                            <ExternalLink className="h-4 w-4 mr-2" />
-                                            View on Modrinth
-                                        </Button>
-                                    )}
                                 </div>
                             </div>
 
                             {modrinthDetail.gallery && modrinthDetail.gallery.length > 0 && (
                                 <div className="space-y-2">
-                                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Gallery</h3>
+                                    <h3 className="text-sm font-medium text-muted-foreground">Gallery</h3>
                                     <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
                                         {modrinthDetail.gallery.map((image) => (
                                             <img
@@ -2867,7 +2962,7 @@ export function ServerDetailPage() {
                             )}
 
                             <div className="space-y-2">
-                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">About</h3>
+                                <h3 className="text-sm font-medium text-muted-foreground">About</h3>
                                 <div className="rounded-xl border border-border bg-card p-6 text-sm text-foreground/80 leading-relaxed font-sans prose max-w-none">
                                     {/* Rudimentary markdown support (converting newlines and links) would go here ideally */}
                                     {/* For now, preserving whitespace and basic structure */}
@@ -2878,6 +2973,111 @@ export function ServerDetailPage() {
                             </div>
                         </div>
                     ) : null}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={modrinthInstallOpen} onOpenChange={setModrinthInstallOpen}>
+                <DialogContent className="max-w-[620px] border-border bg-card">
+                    <DialogHeader>
+                        <DialogTitle>Install {modrinthInstallTarget?.title ?? modrinthContext?.label}</DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                            Choose the exact version to install for {server.version}. Catalyst will download the selected compatible file into the server&apos;s {modrinthContext?.projectType === "plugin" ? "plugins" : "mods"} folder.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="mt-4 space-y-4">
+                        {modrinthVersionsLoading ? (
+                            <div className="flex items-center justify-center py-10">
+                                <Spinner className="text-primary" />
+                            </div>
+                        ) : modrinthVersionsError ? (
+                            <Alert variant="destructive">
+                                <AlertTitle>Versions unavailable</AlertTitle>
+                                <AlertDescription>{modrinthVersionsError}</AlertDescription>
+                            </Alert>
+                        ) : (
+                            <>
+                                <div className="grid gap-2">
+                                    <label className="text-[12.5px] font-medium text-muted-foreground">
+                                        Version
+                                    </label>
+                                    <Select value={selectedModrinthVersionId} onValueChange={setSelectedModrinthVersionId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a version" />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-72">
+                                            {modrinthVersions.map((version) => (
+                                                <SelectItem key={version.id} value={version.id}>
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="font-medium">{version.versionNumber}</span>
+                                                        <span className="text-muted-foreground">{version.name}</span>
+                                                    </span>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {selectedModrinthVersion && (
+                                    <div className="rounded-xl border border-border bg-background/60 p-4">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <p className="text-[14px] font-medium text-foreground">
+                                                    {selectedModrinthVersion.name}
+                                                </p>
+                                                <p className="mt-1 text-[12.5px] text-muted-foreground">
+                                                    Published {new Date(selectedModrinthVersion.datePublished).toLocaleDateString()} · {selectedModrinthVersion.fileName}
+                                                </p>
+                                            </div>
+                                            <Badge variant="outline" className="capitalize">
+                                                {selectedModrinthVersion.versionType}
+                                            </Badge>
+                                        </div>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            {selectedModrinthVersion.gameVersions.slice(0, 6).map((version) => (
+                                                <Badge key={version} variant="secondary" className="bg-muted/50 text-muted-foreground">
+                                                    {version}
+                                                </Badge>
+                                            ))}
+                                            {selectedModrinthVersion.loaders.map((loader) => (
+                                                <Badge key={loader} variant="outline" className="capitalize">
+                                                    {loader}
+                                                </Badge>
+                                            ))}
+                                            {selectedModrinthVersion.fileSize && (
+                                                <Badge variant="outline">
+                                                    {formatBytes(selectedModrinthVersion.fileSize)}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    <div className="mt-6 flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setModrinthInstallOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleConfirmModrinthInstall}
+                            disabled={
+                                !selectedModrinthVersionId ||
+                                !modrinthInstallTarget ||
+                                !!modrinthVersionsError ||
+                                modrinthVersionsLoading ||
+                                !!(modrinthInstallTarget && modrinthInstalling[modrinthInstallTarget.projectId])
+                            }
+                        >
+                            {modrinthInstallTarget && modrinthInstalling[modrinthInstallTarget.projectId] ? (
+                                <Spinner className="mr-2 h-4 w-4" />
+                            ) : (
+                                <Download className="mr-2 h-4 w-4" />
+                            )}
+                            Install selected version
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
 
@@ -3042,4 +3242,3 @@ export function ServerDetailPage() {
         </section>
     )
 }
-
