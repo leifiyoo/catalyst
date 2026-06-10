@@ -1,48 +1,92 @@
-import { useState, useEffect } from "react"
-import { TitleBar } from "@/components/TitleBar"
+import { useCallback, useEffect, useState } from "react"
+import { Minus, Square, X, Copy, Search } from "@/components/icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AnimatedOutlet } from "@/components/AnimatedOutlet"
-import { Badge } from "@/components/ui/badge"
-import { SidebarProvider } from "@/components/ui/sidebar"
+import { CommandPalette } from "@/components/CommandPalette"
+import { startServerSync } from "@/stores/serverStore"
+
+const dragRegion = { WebkitAppRegion: "drag" } as React.CSSProperties
+const noDragRegion = { WebkitAppRegion: "no-drag" } as React.CSSProperties
 
 export function DashboardLayout() {
     const [isMaximized, setIsMaximized] = useState(false)
 
     useEffect(() => {
+        startServerSync()
+
         window.context?.getWindowState?.().then((state) => {
             setIsMaximized(state.isMaximized)
         })
-        const unsubscribe = window.context?.onWindowStateChanged?.((state) => {
+
+        return window.context?.onWindowStateChanged?.((state) => {
             setIsMaximized(state.isMaximized)
         })
-        return () => {
-            unsubscribe?.()
-        }
+    }, [])
+
+    const handleControl = useCallback((action: "minimize" | "toggle-maximize" | "close") => {
+        window.context?.windowControl?.(action)
+    }, [])
+
+    const openCommandPalette = useCallback(() => {
+        window.dispatchEvent(new CustomEvent("catalyst:command-palette"))
     }, [])
 
     return (
-        <div className="relative h-full min-h-screen w-full bg-background text-foreground" style={{ borderRadius: '12px', overflow: 'auto' }}>
-            <TitleBar isMaximized={isMaximized} />
-            <SidebarProvider>
-                <div className="flex h-full w-full min-h-0">
-                    <AppSidebar />
-                    <main className="flex-1 min-h-0 overflow-auto pt-11">
-                        <div className="flex min-h-0 flex-col">
-                            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-8 py-4 backdrop-blur">
-                                <div className="text-[11px] uppercase tracking-[0.35em] text-muted-foreground">
-                                    Workspace
-                                </div>
-                                <Badge variant="outline" className="border-border text-muted-foreground">
-                                    Local runtime
-                                </Badge>
-                            </div>
-                            <div className="flex-1 min-h-0">
-                                <AnimatedOutlet />
-                            </div>
-                        </div>
-                    </main>
-                </div>
-            </SidebarProvider>
+        <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
+            <AppSidebar />
+
+            <div className="flex h-screen min-w-0 flex-1 flex-col">
+                <header
+                    className="flex h-[60px] shrink-0 items-center justify-between border-b border-border pl-8 pr-4 pt-2"
+                    style={dragRegion}
+                >
+                    <button
+                        type="button"
+                        onClick={openCommandPalette}
+                        style={noDragRegion}
+                        className="group inline-flex h-8 w-64 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-secondary/60 px-3.5 text-[13px] text-muted-foreground transition-colors duration-200 hover:border-input hover:bg-secondary hover:text-foreground"
+                    >
+                        <Search className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1 truncate text-left">Search or run a command</span>
+                        <kbd className="font-data rounded-md border border-border bg-background px-1.5 py-px text-[10px] text-muted-foreground">
+                            Ctrl K
+                        </kbd>
+                    </button>
+
+                    <div className="flex items-center gap-1" style={noDragRegion}>
+                        <button
+                            type="button"
+                            className="grid h-8 w-9 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+                            aria-label="Minimize"
+                            onClick={() => handleControl("minimize")}
+                        >
+                            <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                            type="button"
+                            className="grid h-8 w-9 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+                            aria-label={isMaximized ? "Restore" : "Maximize"}
+                            onClick={() => handleControl("toggle-maximize")}
+                        >
+                            {isMaximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                            type="button"
+                            className="grid h-8 w-9 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-destructive hover:text-destructive-foreground"
+                            aria-label="Close"
+                            onClick={() => handleControl("close")}
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </header>
+
+                <main className="app-main-scroll relative min-h-0 flex-1 overflow-y-scroll">
+                    <AnimatedOutlet />
+                </main>
+            </div>
+
+            <CommandPalette />
         </div>
     )
 }

@@ -37,6 +37,7 @@ export default defineConfig({
         "@/pages": resolve("src/renderer/src/pages"),
         "@/layouts": resolve("src/renderer/src/layouts"),
         "@/assets": resolve("src/renderer/src/assets"),
+        "@/stores": resolve("src/renderer/src/stores"),
       },
     },
     plugins: [react()],

@@ -21,6 +21,8 @@ export function UpdateNotifier() {
     } | null>(null);
 
     useEffect(() => {
+        if (!window.context?.checkForUpdates) return;
+
         let cancelled = false;
 
         const delayTimer = setTimeout(async () => {
@@ -48,7 +50,7 @@ export function UpdateNotifier() {
     }, []);
 
     const handleUpdate = () => {
-        if (updateInfo?.releaseUrl) {
+        if (updateInfo?.releaseUrl && window.context?.openExternal) {
             window.context.openExternal(updateInfo.releaseUrl);
         }
         setOpen(false);

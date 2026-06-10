@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command'
 import { Dialog, DialogContent } from './ui/dialog'
+import { DialogTitle } from '@radix-ui/react-dialog'
 import { useServerStore } from '../stores/serverStore'
-import { usePreferences } from '../hooks/usePreferences'
-import { Search, Play, Square, RotateCw, Settings, Zap } from 'lucide-react'
+import { Search, Play, Square, RotateCw, Settings, LayoutGrid, Server, Activity, Plus } from 'lucide-react'
 
 interface CommandAction {
   id: string
@@ -20,9 +20,8 @@ export function CommandPalette() {
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
   const { servers, startServer, stopServer, restartServer } = useServerStore()
-  usePreferences() // preferences removed as it was unused
 
-  // Global keyboard shortcut handler
+  // Global shortcut + header button event
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -30,25 +29,57 @@ export function CommandPalette() {
         setOpen((prev) => !prev)
       }
     }
+    const handleOpenEvent = () => setOpen(true)
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('catalyst:command-palette', handleOpenEvent)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('catalyst:command-palette', handleOpenEvent)
+    }
   }, [])
 
-  // Build command actions
-  const buildActions = useCallback((): CommandAction[] => {
-    const actions: CommandAction[] = [
-      // Navigation actions
+  // Clear stale search whenever the palette is opened
+  useEffect(() => {
+    if (open) setSearch('')
+  }, [open])
+
+  const actions = useMemo<CommandAction[]>(() => {
+    const close = () => setOpen(false)
+
+    return [
+      {
+        id: 'nav-dashboard',
+        label: 'Go to Dashboard',
+        icon: <LayoutGrid className="w-4 h-4" />,
+        action: () => {
+          navigate('/')
+          close()
+        },
+        group: 'Navigation',
+        keywords: ['dashboard', 'home', 'overview'],
+      },
       {
         id: 'nav-servers',
         label: 'Go to Servers',
-        icon: <Zap className="w-4 h-4" />,
+        icon: <Server className="w-4 h-4" />,
         action: () => {
           navigate('/servers')
-          setOpen(false)
+          close()
         },
         group: 'Navigation',
-        keywords: ['servers', 'manage', 'dashboard']
+        keywords: ['servers', 'manage', 'list'],
+      },
+      {
+        id: 'nav-analytics',
+        label: 'Go to Analytics',
+        icon: <Activity className="w-4 h-4" />,
+        action: () => {
+          navigate('/analytics')
+          close()
+        },
+        group: 'Navigation',
+        keywords: ['analytics', 'stats', 'players', 'tps'],
       },
       {
         id: 'nav-settings',
@@ -56,77 +87,93 @@ export function CommandPalette() {
         icon: <Settings className="w-4 h-4" />,
         action: () => {
           navigate('/settings')
-          setOpen(false)
+          close()
         },
         group: 'Navigation',
-        keywords: ['settings', 'preferences', 'config']
+        keywords: ['settings', 'preferences', 'config', 'theme', 'ngrok'],
       },
       {
-        id: 'nav-analytics',
-        label: 'Go to Analytics',
-        icon: <Zap className="w-4 h-4" />,
+        id: 'create-server',
+        label: 'Create new server',
+        icon: <Plus className="w-4 h-4" />,
         action: () => {
-          navigate('/analytics')
-          setOpen(false)
+          navigate('/servers?create=true')
+          close()
         },
-        group: 'Navigation',
-        keywords: ['analytics', 'dashboard', 'stats']
+        group: 'Actions',
+        keywords: ['create', 'new', 'server', 'add'],
       },
-      // Server actions
-      ...servers.flatMap((server) => [
-        {
-          id: `start-${server.id}`,
-          label: `Start ${server.name}`,
-          icon: <Play className="w-4 h-4" />,
-          action: async () => {
-            await startServer(server.id)
-            setOpen(false)
+      ...servers.flatMap((server): CommandAction[] => {
+        const online = server.status === 'Online'
+        const busy = server.status === 'Starting' || server.status === 'Stopping'
+        const serverActions: CommandAction[] = [
+          {
+            id: `open-${server.id}`,
+            label: `Open ${server.name}`,
+            icon: <Server className="w-4 h-4" />,
+            action: () => {
+              navigate(`/servers/${server.id}`)
+              close()
+            },
+            group: 'Servers',
+            keywords: [server.name.toLowerCase(), 'open', 'panel', 'console'],
           },
-          group: 'Servers',
-          keywords: [server.name.toLowerCase(), 'start', 'run']
-        },
-        {
-          id: `stop-${server.id}`,
-          label: `Stop ${server.name}`,
-          icon: <Square className="w-4 h-4" />,
-          action: async () => {
-            await stopServer(server.id)
-            setOpen(false)
-          },
-          group: 'Servers',
-          keywords: [server.name.toLowerCase(), 'stop', 'kill']
-        },
-        {
-          id: `restart-${server.id}`,
-          label: `Restart ${server.name}`,
-          icon: <RotateCw className="w-4 h-4" />,
-          action: async () => {
-            await restartServer(server.id)
-            setOpen(false)
-          },
-          group: 'Servers',
-          keywords: [server.name.toLowerCase(), 'restart', 'reboot']
+        ]
+
+        if (online) {
+          serverActions.push(
+            {
+              id: `stop-${server.id}`,
+              label: `Stop ${server.name}`,
+              icon: <Square className="w-4 h-4" />,
+              action: async () => {
+                close()
+                await stopServer(server.id)
+              },
+              group: 'Servers',
+              keywords: [server.name.toLowerCase(), 'stop', 'kill'],
+            },
+            {
+              id: `restart-${server.id}`,
+              label: `Restart ${server.name}`,
+              icon: <RotateCw className="w-4 h-4" />,
+              action: async () => {
+                close()
+                await restartServer(server.id)
+              },
+              group: 'Servers',
+              keywords: [server.name.toLowerCase(), 'restart', 'reboot'],
+            }
+          )
+        } else if (!busy) {
+          serverActions.push({
+            id: `start-${server.id}`,
+            label: `Start ${server.name}`,
+            icon: <Play className="w-4 h-4" />,
+            action: async () => {
+              close()
+              await startServer(server.id)
+            },
+            group: 'Servers',
+            keywords: [server.name.toLowerCase(), 'start', 'run', 'launch'],
+          })
         }
-      ])
+
+        return serverActions
+      }),
     ]
-    return actions
   }, [servers, startServer, stopServer, restartServer, navigate])
 
-  const actions = buildActions()
-
-  // Fuzzy search filter
   const filteredActions = search
     ? actions.filter((action) => {
         const query = search.toLowerCase()
-        const matchesLabel = action.label.toLowerCase().includes(query)
-        const matchesKeywords = action.keywords?.some((kw) =>
-          kw.toLowerCase().includes(query)
+        return (
+          action.label.toLowerCase().includes(query) ||
+          action.keywords?.some((kw) => kw.toLowerCase().includes(query))
         )
-        return matchesLabel || matchesKeywords
       })
     : actions
 
-  // Group actions by category
   const groupedActions = filteredActions.reduce(
     (groups, action) => {
       if (!groups[action.group]) {
@@ -140,8 +187,9 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="overflow-hidden p-0 shadow-lg">
-        <Command className="[&_[cmdk-input-wrapper]_svg]:hidden [&_[cmdk-input]]:border-0 [&_[cmdk-input]]:focus-visible:ring-0">
+      <DialogContent className="overflow-hidden p-0 shadow-lg top-[30%] translate-y-0">
+        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <Command shouldFilter={false} className="[&_[cmdk-input-wrapper]_svg]:hidden [&_[cmdk-input]]:border-0 [&_[cmdk-input]]:focus-visible:ring-0">
           <div className="flex items-center border-b px-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <CommandInput
@@ -151,28 +199,23 @@ export function CommandPalette() {
               className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
-          <CommandList className="max-h-[300px] overflow-y-auto">
-            <CommandEmpty className="py-6 text-center text-sm">
+          <CommandList className="max-h-[320px] overflow-y-auto p-1">
+            <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
               No results found.
             </CommandEmpty>
             {Object.entries(groupedActions).map(([group, groupActions]) => (
-              <CommandGroup key={group} heading={group} className="overflow-hidden px-2 py-1.5">
+              <CommandGroup key={group} heading={group} className="overflow-hidden px-1 py-1">
                 {groupActions.map((action) => (
                   <CommandItem
                     key={action.id}
-                    value={action.label}
+                    value={action.id}
                     onSelect={action.action}
-                    className="cursor-pointer"
+                    className="cursor-pointer rounded-lg"
                   >
-                    <div className="mr-2 flex h-4 w-4 items-center justify-center">
+                    <div className="mr-2 flex h-4 w-4 items-center justify-center text-muted-foreground">
                       {action.icon}
                     </div>
                     <span className="flex-1">{action.label}</span>
-                    {action.group === 'Servers' && (
-                      <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-                        Ctrl+K
-                      </kbd>
-                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -180,9 +223,9 @@ export function CommandPalette() {
           </CommandList>
           <div className="border-t px-3 py-2 text-xs text-muted-foreground">
             <p>
-              <kbd className="rounded border bg-muted px-1">Ctrl</kbd>
+              <kbd className="font-data rounded border bg-muted px-1">Ctrl</kbd>
               <span className="mx-1">+</span>
-              <kbd className="rounded border bg-muted px-1">K</kbd>
+              <kbd className="font-data rounded border bg-muted px-1">K</kbd>
               <span className="ml-2">to toggle</span>
             </p>
           </div>

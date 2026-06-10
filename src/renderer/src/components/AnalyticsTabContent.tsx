@@ -348,8 +348,8 @@ function AnalyticsContent({
                                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                     <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                    <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
-                                    <Area type="monotone" dataKey="players" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={2} />
+                                    <Tooltip cursor={false} labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                    <Area isAnimationActive={false} type="monotone" dataKey="players" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.15} strokeWidth={2} />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </CardContent>
@@ -382,8 +382,8 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis domain={[0, 20]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
-                                        <Line type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} dot={false} />
+                                        <Tooltip cursor={false} labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                        <Line isAnimationActive={false} type="monotone" dataKey="tps" stroke="#10b981" strokeWidth={2} dot={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </CardContent>
@@ -403,9 +403,9 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
-                                        <Area type="monotone" dataKey="usedMB" name="Used MB" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} strokeWidth={2} />
-                                        <Area type="monotone" dataKey="maxMB" name="Max MB" stroke="#94a3b8" fill="none" strokeWidth={1} strokeDasharray="5 5" />
+                                        <Tooltip cursor={false} labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                        <Area isAnimationActive={false} type="monotone" dataKey="usedMB" name="Used MB" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} strokeWidth={2} />
+                                        <Area isAnimationActive={false} type="monotone" dataKey="maxMB" name="Max MB" stroke="#94a3b8" fill="none" strokeWidth={1} strokeDasharray="5 5" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </CardContent>
@@ -425,8 +425,8 @@ function AnalyticsContent({
                                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                         <XAxis dataKey="timestamp" tickFormatter={formatTimestamp} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                                        <Tooltip labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
-                                        <Area type="monotone" dataKey="mspt" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.15} strokeWidth={2} />
+                                        <Tooltip cursor={false} labelFormatter={formatTimestamp} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                        <Area isAnimationActive={false} type="monotone" dataKey="mspt" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.15} strokeWidth={2} />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </CardContent>
@@ -471,7 +471,7 @@ function AnalyticsContent({
                                                 <Cell key={`c-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                             ))}
                                         </Pie>
-                                        <Tooltip contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
+                                        <Tooltip cursor={false} contentStyle={CHART_TOOLTIP_STYLE} itemStyle={{ color: "#ffffff" }} labelStyle={{ color: "#ffffff" }} />
                                         <Legend wrapperStyle={{ fontSize: 11, color: "#ffffff" }} />
                                     </PieChart>
                                 </ResponsiveContainer>
@@ -551,7 +551,7 @@ function AnalyticsContent({
                                         <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                                         <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
                                         <Tooltip content={<BarChartTooltip />} cursor={false} />
-                                        <Bar dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
+                                        <Bar isAnimationActive={false} dataKey="joins" name="Joins" radius={[4, 4, 0, 0]}>
                                             {hourlyData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill="hsl(var(--primary))" fillOpacity={0.7} />
                                             ))}
@@ -595,7 +595,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ComponentType<{ clas
     return (
         <div className="flex items-center gap-2 mb-3">
             <Icon className="h-4 w-4 text-muted-foreground" />
-            <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
+            <h4 className="text-sm font-medium text-muted-foreground">{title}</h4>
             <div className="flex-1 h-px bg-border" />
         </div>
     )
@@ -613,15 +613,15 @@ function StatCard({
     accent?: string
 }) {
     return (
-        <Card className="relative overflow-hidden">
-            <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                    <div className={`rounded-md bg-muted p-2 ${accent || ""}`}>
+        <Card className="relative overflow-hidden rounded-xl">
+            <CardContent className="p-3.5">
+                <div className="flex min-h-[54px] items-center gap-3">
+                    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-selected ${accent || ""}`}>
                         <Icon className="h-4 w-4" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
-                        <p className="text-lg font-bold truncate">{value}</p>
+                        <p className="text-[12px] text-muted-foreground">{label}</p>
+                        <p className="mt-0.5 truncate font-data text-[18px] font-medium leading-none text-foreground">{value}</p>
                     </div>
                 </div>
             </CardContent>
@@ -656,7 +656,7 @@ function TrackingSettings({ config }: { config: NonNullable<AnalyticsData["track
             <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {settings.map(s => (
-                        <div key={s.key} className="flex items-center justify-between p-2.5 rounded-md bg-muted/30 border border-border/50">
+                        <div key={s.key} className="flex items-center justify-between p-2.5 rounded-md bg-muted/30 border border-border">
                             <div className="min-w-0">
                                 <p className="text-sm font-medium">{s.label}</p>
                                 <p className="text-xs text-muted-foreground">{s.description}</p>

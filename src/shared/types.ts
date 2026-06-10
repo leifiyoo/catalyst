@@ -13,6 +13,7 @@ export type SetAlwaysOnTopFn = (value: boolean) => Promise<void>;
 // ---- Server Types ----
 
 export type ProcessPriority = "Low" | "Normal" | "High";
+export type ServerRuntimeStatus = "Starting" | "Online" | "Stopping" | "Offline" | "Idle";
 
 export type ServerRecord = {
   id: string;
@@ -20,7 +21,7 @@ export type ServerRecord = {
   framework: string;
   version: string;
   ramMB: number;
-  status: "Online" | "Idle" | "Offline";
+  status: ServerRuntimeStatus;
   players: string;
   createdAt: string;
   serverPath: string;
@@ -86,7 +87,7 @@ export type ConsoleLine = {
 
 export type ServerStatusUpdate = {
   serverId: string;
-  status: "Online" | "Offline";
+  status: ServerRuntimeStatus;
   players?: string;
 };
 
@@ -145,9 +146,22 @@ export type ModrinthInstallRequest = {
   projectType: ModrinthProjectType;
   loader?: string;
   gameVersion?: string;
+  versionId?: string;
   title?: string;
   slug?: string;
   iconUrl?: string;
+};
+
+export type ModrinthVersionOption = {
+  id: string;
+  name: string;
+  versionNumber: string;
+  versionType: "release" | "beta" | "alpha";
+  datePublished: string;
+  loaders: string[];
+  gameVersions: string[];
+  fileName: string;
+  fileSize?: number;
 };
 
 export type ModrinthInstallEntry = {
@@ -245,6 +259,7 @@ export type RenameServerFileFn = (serverId: string, relativePath: string, newNam
 export type CopyServerFileFn = (serverId: string, relativePath: string, newName: string) => Promise<{ success: boolean; error?: string }>;
 export type GetServerLogsFn = (serverId: string) => Promise<ConsoleLine[]>;
 export type SearchModrinthFn = (params: ModrinthSearchParams) => Promise<ModrinthSearchResult>;
+export type ListModrinthVersionsFn = (projectId: string, loader?: string, gameVersion?: string) => Promise<ModrinthVersionOption[]>;
 export type ListModrinthInstallsFn = (serverId: string, projectType: ModrinthProjectType) => Promise<ModrinthInstallEntry[]>;
 export type InstallModrinthProjectFn = (serverId: string, request: ModrinthInstallRequest) => Promise<ModrinthInstallResult>;
 export type UpdateModrinthInstallFn = (serverId: string, request: ModrinthInstallRequest) => Promise<ModrinthUpdateResult>;

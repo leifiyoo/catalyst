@@ -1,35 +1,39 @@
 import "@testing-library/jest-dom";
 import "./utils/window.mock";
-import { render, screen, fireEvent } from "./utils";
-import { expect, test } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { render, screen } from "./utils";
+import { describe, beforeEach, afterEach, expect, test, vi } from "vitest";
 import { act } from "react";
 import App from "@/App";
 
-describe("Tesing default interface", () => {
+describe("Catalyst app shell", () => {
   beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
     await act(async () => {
       render(<App />);
     });
   });
-  test("check screen elements", () => {
-    expect(
-      screen.getByText(/Electron \+ React \+ Shadcn/i)
-    ).toBeVisible();
-    expect(screen.getByText(/Increase Count/i)).toBeVisible();
-    expect(screen.getByText(/Invoke IPC/i)).toBeVisible();
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
   });
 
-  test("check count button interactions", () => {
-    const countButton = screen.getByText(/Increase Count/);
-    fireEvent.click(countButton);
-    expect(screen.getByText("1")).toBeVisible();
-    fireEvent.click(countButton);
-    expect(screen.getByText("2")).toBeVisible();
+  test("renders the Catalyst splash screen", () => {
+    expect(screen.getByAltText("Catalyst")).toBeInTheDocument();
+    expect(screen.getByText(/Preparing your workspace and syncing server state/i)).toBeInTheDocument();
+    expect(window.context.setAlwaysOnTop).toHaveBeenCalledWith(true);
+    expect(window.context.appReady).toHaveBeenCalled();
   });
 
-  test("check IPC communication", () => {
-    const ipcButton = screen.getByText(/Invoke IPC/);
-    fireEvent.click(ipcButton);
-    expect(window.context.triggerIPC).toHaveBeenCalled();
+  test("shows the loading spinner after the splash delay", async () => {
+    expect(screen.queryByRole("status", { name: /loading/i })).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+    });
+
+    expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
   });
 });

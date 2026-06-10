@@ -24,7 +24,10 @@ export function getRequiredJavaVersion(mcVersion: string): number {
   const major = parseInt(match[1]);
   const minor = parseInt(match[2]);
 
-  // Only handle MC 1.x logic
+  // Calendar-versioned Java Edition releases (26.1+) keep the modern Java baseline.
+  if (major >= 26) return 21;
+
+  // Only handle legacy MC 1.x logic after calendar versions.
   if (major !== 1) return 8;
 
   // 1.20.5+ -> Java 21
