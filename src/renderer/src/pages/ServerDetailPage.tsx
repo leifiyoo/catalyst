@@ -645,6 +645,9 @@ export function ServerDetailPage() {
         if (!result.success) {
             setError(result.error || "Failed to stop server")
             await refreshServers()
+        } else {
+            setServer((prev) => prev ? { ...prev, status: "Offline", players: "0/20" } : prev)
+            await refreshServers()
         }
         setStopping(false)
     }

@@ -592,11 +592,26 @@ export async function stopServer(
   }
 
   return new Promise((resolve) => {
-    const onClose = () => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    const finishStopped = async () => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
+      runningServers.delete(serverId);
+      stopStatsPolling(serverId);
       // Clear the ngrok URL from server record when server stops
-      updateServerSettings(serverId, { ngrokUrl: undefined }).catch(() => {});
+      await updateServerSettings(serverId, { ngrokUrl: undefined }).catch(() => {});
+      await updateServerStatus(serverId, "Offline", "0/20");
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        sendStatusUpdate(mainWindow, { serverId, status: "Offline", players: "0/20" });
+      }
       resolve({ success: true });
+    };
+
+    const onClose = () => {
+      finishStopped();
     };
 
     // Send graceful "stop" command to MC server
@@ -604,12 +619,11 @@ export async function stopServer(
       child.stdin.write("stop\n");
     }
 
-    const timeout = setTimeout(() => {
-      child.removeListener("close", onClose);
+    timeout = setTimeout(() => {
       child.kill("SIGKILL");
       // Clear the ngrok URL from server record when server stops
       updateServerSettings(serverId, { ngrokUrl: undefined }).catch(() => {});
-      resolve({ success: true });
+      setTimeout(finishStopped, 1500);
     }, 15000);
 
     child.once("close", onClose);

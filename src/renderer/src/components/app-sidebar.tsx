@@ -24,6 +24,7 @@ function CatalystMark() {
 export function AppSidebar() {
     const location = useLocation()
     const servers = useServerStore((state) => state.servers)
+    const loaded = useServerStore((state) => state.loaded)
     const runningCount = servers.filter((server) => server.status === "Online").length
 
     const isItemActive = (path: string) =>
@@ -74,12 +75,14 @@ export function AppSidebar() {
                     <span className={`status-dot ${runningCount > 0 ? "status-dot-online" : "status-dot-offline"}`} />
                     <div className="leading-none">
                         <div className="text-[12.5px] font-medium text-foreground">
-                            {runningCount > 0
+                            {!loaded
+                                ? "Syncing servers"
+                                : runningCount > 0
                                 ? `${runningCount} server${runningCount === 1 ? "" : "s"} running`
                                 : "All servers stopped"}
                         </div>
                         <div className="mt-1 text-[11px] text-muted-foreground">
-                            {servers.length} configured
+                            {loaded ? `${servers.length} configured` : "Loading..."}
                         </div>
                     </div>
                 </div>

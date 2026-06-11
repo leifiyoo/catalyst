@@ -1,96 +1,88 @@
-![catalyst](/.github/assets/banner.png)
+![Catalyst banner](.github/assets/banner.png)
 
 # Catalyst
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](#installation)
-[![Electron](https://img.shields.io/badge/Electron-33-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-111827.svg)](#installation)
+[![Electron 33](https://img.shields.io/badge/Electron-33-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 
-**A modern, feature-rich Minecraft server launcher and manager.**
+Catalyst is a desktop manager for Minecraft servers. It helps you create, run, configure, back up, and monitor multiple servers from one Windows app.
 
-Catalyst makes it easy to create, configure, and manage multiple Minecraft servers from a single desktop application. With automatic Java management, plugin support via Modrinth, built-in analytics, and a sleek dark UI — running a Minecraft server has never been simpler.
+## Highlights
 
----
+- Manage multiple Vanilla, Paper, Fabric, Forge, and Purpur servers
+- Download and select the right Java runtime for each Minecraft version
+- Use a built-in live console for server output and commands
+- Search and install plugins from Modrinth
+- Track TPS, memory, player activity, and events with CatalystAnalytics
+- Schedule backups for worlds and server files
+- Edit server settings, whitelist, and ban list from the UI
+- Share a server through the built-in ngrok integration
 
-## ✨ Features
+## Installation
 
-- 🖥️ **Multi-Server Management** — Create and run multiple Minecraft servers (Vanilla, Paper, Fabric, Forge, and more)
-- ☕ **Automatic Java Runtime** — Downloads and manages the correct Java version (8, 11, 17, 21) based on your Minecraft version
-- 📟 **Real-Time Console** — Integrated server console with live output
-- 🔌 **Plugin Management** — Search, install, and update plugins directly from Modrinth
-- 📊 **Server Analytics** — Bundled CatalystAnalytics plugin for TPS, memory usage, player stats, and geo-location tracking
-- 💾 **Automated Backups** — Configurable backup schedules to keep your worlds safe
-- 🌐 **Ngrok Integration** — Share your server instantly with built-in tunnel support
-- ⚙️ **Server Properties Editor** — Edit server.properties, whitelist, and banlist from the UI
-- 🔄 **Auto-Updates** — Built-in update checker to stay on the latest version
-- 💻 **Cross-Platform** — Supports Windows (Linux coming soon)
+Download the latest Windows installer from [GitHub Releases](../../releases).
 
----
+| Platform | Status | Format |
+| --- | --- | --- |
+| Windows | Supported | `.exe` installer |
+| Linux | Planned | Not available yet |
 
-## 📥 Installation
+## Development
 
-Download the latest release from [**GitHub Releases**](../../releases).
+### Requirements
 
-| Platform | Format |
-|----------|--------|
-| Windows  | `.exe` installer |
-| Linux    | 🚧 Coming Soon |
-
----
-
-## 🛠️ Development
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 20+
-- [npm](https://www.npmjs.com/) (included with Node.js)
+- [Node.js](https://nodejs.org/) 20 or newer
+- npm, included with Node.js
+- Windows for packaged desktop builds
 
 ### Setup
 
 ```bash
-# Install dependencies
 npm install
-
-# Start in development mode
 npm run dev
 ```
+
+The dev command starts the Electron app and the renderer dev server.
+
+If `npm run dev` fails with `Error: spawn EPERM`, your terminal, antivirus, or sandbox may be blocking Node from starting the esbuild/Electron child process. Run the same command from a normal trusted terminal and allow Node/Electron when Windows or your antivirus asks.
 
 ### Build
 
 ```bash
-# Windows
 npm run build:win
-
-# Linux
-# 🚧 Coming Soon
-
 ```
 
-### Testing
+For an unpacked local build:
 
 ```bash
-# Run unit tests
-npm run test:unit
+npm run build:unpack
+```
 
-# Run tests with coverage
+### Checks
+
+```bash
+npm run typecheck
+npm run test:unit
 npm run coverage
 ```
 
----
+## CatalystAnalytics
 
-## 🧰 Tech Stack
+The desktop app ships with `resources/plugins/CatalystAnalytics.jar`. When analytics are enabled for a Paper or Purpur server, Catalyst copies the plugin into the server's `plugins/` directory and keeps it installed on future starts.
 
-| Category | Technology |
-|----------|------------|
-| **Framework** | [Electron 33](https://www.electronjs.org/) with [electron-vite](https://electron-vite.org/) |
-| **Language** | [TypeScript](https://www.typescriptlang.org/) |
-| **Frontend** | [React 19](https://react.dev/) |
-| **Styling** | [Tailwind CSS 3](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) |
-| **3D Graphics** | [Three.js](https://threejs.org/) |
-| **Testing** | [Vitest](https://vitest.dev/) + [Testing Library](https://testing-library.com/) |
+The plugin exposes a local REST API for dashboard data such as TPS, memory usage, joins, leaves, play time, chat counts, commands, kills, deaths, and approximate player location. Plugin details live in [catalyst-plugin/README.md](catalyst-plugin/README.md).
 
----
+## Tech Stack
 
-## 📄 License
+| Area | Tools |
+| --- | --- |
+| Desktop | Electron 33, electron-vite |
+| UI | React 19, Tailwind CSS, shadcn/ui |
+| Language | TypeScript |
+| Charts and visuals | Recharts, Three.js |
+| Testing | Vitest, Testing Library |
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE).
+## License
+
+Catalyst is licensed under the [GNU General Public License v3.0](LICENSE).
