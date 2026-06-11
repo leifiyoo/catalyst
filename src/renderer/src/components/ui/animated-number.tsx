@@ -12,7 +12,7 @@ interface AnimatedNumberProps {
  * so there are no per-frame React re-renders.
  */
 export function AnimatedNumber({ value, format, className }: AnimatedNumberProps) {
-    const spring = useSpring(0, { stiffness: 100, damping: 22 })
+    const spring = useSpring(value, { stiffness: 100, damping: 22 })
 
     useEffect(() => {
         spring.set(value)

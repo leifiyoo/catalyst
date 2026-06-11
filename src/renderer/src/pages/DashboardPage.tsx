@@ -17,6 +17,31 @@ import { RadialGauge } from "@/components/ui/radial-gauge"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { useServerStore, type ServerEvent } from "@/stores/serverStore"
 
+const DASHBOARD_EASE = [0.22, 1, 0.36, 1] as const
+
+const dashboardSequence = {
+    hidden: {},
+    show: {
+        transition: {
+            staggerChildren: 0.07,
+            delayChildren: 0.04,
+        },
+    },
+}
+
+const dashboardItem = {
+    hidden: { opacity: 0, y: 24, scale: 0.985 },
+    show: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: {
+            duration: 0.46,
+            ease: DASHBOARD_EASE,
+        },
+    },
+}
+
 function parsePlayers(value: string | undefined) {
     const match = value?.match(/(\d+)\s*\/\s*(\d+)/)
     return {
@@ -301,9 +326,17 @@ export function DashboardPage() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-[1240px] px-8 pb-10 pt-8">
+        <motion.div
+            className="mx-auto w-full max-w-[1240px] px-8 pb-10 pt-8"
+            variants={dashboardSequence}
+            initial="hidden"
+            animate="show"
+        >
             {/* Hero row — greeting left, big live numbers right */}
-            <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
+            <motion.div
+                className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6"
+                variants={dashboardItem}
+            >
                 <div>
                     <h1 className="text-[34px] font-medium leading-none tracking-tight text-foreground">Dashboard</h1>
                     <p className="mt-2.5 text-[14px] text-muted-foreground">
@@ -313,24 +346,36 @@ export function DashboardPage() {
                     </p>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-                    <HeroStat label="Servers" value={servers.length} />
-                    <HeroStat label="Running" value={runningServers.length} active={runningServers.length > 0} />
-                    <HeroStat label="Players online" value={totalPlayers} active={totalPlayers > 0} />
-                    <HeroStat
-                        label="Memory in use"
-                        value={memTotals.used}
-                        format={(v) => (v >= 1024 ? `${(v / 1024).toFixed(1)}` : `${Math.round(v)}`)}
-                        active={memTotals.used > 0}
-                    />
-                </div>
-            </div>
+                <motion.div className="flex flex-wrap items-end gap-x-10 gap-y-4" variants={dashboardSequence}>
+                    <motion.div variants={dashboardItem}>
+                        <HeroStat label="Servers" value={servers.length} />
+                    </motion.div>
+                    <motion.div variants={dashboardItem}>
+                        <HeroStat label="Running" value={runningServers.length} active={runningServers.length > 0} />
+                    </motion.div>
+                    <motion.div variants={dashboardItem}>
+                        <HeroStat label="Players online" value={totalPlayers} active={totalPlayers > 0} />
+                    </motion.div>
+                    <motion.div variants={dashboardItem}>
+                        <HeroStat
+                            label="Memory in use"
+                            value={memTotals.used}
+                            format={(v) => (v >= 1024 ? `${(v / 1024).toFixed(1)}` : `${Math.round(v)}`)}
+                            active={memTotals.used > 0}
+                        />
+                    </motion.div>
+                </motion.div>
+            </motion.div>
 
             {/* Bento grid */}
-            <div className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+            <motion.div
+                className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]"
+                variants={dashboardSequence}
+            >
                 {/* Servers — wide card */}
-                <section
+                <motion.section
                     className="overflow-hidden rounded-2xl border border-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                    variants={dashboardItem}
                 >
                     <div className="flex items-center justify-between px-6 pb-2 pt-6">
                         <h2 className="text-[16px] font-medium text-foreground">Servers</h2>
@@ -356,13 +401,14 @@ export function DashboardPage() {
                             <ServerRow key={server.id} server={server} stats={stats[server.id]} />
                         ))}
                     </div>
-                </section>
+                </motion.section>
 
                 {/* Right column */}
-                <div className="flex flex-col gap-5">
+                <motion.div className="flex flex-col gap-5" variants={dashboardSequence}>
                     {/* Live performance gauge */}
-                    <section
+                    <motion.section
                         className="rounded-2xl border border-border bg-card px-6 pb-5 pt-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                        variants={dashboardItem}
                     >
                         <h2 className="text-[16px] font-medium text-foreground">Live performance</h2>
                         <div className="mt-1 flex justify-center">
@@ -380,10 +426,10 @@ export function DashboardPage() {
                                 {avgTps != null ? avgTps.toFixed(1) : "—"}
                             </span>
                         </div>
-                    </section>
+                    </motion.section>
 
                     {/* Action pair — one lime, one violet */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <motion.div className="grid grid-cols-2 gap-4" variants={dashboardItem}>
                         <button
                             type="button"
                             onClick={() => navigate("/servers?create=true")}
@@ -412,19 +458,20 @@ export function DashboardPage() {
                                 analytics
                             </span>
                         </button>
-                    </div>
+                    </motion.div>
 
                     {/* Activity */}
-                    <section
+                    <motion.section
                         className="rounded-2xl border border-border bg-card px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                        variants={dashboardItem}
                     >
                         <h2 className="px-1 text-[16px] font-medium text-foreground">Activity</h2>
                         <div className="mt-2">
                             <ActivityFeed events={events} />
                         </div>
-                    </section>
-                </div>
-            </div>
-        </div>
+                    </motion.section>
+                </motion.div>
+            </motion.div>
+        </motion.div>
     )
 }

@@ -85,7 +85,9 @@ export const useServerStore = create<ServerStore>((set) => ({
   stopServer: async (id) => {
     useServerStore.getState().applyStatus({ serverId: id, status: 'Stopping' })
     const result = await window.context.stopServer(id)
-    if (!result?.success) {
+    if (result?.success) {
+      useServerStore.getState().applyStatus({ serverId: id, status: 'Offline', players: '0/20' })
+    } else {
       useServerStore.getState().refresh()
     }
   },
