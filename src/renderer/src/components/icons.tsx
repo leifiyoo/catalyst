@@ -1,37 +1,55 @@
 import type { ComponentProps } from "react"
+import { HugeiconsIcon } from "@hugeicons/react"
+import type { IconSvgElement } from "@hugeicons/react"
 import {
-  IconAspectRatioSquare2Outline18,
-  IconChartBarTrendUpOutline18,
-  IconCheckOutline18,
-  IconChevronDownOutline18,
-  IconChevronUpOutline18,
-  IconComputerOutline18,
-  IconFiles2Outline18,
-  IconGear2Outline18,
-  IconGridCirclePlusOutline18,
-  IconMagnifierOutline18,
-  IconMinusOutline18,
-  IconXmarkOutline18,
-} from "nucleo-ui-essential-outline-18"
+  Analytics01Icon,
+  Cancel01Icon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CheckIcon,
+  Copy02Icon,
+  DashboardSquare02Icon,
+  MinusSignIcon,
+  Search01Icon,
+  ServerStack02Icon,
+  Settings02Icon,
+  SquareIcon,
+} from "@hugeicons/core-free-icons"
 
-type NucleoIcon = typeof IconCheckOutline18
-type NucleoIconProps = ComponentProps<NucleoIcon>
+type CatalystIconProps = Omit<ComponentProps<"svg">, "ref"> & {
+  size?: number | string
+  strokeWidth?: number
+}
 
-function withOnePxStroke(Icon: NucleoIcon) {
-  return function CatalystIcon(props: NucleoIconProps) {
-    return <Icon aria-hidden="true" strokeWidth={1} {...props} />
+function withHugeIcon(icon: IconSvgElement) {
+  return function CatalystIcon({
+    className,
+    size,
+    strokeWidth = 1.7,
+    ...props
+  }: CatalystIconProps) {
+    return (
+      <HugeiconsIcon
+        aria-hidden="true"
+        icon={icon}
+        className={className}
+        size={size ?? "1em"}
+        strokeWidth={strokeWidth}
+        {...props}
+      />
+    )
   }
 }
 
-export const Activity = withOnePxStroke(IconChartBarTrendUpOutline18)
-export const Check = withOnePxStroke(IconCheckOutline18)
-export const ChevronDown = withOnePxStroke(IconChevronDownOutline18)
-export const ChevronUp = withOnePxStroke(IconChevronUpOutline18)
-export const Copy = withOnePxStroke(IconFiles2Outline18)
-export const LayoutGrid = withOnePxStroke(IconGridCirclePlusOutline18)
-export const Minus = withOnePxStroke(IconMinusOutline18)
-export const Search = withOnePxStroke(IconMagnifierOutline18)
-export const Server = withOnePxStroke(IconComputerOutline18)
-export const Settings = withOnePxStroke(IconGear2Outline18)
-export const Square = withOnePxStroke(IconAspectRatioSquare2Outline18)
-export const X = withOnePxStroke(IconXmarkOutline18)
+export const Activity = withHugeIcon(Analytics01Icon)
+export const Check = withHugeIcon(CheckIcon)
+export const ChevronDown = withHugeIcon(ChevronDownIcon)
+export const ChevronUp = withHugeIcon(ChevronUpIcon)
+export const Copy = withHugeIcon(Copy02Icon)
+export const LayoutGrid = withHugeIcon(DashboardSquare02Icon)
+export const Minus = withHugeIcon(MinusSignIcon)
+export const Search = withHugeIcon(Search01Icon)
+export const Server = withHugeIcon(ServerStack02Icon)
+export const Settings = withHugeIcon(Settings02Icon)
+export const Square = withHugeIcon(SquareIcon)
+export const X = withHugeIcon(Cancel01Icon)

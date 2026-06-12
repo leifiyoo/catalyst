@@ -99,7 +99,7 @@ const router = createHashRouter([
 ]);
 
 // Minimum splash display time (ms) to avoid jarring flash
-const MIN_SPLASH_MS = 1500;
+const MIN_SPLASH_MS = 650;
 
 const App = () => {
     const [showSpinner, setShowSpinner] = useState(false);
@@ -123,7 +123,7 @@ const App = () => {
         // Show spinner after a brief delay (indicates loading)
         const showSpinnerTimer = setTimeout(() => {
             setShowSpinner(true);
-        }, 800);
+        }, 300);
 
         const startTime = Date.now();
 
@@ -147,8 +147,8 @@ const App = () => {
             .then(() => onReady())
             .catch(() => onReady());
 
-        // Fallback timeout in case IPC fails (max 6 seconds)
-        const fallbackTimer = setTimeout(onReady, 6000);
+        // Fallback timeout in case IPC fails
+        const fallbackTimer = setTimeout(onReady, 2500);
 
         const unsubscribe = window.context?.onResizeStep?.(() => {
             window.dispatchEvent(new Event("resize"));

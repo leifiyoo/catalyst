@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from "react"
 import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { ConsoleTab } from "@/components/ConsoleTab"
 import { useParams, useNavigate } from "react-router-dom"
@@ -125,6 +125,156 @@ const SERVER_STATUS_DOT: Record<ServerRecord["status"], string> = {
     Stopping: "status-dot-stopping",
     Offline: "status-dot-offline",
     Idle: "status-dot-idle",
+}
+
+function isMarkdownBoundary(line: string) {
+    const trimmed = line.trim()
+    return (
+        trimmed === "" ||
+        trimmed.startsWith("#") ||
+        trimmed.startsWith("```") ||
+        trimmed.startsWith(">") ||
+        /^[-*]\s+/.test(trimmed)
+    )
+}
+
+function renderMarkdownInline(text: string): ReactNode[] {
+    const nodes: ReactNode[] = []
+    const pattern = /(`[^`]+`|\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = pattern.exec(text))) {
+        if (match.index > lastIndex) {
+            nodes.push(text.slice(lastIndex, match.index))
+        }
+
+        const token = match[0]
+        if (token.startsWith("`")) {
+            nodes.push(
+                <code key={`code-${match.index}`} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">
+                    {token.slice(1, -1)}
+                </code>
+            )
+        } else {
+            const label = match[2]
+            const href = match[3]
+            nodes.push(
+                <a
+                    key={`link-${match.index}`}
+                    href={href}
+                    className="text-primary underline underline-offset-4 hover:text-primary/80"
+                    onClick={(event) => {
+                        event.preventDefault()
+                        window.context?.openExternal?.(href)
+                    }}
+                >
+                    {label}
+                </a>
+            )
+        }
+
+        lastIndex = pattern.lastIndex
+    }
+
+    if (lastIndex < text.length) {
+        nodes.push(text.slice(lastIndex))
+    }
+
+    return nodes
+}
+
+function ModrinthReadme({ body }: { body: string }) {
+    const lines = body.split(/\r?\n/)
+    const blocks: ReactNode[] = []
+    let index = 0
+
+    while (index < lines.length) {
+        const line = lines[index]
+        const trimmed = line.trim()
+
+        if (!trimmed) {
+            index += 1
+            continue
+        }
+
+        if (trimmed.startsWith("```")) {
+            const code: string[] = []
+            index += 1
+            while (index < lines.length && !lines[index].trim().startsWith("```")) {
+                code.push(lines[index])
+                index += 1
+            }
+            index += 1
+            blocks.push(
+                <pre key={`code-${index}`} className="overflow-auto rounded-xl border border-border bg-background p-4 font-mono text-[12px] leading-relaxed text-muted-foreground">
+                    <code>{code.join("\n")}</code>
+                </pre>
+            )
+            continue
+        }
+
+        const heading = trimmed.match(/^(#{1,4})\s+(.+)$/)
+        if (heading) {
+            const level = heading[1].length
+            const text = heading[2].replace(/\s+#$/, "")
+            const HeadingTag = level <= 2 ? "h2" : "h3"
+            blocks.push(
+                <HeadingTag key={`heading-${index}`} className={level <= 2 ? "pt-2 text-xl font-semibold tracking-tight text-foreground" : "pt-1 text-base font-semibold text-foreground"}>
+                    {renderMarkdownInline(text)}
+                </HeadingTag>
+            )
+            index += 1
+            continue
+        }
+
+        if (/^[-*]\s+/.test(trimmed)) {
+            const items: string[] = []
+            while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
+                items.push(lines[index].trim().replace(/^[-*]\s+/, ""))
+                index += 1
+            }
+            blocks.push(
+                <ul key={`list-${index}`} className="space-y-2 pl-5 text-[13.5px] leading-relaxed text-muted-foreground">
+                    {items.map((item, itemIndex) => (
+                        <li key={`${item}-${itemIndex}`} className="list-disc marker:text-primary/70">
+                            {renderMarkdownInline(item)}
+                        </li>
+                    ))}
+                </ul>
+            )
+            continue
+        }
+
+        if (trimmed.startsWith(">")) {
+            const quote = trimmed.replace(/^>\s?/, "")
+            blocks.push(
+                <blockquote key={`quote-${index}`} className="rounded-xl border-l-2 border-primary bg-primary/5 px-4 py-3 text-[13.5px] leading-relaxed text-muted-foreground">
+                    {renderMarkdownInline(quote)}
+                </blockquote>
+            )
+            index += 1
+            continue
+        }
+
+        const paragraph: string[] = [trimmed]
+        index += 1
+        while (index < lines.length && !isMarkdownBoundary(lines[index])) {
+            paragraph.push(lines[index].trim())
+            index += 1
+        }
+        blocks.push(
+            <p key={`paragraph-${index}`} className="text-[13.5px] leading-7 text-muted-foreground">
+                {renderMarkdownInline(paragraph.join(" "))}
+            </p>
+        )
+    }
+
+    if (blocks.length === 0) {
+        return <p className="text-sm text-muted-foreground">No description provided.</p>
+    }
+
+    return <div className="space-y-4">{blocks}</div>
 }
 
 export function ServerDetailPage() {
@@ -274,6 +424,7 @@ export function ServerDetailPage() {
     const [restarting, setRestarting] = useState(false)
     const [exporting, setExporting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState("overview")
     
     // Disk usage state
     const [diskUsage, setDiskUsage] = useState<number | null>(null)
@@ -363,13 +514,16 @@ export function ServerDetailPage() {
     // Load disk usage
     useEffect(() => {
         if (!id) return
-        setDiskUsageLoading(true)
-        window.context.getServerDiskUsage(id).then((result) => {
-            if (result.success && result.bytes !== undefined) {
-                setDiskUsage(result.bytes)
-            }
-            setDiskUsageLoading(false)
-        })
+        const timer = setTimeout(() => {
+            setDiskUsageLoading(true)
+            window.context.getServerDiskUsage(id).then((result) => {
+                if (result.success && result.bytes !== undefined) {
+                    setDiskUsage(result.bytes)
+                }
+                setDiskUsageLoading(false)
+            })
+        }, 900)
+        return () => clearTimeout(timer)
     }, [id])
 
     // Server status subscriber
@@ -925,10 +1079,10 @@ export function ServerDetailPage() {
 
     // Automatically load Modrinth results when tab is opened/context is available
     useEffect(() => {
-        if (modrinthContext && modrinthResults.length === 0 && !modrinthLoading && modrinthQuery === "") {
+        if (activeTab === "library" && modrinthContext && modrinthResults.length === 0 && !modrinthLoading && modrinthQuery === "") {
             handleSearchModrinth(0)
         }
-    }, [modrinthContext])
+    }, [activeTab, modrinthContext, modrinthResults.length, modrinthLoading, modrinthQuery, handleSearchModrinth])
 
     const performInstallModrinth = async (target: ModrinthInstallTarget, versionId: string) => {
         if (!id || !modrinthContext || !server) return
@@ -1350,7 +1504,7 @@ export function ServerDetailPage() {
             )}
 
             {/* Tabs */}
-            <Tabs defaultValue="overview" className="flex flex-col">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col">
                 <div className="px-8 border-b border-border">
                     <TabsList>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -1792,7 +1946,12 @@ export function ServerDetailPage() {
                                             <AlertDescription>{modrinthError}</AlertDescription>
                                         </Alert>
                                     )}
-                                    {modrinthResults.length === 0 ? (
+                                    {modrinthLoading && modrinthResults.length === 0 ? (
+                                        <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                                            <Spinner className="text-primary" />
+                                            <span>Loading Modrinth {modrinthContext.label.toLowerCase()}...</span>
+                                        </div>
+                                    ) : modrinthResults.length === 0 ? (
                                         <div className="flex items-center gap-2 text-muted-foreground text-sm">
                                             <Info className="h-4 w-4" />
                                             <span>Run a search to see results.</span>
@@ -2847,11 +3006,11 @@ export function ServerDetailPage() {
             </Tabs>
 
             <Dialog open={modrinthDetailOpen} onOpenChange={setModrinthDetailOpen}>
-                <DialogContent className="max-w-[800px] border-border bg-card max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <DialogContent className="max-w-[960px] border-border bg-card max-h-[88vh] overflow-y-auto custom-scrollbar">
                     <DialogHeader>
-                        <DialogTitle>Modrinth Overview</DialogTitle>
+                        <DialogTitle>Modrinth Project</DialogTitle>
                         <DialogDescription className="text-muted-foreground">
-                            Details, screenshots, and install status
+                            README, gallery, versions, and install status
                         </DialogDescription>
                     </DialogHeader>
                     {modrinthDetailLoading ? (
@@ -2944,6 +3103,17 @@ export function ServerDetailPage() {
                                             Install
                                         </Button>
                                     )}
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => {
+                                            const url = modrinthDetail.projectUrl || `https://modrinth.com/${modrinthContext?.projectType ?? "plugin"}/${modrinthDetail.slug}`
+                                            window.context?.openExternal?.(url)
+                                        }}
+                                    >
+                                        <Link className="h-4 w-4 mr-2" />
+                                        View on Modrinth
+                                    </Button>
                                 </div>
                             </div>
 
@@ -2965,13 +3135,9 @@ export function ServerDetailPage() {
                             )}
 
                             <div className="space-y-2">
-                                <h3 className="text-sm font-medium text-muted-foreground">About</h3>
-                                <div className="rounded-xl border border-border bg-card p-6 text-sm text-foreground/80 leading-relaxed font-sans prose max-w-none">
-                                    {/* Rudimentary markdown support (converting newlines and links) would go here ideally */}
-                                    {/* For now, preserving whitespace and basic structure */}
-                                    <div className="whitespace-pre-wrap font-sans">
-                                        {modrinthDetail.body || "No description provided."}
-                                    </div>
+                                <h3 className="text-sm font-medium text-muted-foreground">README</h3>
+                                <div className="rounded-2xl border border-border bg-background/70 p-6">
+                                    <ModrinthReadme body={modrinthDetail.body || modrinthDetail.description} />
                                 </div>
                             </div>
                         </div>
@@ -3029,7 +3195,7 @@ export function ServerDetailPage() {
                                                     {selectedModrinthVersion.name}
                                                 </p>
                                                 <p className="mt-1 text-[12.5px] text-muted-foreground">
-                                                    Published {new Date(selectedModrinthVersion.datePublished).toLocaleDateString()} · {selectedModrinthVersion.fileName}
+                                                    Published {new Date(selectedModrinthVersion.datePublished).toLocaleDateString()} - {selectedModrinthVersion.fileName}
                                                 </p>
                                             </div>
                                             <Badge variant="outline" className="capitalize">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Minus, Square, X, Copy, Search } from "@/components/icons"
+import { Minus, Square, X, Copy } from "@/components/icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AnimatedOutlet } from "@/components/AnimatedOutlet"
 import { CommandPalette } from "@/components/CommandPalette"
@@ -27,32 +27,15 @@ export function DashboardLayout() {
         window.context?.windowControl?.(action)
     }, [])
 
-    const openCommandPalette = useCallback(() => {
-        window.dispatchEvent(new CustomEvent("catalyst:command-palette"))
-    }, [])
-
     return (
         <div className="relative flex h-screen overflow-hidden bg-background text-foreground">
             <AppSidebar />
 
             <div className="flex h-screen min-w-0 flex-1 flex-col">
                 <header
-                    className="flex h-[60px] shrink-0 items-center justify-between border-b border-border pl-8 pr-4 pt-2"
+                    className="flex h-[60px] shrink-0 items-center justify-end border-b border-border pl-8 pr-4 pt-2"
                     style={dragRegion}
                 >
-                    <button
-                        type="button"
-                        onClick={openCommandPalette}
-                        style={noDragRegion}
-                        className="group inline-flex h-8 w-64 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-secondary/60 px-3.5 text-[13px] text-muted-foreground transition-colors duration-200 hover:border-input hover:bg-secondary hover:text-foreground"
-                    >
-                        <Search className="h-3.5 w-3.5 shrink-0" />
-                        <span className="flex-1 truncate text-left">Search or run a command</span>
-                        <kbd className="font-data rounded-md border border-border bg-background px-1.5 py-px text-[10px] text-muted-foreground">
-                            Ctrl K
-                        </kbd>
-                    </button>
-
                     <div className="flex items-center gap-1" style={noDragRegion}>
                         <button
                             type="button"

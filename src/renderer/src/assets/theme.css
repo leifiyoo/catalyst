@@ -47,26 +47,26 @@
 
   .dark {
     /* Dark — deep charcoal, lime-chartreuse signal */
-    --background: 0 0% 7%;
+    --background: 220 9% 6%;
     --foreground: 0 0% 93%;
     --strong: 0 0% 100%;
-    --selected: 0 0% 13%;
-    --card: 0 0% 9%;
+    --selected: 220 7% 14%;
+    --card: 220 8% 9%;
     --card-foreground: 0 0% 93%;
-    --popover: 0 0% 10%;
+    --popover: 220 8% 11%;
     --popover-foreground: 0 0% 93%;
     --primary: 72 78% 60%;
     --primary-foreground: 75 40% 8%;
-    --secondary: 0 0% 13%;
+    --secondary: 220 7% 13%;
     --secondary-foreground: 0 0% 93%;
-    --muted: 0 0% 13%;
+    --muted: 220 6% 15%;
     --muted-foreground: 0 0% 71%;
-    --accent: 0 0% 13%;
+    --accent: 220 7% 14%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 58% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 100% / 0.04;
-    --input: 0 0% 100% / 0.08;
+    --border: 220 12% 100% / 0.055;
+    --input: 220 12% 100% / 0.095;
     --ring: 72 78% 60%;
     --radius: 0.5rem;
     --chart-1: 72 78% 60%;
@@ -74,13 +74,13 @@
     --chart-3: 38 85% 58%;
     --chart-4: 192 65% 56%;
     --chart-5: 0 62% 58%;
-    --sidebar-background: 0 0% 7%;
+    --sidebar-background: 220 9% 6%;
     --sidebar-foreground: 0 0% 71%;
     --sidebar-primary: 72 78% 60%;
     --sidebar-primary-foreground: 75 40% 8%;
-    --sidebar-accent: 0 0% 13%;
+    --sidebar-accent: 220 7% 14%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 0 0% 100% / 0.04;
+    --sidebar-border: 220 12% 100% / 0.055;
     --sidebar-ring: 72 78% 60%;
 
     /* Custom signals */
