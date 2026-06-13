@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -33,8 +34,8 @@ public class GeoLocationService {
      * Results are cached and applied to the player's data.
      */
     public void lookupAsync(String playerUuid, String ipAddress) {
-        if (ipAddress == null || ipAddress.isEmpty() || ipAddress.equals("127.0.0.1") || ipAddress.startsWith("192.168.") || ipAddress.startsWith("10.")) {
-            return; // Skip local IPs
+        if (!isPublicAddress(ipAddress)) {
+            return;
         }
 
         // Check cache first
@@ -61,7 +62,7 @@ public class GeoLocationService {
                 }
 
                 String apiUrl = plugin.getConfig().getString("geolocation.api-url",
-                        "http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp");
+                        "https://ipapi.co/{ip}/json/");
                 String url = apiUrl.replace("{ip}", ipAddress);
 
                 HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
@@ -73,7 +74,8 @@ public class GeoLocationService {
                 if (conn.getResponseCode() == 200) {
                     try (InputStreamReader reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
                         DataManager.GeoData geo = gson.fromJson(reader, DataManager.GeoData.class);
-                        if (geo != null && "success".equals(geo.status)) {
+                        if (geo != null && geo.isSuccessful()) {
+                            geo.normalizeProviderFields();
                             geo.cachedAt = Instant.now().getEpochSecond();
                             dm.cacheGeo(ipAddress, geo);
                             dm.setPlayerGeo(playerUuid, geo);
@@ -85,5 +87,29 @@ public class GeoLocationService {
                 plugin.getLogger().log(Level.FINE, "Geo lookup failed for " + ipAddress, e);
             }
         });
+    }
+
+    private boolean isPublicAddress(String ipAddress) {
+        if (ipAddress == null || ipAddress.isEmpty()) {
+            return false;
+        }
+
+        try {
+            InetAddress address = InetAddress.getByName(ipAddress);
+            if (
+                    address.isAnyLocalAddress() ||
+                    address.isLoopbackAddress() ||
+                    address.isLinkLocalAddress() ||
+                    address.isSiteLocalAddress() ||
+                    address.isMulticastAddress()
+            ) {
+                return false;
+            }
+
+            String normalized = address.getHostAddress().toLowerCase();
+            return !(normalized.startsWith("fc") || normalized.startsWith("fd"));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 }

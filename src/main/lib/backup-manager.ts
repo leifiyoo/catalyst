@@ -8,9 +8,12 @@
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
+import { Worker } from 'worker_threads';
 import { BackupEntry } from '@shared/types';
 import { getServer, updateServerSettings, getServers } from './server-manager';
 import { WebContents } from 'electron';
+import { isRunning } from './server-runner';
+import { isPathWithin, sanitizeDownloadFileName } from './safety';
 
 const BACKUP_DIR_NAME = 'backups';
 
@@ -23,8 +26,15 @@ interface BackupStatus {
   error?: string;
 }
 
+type ActiveBackup = {
+  worker: Worker;
+  zipPath: string;
+  webContents?: WebContents;
+  cancelled: boolean;
+};
+
 // Active backups registry to track ongoing backups
-const activeBackups = new Map<string, boolean>();
+const activeBackups = new Map<string, ActiveBackup>();
 const backupStatuses = new Map<string, BackupStatus>();
 
 /**
@@ -56,101 +66,29 @@ function sendProgress(webContents: WebContents | undefined, serverId: string, da
   }
 }
 
-/**
- * Yield to the event loop to prevent blocking
- */
-function yieldToEventLoop(): Promise<void> {
-  return new Promise(resolve => setImmediate(resolve));
-}
-
-/**
- * Get all files in a directory recursively (excluding backup directory)
- * Uses async iteration to prevent blocking
- */
-async function getAllFilesAsync(
-  dirPath: string, 
-  excludeDir: string, 
-  basePath: string = dirPath
-): Promise<{ path: string; relativePath: string; size: number }[]> {
-  const files: { path: string; relativePath: string; size: number }[] = [];
-  
-  if (!fs.existsSync(dirPath)) return files;
-  
-  const items = fs.readdirSync(dirPath);
-  
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const fullPath = path.join(dirPath, item);
-    
-    // Skip the backup directory itself
-    if (fullPath === excludeDir || fullPath.startsWith(excludeDir + path.sep)) {
-      continue;
-    }
-    
-    try {
-      const stat = fs.statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        const subFiles = await getAllFilesAsync(fullPath, excludeDir, basePath);
-        files.push(...subFiles);
-      } else {
-        const relativePath = path.relative(basePath, fullPath);
-        files.push({ path: fullPath, relativePath, size: stat.size });
-      }
-    } catch (e) {
-      console.warn('[BACKUP] Skipping file due to error:', fullPath, e);
-    }
-    
-    // Yield every 50 items to prevent blocking
-    if (i % 50 === 0) {
-      await yieldToEventLoop();
-    }
-  }
-  
-  return files;
-}
-
-/**
- * Create a backup asynchronously using adm-zip
- * 
- * This function properly yields to the event loop to prevent UI blocking
- */
 export async function createBackup(
   serverId: string, 
   name?: string, 
   webContents?: WebContents
 ): Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }> {
-  console.log('[BACKUP] Entering createBackup function');
-  
-  // Check if backup is already in progress for this server
   if (activeBackups.has(serverId)) {
-    console.log('[BACKUP] Backup already in progress for server:', serverId);
     return { 
       success: false, 
       error: 'A backup is already in progress for this server' 
     };
   }
-  
-  // Mark as active immediately
-  activeBackups.set(serverId, true);
-  
+
   try {
     const server = await getServer(serverId);
     if (!server) {
-      console.error('[BACKUP] Server not found', serverId);
-      activeBackups.delete(serverId);
       return { success: false, error: 'Server not found' };
     }
 
     const serverPath = server.serverPath;
-    console.log('[BACKUP] Server path:', serverPath);
-    
     if (!serverPath || !fs.existsSync(serverPath)) {
-      console.error('[BACKUP] Invalid path');
-      activeBackups.delete(serverId);
       return { success: false, error: 'Server path is invalid or missing' };
     }
-    
+
     const backupsDir = path.join(serverPath, BACKUP_DIR_NAME);
     if (!fs.existsSync(backupsDir)) {
       fs.mkdirSync(backupsDir, { recursive: true });
@@ -160,10 +98,7 @@ export async function createBackup(
     const safeName = name ? name.replace(/[^a-zA-Z0-9-_]/g, '_') : 'auto';
     const filename = `backup-${timestamp}-${safeName}.zip`;
     const zipPath = path.join(backupsDir, filename);
-    
-    console.log('[BACKUP] Target zip path:', zipPath);
 
-    // Initialize status
     backupStatuses.set(serverId, {
       serverId,
       inProgress: true,
@@ -171,130 +106,103 @@ export async function createBackup(
       stage: 'calculating'
     });
 
-    // Send initial progress
     sendProgress(webContents, serverId, { percent: 0, stage: 'calculating' });
 
-    // Yield before starting heavy work
-    await yieldToEventLoop();
-
-    // Get all files to backup (async)
-    console.log('[BACKUP] Scanning files...');
-    const filesToBackup = await getAllFilesAsync(serverPath, backupsDir);
-    const totalFiles = filesToBackup.length;
-    const totalSize = filesToBackup.reduce((sum, f) => sum + f.size, 0);
-    
-    console.log(`[BACKUP] Found ${totalFiles} files to backup (${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
-
-    if (totalFiles === 0) {
-      console.error('[BACKUP] No files to backup');
-      activeBackups.delete(serverId);
-      backupStatuses.delete(serverId);
-      return { success: false, error: 'No files found to backup' };
-    }
-
-    // Update stage to archiving
-    sendProgress(webContents, serverId, { percent: 5, stage: 'archiving' });
-
-    // Create zip file
-    const zip = new AdmZip();
-    let processedFiles = 0;
-
-    // Add files in batches to prevent blocking
-    const BATCH_SIZE = 20;
-    
-    for (let i = 0; i < filesToBackup.length; i += BATCH_SIZE) {
-      const batch = filesToBackup.slice(i, i + BATCH_SIZE);
-      
-      for (const file of batch) {
-        try {
-          zip.addLocalFile(file.path, path.dirname(file.relativePath));
-          processedFiles++;
-        } catch (e) {
-          console.warn('[BACKUP] Failed to add file to backup:', file.path, e);
+    return await new Promise((resolve) => {
+      let settled = false;
+      const worker = new Worker(path.join(__dirname, 'backup-worker.js'), {
+        workerData: {
+          serverPath,
+          backupsDir,
+          zipPath,
+          filename,
+          name: name || 'Automatic Backup',
+          type: name ? 'manual' : 'auto',
+          excludeDir: backupsDir
         }
-      }
-      
-      // Calculate progress (5-95% range for archiving)
-      const percent = Math.min(95, Math.round(5 + (processedFiles / totalFiles) * 90));
-      
-      // Send progress update
-      sendProgress(webContents, serverId, {
-        percent,
-        stage: 'archiving',
-        processedFiles,
-        totalFiles
       });
-      
-      // Yield to event loop after each batch
-      await yieldToEventLoop();
-    }
 
-    // Write zip file (95-100%)
-    sendProgress(webContents, serverId, { percent: 95, stage: 'complete' });
-    
-    // Yield before writing
-    await yieldToEventLoop();
-    
-    console.log('[BACKUP] Writing zip file...');
-    zip.writeZip(zipPath);
-    
-    // Verify the file was created
-    if (!fs.existsSync(zipPath)) {
-      console.error('[BACKUP] Zip file was not created');
-      activeBackups.delete(serverId);
-      backupStatuses.delete(serverId);
-      return { success: false, error: 'Failed to create backup file' };
-    }
+      activeBackups.set(serverId, { worker, zipPath, webContents, cancelled: false });
 
-    const stat = fs.statSync(zipPath);
-    console.log(`[BACKUP] Backup created: ${filename} (${(stat.size / 1024 / 1024).toFixed(2)} MB)`);
-
-    // Clean up status
-    activeBackups.delete(serverId);
-    backupStatuses.delete(serverId);
-
-    // Send final progress
-    sendProgress(webContents, serverId, { percent: 100, stage: 'complete' });
-
-    // Send completion event
-    if (webContents && !webContents.isDestroyed()) {
-      const backupEntry: BackupEntry = {
-        name: name || 'Automatic Backup',
-        filename,
-        path: zipPath,
-        size: stat.size,
-        createdAt: new Date().toISOString(),
-        type: name ? 'manual' : 'auto'
+      const settle = async (result: { success: boolean; error?: string; backup?: BackupEntry; started?: boolean }) => {
+        if (settled) return;
+        settled = true;
+        activeBackups.delete(serverId);
+        backupStatuses.delete(serverId);
+        if (!result.success) {
+          await fs.promises.rm(zipPath, { force: true }).catch(() => {});
+        }
+        resolve(result);
       };
-      
-      webContents.send('rendererLog', { 
-        message: 'Backup completed', 
-        data: { filename, size: stat.size } 
-      });
-      
-      // Send backup list refresh trigger
-      webContents.send('backupCompleted', { serverId, backup: backupEntry });
-    }
 
-    return { 
-      success: true, 
-      started: true,
-      backup: {
-        name: name || 'Automatic Backup',
-        filename,
-        path: zipPath,
-        size: stat.size,
-        createdAt: new Date().toISOString(),
-        type: name ? 'manual' : 'auto'
-      }
-    };
+      worker.on('message', (message: { type: string; data: any }) => {
+        if (message.type === 'progress') {
+          sendProgress(webContents, serverId, {
+            percent: message.data.percent,
+            stage: message.data.stage,
+            processedFiles: message.data.processedFiles,
+            totalFiles: message.data.totalFiles
+          });
+          return;
+        }
+
+        if (message.type === 'log') {
+          console.log(message.data);
+          return;
+        }
+
+        if (message.type === 'error') {
+          const errorMessage = message.data?.message ?? 'Backup failed';
+          if (webContents && !webContents.isDestroyed()) {
+            webContents.send('backupProgress', { serverId, percent: -1, error: errorMessage });
+          }
+          void settle({ success: false, error: errorMessage });
+          return;
+        }
+
+        if (message.type === 'complete') {
+          const backup: BackupEntry = {
+            name: name || 'Automatic Backup',
+            filename,
+            path: zipPath,
+            size: message.data.size,
+            createdAt: new Date().toISOString(),
+            type: name ? 'manual' : 'auto'
+          };
+
+          if (webContents && !webContents.isDestroyed()) {
+            webContents.send('rendererLog', {
+              message: 'Backup completed',
+              data: { filename, size: message.data.size }
+            });
+            webContents.send('backupCompleted', { serverId, backup });
+          }
+
+          void settle({ success: true, started: true, backup });
+        }
+      });
+
+      worker.on('error', (error) => {
+        void settle({ success: false, error: error.message });
+      });
+
+      worker.on('exit', (code) => {
+        if (settled) return;
+        const active = activeBackups.get(serverId);
+        if (active?.cancelled) {
+          void settle({ success: false, error: 'Backup cancelled' });
+          return;
+        }
+        if (code !== 0) {
+          void settle({ success: false, error: `Backup worker exited with code ${code}` });
+        }
+      });
+    });
 
   } catch (error) {
-    console.error('[BACKUP] Fatal error:', error);
     activeBackups.delete(serverId);
     backupStatuses.delete(serverId);
-    
-    // Send error to UI
+
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (webContents && !webContents.isDestroyed()) {
       webContents.send('backupProgress', { 
@@ -312,10 +220,19 @@ export async function createBackup(
  * Cancel an ongoing backup
  */
 export function cancelBackup(serverId: string): boolean {
-  if (activeBackups.has(serverId)) {
-    console.log('[BACKUP] Cancelling backup for server:', serverId);
-    activeBackups.delete(serverId);
-    backupStatuses.delete(serverId);
+  const active = activeBackups.get(serverId);
+  if (active) {
+    active.cancelled = true;
+    void active.worker.terminate().finally(() => {
+      fs.rmSync(active.zipPath, { force: true });
+    });
+    if (active.webContents && !active.webContents.isDestroyed()) {
+      active.webContents.send('backupProgress', {
+        serverId,
+        percent: -1,
+        error: 'Backup cancelled'
+      });
+    }
     return true;
   }
   return false;
@@ -392,18 +309,20 @@ export async function deleteBackup(serverId: string, filename: string): Promise<
   const server = await getServer(serverId);
   if (!server) return { success: false, error: 'Server not found' };
 
-  // Validate filename to prevent path traversal
-  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+  let safeFilename: string;
+  try {
+    safeFilename = sanitizeDownloadFileName(filename);
+  } catch {
     return { success: false, error: 'Invalid filename' };
   }
 
   const backupsDir = path.join(server.serverPath, BACKUP_DIR_NAME);
-  const filePath = path.join(backupsDir, filename);
+  const filePath = path.join(backupsDir, safeFilename);
 
   // Double-check resolved path is within backups directory
   const resolvedPath = path.resolve(filePath);
   const resolvedBackupsDir = path.resolve(backupsDir);
-  if (!resolvedPath.startsWith(resolvedBackupsDir + path.sep)) {
+  if (!isPathWithin(resolvedPath, resolvedBackupsDir) || resolvedPath === resolvedBackupsDir) {
     return { success: false, error: 'Access denied' };
   }
 
@@ -422,19 +341,25 @@ export async function restoreBackup(serverId: string, filename: string): Promise
   const server = await getServer(serverId);
   if (!server) return { success: false, error: 'Server not found' };
 
-  // Validate filename to prevent path traversal
-  if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+  if (isRunning(serverId)) {
+    return { success: false, error: 'Stop the server before restoring a backup' };
+  }
+
+  let safeFilename: string;
+  try {
+    safeFilename = sanitizeDownloadFileName(filename);
+  } catch {
     return { success: false, error: 'Invalid filename' };
   }
 
   const backupsDir = path.join(server.serverPath, BACKUP_DIR_NAME);
-  const zipPath = path.join(backupsDir, filename);
+  const zipPath = path.join(backupsDir, safeFilename);
   const serverPath = server.serverPath;
 
   // Double-check resolved path is within backups directory
   const resolvedZipPath = path.resolve(zipPath);
   const resolvedBackupsDir = path.resolve(backupsDir);
-  if (!resolvedZipPath.startsWith(resolvedBackupsDir + path.sep)) {
+  if (!isPathWithin(resolvedZipPath, resolvedBackupsDir) || resolvedZipPath === resolvedBackupsDir) {
     return { success: false, error: 'Access denied' };
   }
 
@@ -447,7 +372,7 @@ export async function restoreBackup(serverId: string, filename: string): Promise
     const resolvedServerPath = path.resolve(serverPath);
     for (const entry of zip.getEntries()) {
       const entryPath = path.resolve(serverPath, entry.entryName);
-      if (!entryPath.startsWith(resolvedServerPath + path.sep) && entryPath !== resolvedServerPath) {
+      if (!isPathWithin(entryPath, resolvedServerPath)) {
         return { success: false, error: `Malicious zip entry detected: ${entry.entryName}` };
       }
     }
@@ -456,7 +381,7 @@ export async function restoreBackup(serverId: string, filename: string): Promise
     const currentFiles = fs.readdirSync(serverPath);
     for (const file of currentFiles) {
       const fullPath = path.join(serverPath, file);
-      if (fullPath === backupsDir) continue;
+      if (path.resolve(fullPath) === path.resolve(backupsDir)) continue;
       await fs.promises.rm(fullPath, { recursive: true, force: true });
     }
 
@@ -479,14 +404,17 @@ export async function checkAndRunAutoBackups() {
         if (now - lastBackup > intervalMs) {
           if (!isBackupInProgress(server.id)) {
             console.log(`[AUTO_BACKUP] Running auto backup for server ${server.name}`);
-            await createBackup(server.id);
-            
-            await updateServerSettings(server.id, {
-              backupConfig: {
-                ...server.backupConfig,
-                lastBackupAt: new Date().toISOString()
-              }
-            });
+            const result = await createBackup(server.id);
+            if (result.success) {
+              await updateServerSettings(server.id, {
+                backupConfig: {
+                  ...server.backupConfig,
+                  lastBackupAt: new Date().toISOString()
+                }
+              });
+            } else {
+              console.warn(`[AUTO_BACKUP] Backup failed for ${server.name}: ${result.error}`);
+            }
           } else {
             console.log(`[AUTO_BACKUP] Skipping auto backup for ${server.name} - backup already in progress`);
           }

@@ -10,6 +10,14 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({
       exclude: ['archiver', 'archiver-utils', 'zip-stream', 'compress-commons', 'crc-32', 'crc32-stream', 'readable-stream', 'lazystream']
     })],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve("src/main/index.ts"),
+          "backup-worker": resolve("src/main/lib/backup-worker.ts"),
+        },
+      },
+    },
     resolve: {
       alias: {
         "@/lib": resolve("src/main/lib"),

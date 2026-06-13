@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
-import { CheckCircle2, ExternalLink, Trash2, Palette, Globe, Info } from "lucide-react"
+import { CheckCircle2, ExternalLink, Trash2, Palette, Globe, Info, ShieldAlert } from "lucide-react"
 import { getStoredTheme, setStoredTheme, type ThemeMode } from "@/utils/theme"
 
 function SettingsSection({
@@ -62,6 +62,7 @@ export function SettingsPage() {
 
     const [theme, setTheme] = useState<ThemeMode>("dark")
     const [ngrokEnabled, setNgrokEnabledState] = useState(true)
+    const [askBeforeClose, setAskBeforeClose] = useState(true)
     const [censoredToken, setCensoredToken] = useState<string | null>(null)
     const [hasToken, setHasToken] = useState(false)
     const [loading, setLoading] = useState(true)
@@ -75,10 +76,10 @@ export function SettingsPage() {
 
     useEffect(() => {
         setTheme(getStoredTheme())
-        loadNgrokSettings()
+        loadSettings()
     }, [])
 
-    const loadNgrokSettings = async () => {
+    const loadSettings = async () => {
         setLoading(true)
         if (!window.context) {
             setLoading(false)
@@ -86,15 +87,17 @@ export function SettingsPage() {
         }
 
         try {
-            const [enabled, token] = await Promise.all([
+            const [enabled, token, appPreferences] = await Promise.all([
                 window.context.isNgrokEnabled(),
-                window.context.getNgrokAuthtokenCensored()
+                window.context.getNgrokAuthtokenCensored(),
+                window.context.getAppPreferences()
             ])
             setNgrokEnabledState(enabled)
             setCensoredToken(token)
             setHasToken(!!token)
+            setAskBeforeClose(appPreferences.askBeforeClose)
         } catch (error) {
-            console.error("Failed to load ngrok settings:", error)
+            console.error("Failed to load settings:", error)
         } finally {
             setLoading(false)
         }
@@ -103,6 +106,11 @@ export function SettingsPage() {
     const handleToggleNgrok = async (enabled: boolean) => {
         await window.context.setNgrokEnabled(enabled)
         setNgrokEnabledState(enabled)
+    }
+
+    const handleToggleCloseWarning = async (enabled: boolean) => {
+        const preferences = await window.context.updateAppPreferences({ askBeforeClose: enabled })
+        setAskBeforeClose(preferences.askBeforeClose)
     }
 
     const handleThemeChange = (value: string) => {
@@ -141,7 +149,7 @@ export function SettingsPage() {
         if (successTimerRef.current) clearTimeout(successTimerRef.current)
         successTimerRef.current = setTimeout(() => setTokenSuccess(false), 3000)
 
-        await loadNgrokSettings()
+        await loadSettings()
     }
 
     const handleRemoveToken = async () => {
@@ -261,6 +269,22 @@ export function SettingsPage() {
                                     </button>
                                 </p>
                             </div>
+                        </div>
+                    </SettingsSection>
+
+                    <SettingsSection
+                        icon={ShieldAlert}
+                        title="Shutdown"
+                        description="Control what happens when Catalyst closes"
+                    >
+                        <div className="flex items-center justify-between gap-6">
+                            <div>
+                                <p className="text-sm font-medium">Ask before closing</p>
+                                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                                    Show a confirmation before servers and tunnels are stopped on exit
+                                </p>
+                            </div>
+                            <Switch checked={askBeforeClose} onCheckedChange={handleToggleCloseWarning} />
                         </div>
                     </SettingsSection>
 

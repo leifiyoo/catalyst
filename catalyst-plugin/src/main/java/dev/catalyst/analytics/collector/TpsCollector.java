@@ -23,32 +23,21 @@ public class TpsCollector {
         // Initialize baseline
         lastPollTime = System.nanoTime();
 
-        // Use a repeating sync task to count ticks accurately
-        Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-            private long tickCount = 0;
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            long now = System.nanoTime();
+            long elapsed = now - lastPollTime;
+            double seconds = elapsed / 1_000_000_000.0;
+            double tps = intervalTicks / seconds;
+            tps = Math.min(tps, 20.0);
+            tps = Math.round(tps * 100.0) / 100.0;
 
-            @Override
-            public void run() {
-                tickCount++;
-                if (tickCount % intervalTicks == 0) {
-                    long now = System.nanoTime();
-                    long elapsed = now - lastPollTime;
-                    double seconds = elapsed / 1_000_000_000.0;
-                    double tps = intervalTicks / seconds;
-                    // Cap at 20 TPS
-                    tps = Math.min(tps, 20.0);
-                    tps = Math.round(tps * 100.0) / 100.0;
+            double mspt = (elapsed / 1_000_000.0) / intervalTicks;
+            mspt = Math.round(mspt * 100.0) / 100.0;
 
-                    // Calculate MSPT (milliseconds per tick)
-                    double mspt = (elapsed / 1_000_000.0) / intervalTicks;
-                    mspt = Math.round(mspt * 100.0) / 100.0;
-
-                    plugin.getDataManager().addTpsSample(tps);
-                    plugin.getDataManager().addMsptSample(mspt);
-                    lastPollTime = now;
-                }
-            }
-        }, 1L, 1L);
+            plugin.getDataManager().addTpsSample(tps);
+            plugin.getDataManager().addMsptSample(mspt);
+            lastPollTime = now;
+        }, intervalTicks, intervalTicks);
 
         // Also try to use Paper's MSPT API if available
         tryPaperMspt();

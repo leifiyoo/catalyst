@@ -1,19 +1,22 @@
 import { Component, type ReactNode, useState, useEffect, useCallback, Suspense, lazy } from 'react';
-import { motion } from "motion/react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
-import { Spinner } from "@/components/ui/spinner";
 import { SpinnerButton } from "@/components/SpinnerButton";
 import { TitleBar } from "@/components/TitleBar";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ErrorPage } from "@/components/ErrorPage";
 import catalystLogo from "@/assets/catalystwithlogotransparent.png";
 
-// Lazy-load heavy page components for better initial load performance
-const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage })));
-const ServersPage = lazy(() => import("@/pages/ServersPage").then(m => ({ default: m.ServersPage })));
-const ServerDetailPage = lazy(() => import("@/pages/ServerDetailPage").then(m => ({ default: m.ServerDetailPage })));
-const SettingsPage = lazy(() => import("@/pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
-const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage").then(m => ({ default: m.AnalyticsPage })));
+const loadDashboardPage = () => import("@/pages/DashboardPage");
+const loadServersPage = () => import("@/pages/ServersPage");
+const loadServerDetailPage = () => import("@/pages/ServerDetailPage");
+const loadSettingsPage = () => import("@/pages/SettingsPage");
+const loadAnalyticsPage = () => import("@/pages/AnalyticsPage");
+
+const DashboardPage = lazy(() => loadDashboardPage().then(m => ({ default: m.DashboardPage })));
+const ServersPage = lazy(() => loadServersPage().then(m => ({ default: m.ServersPage })));
+const ServerDetailPage = lazy(() => loadServerDetailPage().then(m => ({ default: m.ServerDetailPage })));
+const SettingsPage = lazy(() => loadSettingsPage().then(m => ({ default: m.SettingsPage })));
+const AnalyticsPage = lazy(() => loadAnalyticsPage().then(m => ({ default: m.AnalyticsPage })));
 const UpdateNotifier = lazy(() => import("@/components/UpdateNotifier").then(m => ({ default: m.UpdateNotifier })));
 
 class DashboardErrorBoundary extends Component<
@@ -51,37 +54,37 @@ class DashboardErrorBoundary extends Component<
     }
 }
 
-const PageFallback = () => (
-    <div className="flex items-center justify-center h-full min-h-[200px]">
-        <Spinner className="h-5 w-5 text-muted-foreground" />
-    </div>
-);
-
 const SplashScreen = ({ showSpinner }: { showSpinner: boolean }) => {
     return (
-        <motion.div
+        <div
             className="relative z-[2] flex h-full flex-col items-center justify-center gap-6 px-6 text-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
         >
             <div className="flex flex-col items-center gap-4">
-                <motion.img
+                <img
                     src={catalystLogo}
                     alt="Catalyst"
                     className="h-20 object-contain"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
                 />
                 <p className="max-w-md text-sm text-muted-foreground">
                     Preparing your workspace and syncing server state.
                 </p>
             </div>
             {showSpinner && <SpinnerButton />}
-        </motion.div>
+        </div>
     )
 }
+
+const RouteSkeleton = () => (
+    <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-8 py-8">
+        <div className="h-8 w-48 rounded-lg bg-muted/70" />
+        <div className="grid gap-4 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="h-32 rounded-lg border border-border bg-card" />
+            ))}
+        </div>
+        <div className="h-[420px] rounded-lg border border-border bg-card" />
+    </section>
+)
 
 const router = createHashRouter([
     {
@@ -89,11 +92,11 @@ const router = createHashRouter([
         element: <DashboardLayout />,
         errorElement: <ErrorPage />,
         children: [
-            { index: true, element: <Suspense fallback={<PageFallback />}><DashboardPage /></Suspense>, errorElement: <ErrorPage /> },
-            { path: "servers", element: <Suspense fallback={<PageFallback />}><ServersPage /></Suspense>, errorElement: <ErrorPage /> },
-            { path: "servers/:id", element: <Suspense fallback={<PageFallback />}><ServerDetailPage /></Suspense>, errorElement: <ErrorPage /> },
-            { path: "analytics", element: <Suspense fallback={<PageFallback />}><AnalyticsPage /></Suspense>, errorElement: <ErrorPage /> },
-            { path: "settings", element: <Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>, errorElement: <ErrorPage /> },
+            { index: true, element: <Suspense fallback={<RouteSkeleton />}><DashboardPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "servers", element: <Suspense fallback={<RouteSkeleton />}><ServersPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "servers/:id", element: <Suspense fallback={<RouteSkeleton />}><ServerDetailPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "analytics", element: <Suspense fallback={<RouteSkeleton />}><AnalyticsPage /></Suspense>, errorElement: <ErrorPage /> },
+            { path: "settings", element: <Suspense fallback={<RouteSkeleton />}><SettingsPage /></Suspense>, errorElement: <ErrorPage /> },
         ],
     },
 ]);
@@ -180,11 +183,8 @@ const App = () => {
             )}
 
             {showDashboard && (
-                <motion.div
+                <div
                     className="relative z-[9999] h-full w-full"
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 >
                     <DashboardErrorBoundary>
                         <RouterProvider router={router} />
@@ -192,7 +192,7 @@ const App = () => {
                             <UpdateNotifier />
                         </Suspense>
                     </DashboardErrorBoundary>
-                </motion.div>
+                </div>
             )}
         </div>
     );

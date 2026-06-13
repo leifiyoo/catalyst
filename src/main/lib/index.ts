@@ -40,6 +40,8 @@ export {
   refreshServerStatuses,
   getServerLogs,
   restartServer,
+  isRunning,
+  getRunningServerCount,
 } from "./server-runner";
 
 export {
@@ -74,3 +76,5 @@ export {
 } from "./modrinth";
 
 export { checkForUpdates } from "./update-checker";
+export { getAppPreferences, updateAppPreferences } from "./app-preferences";
+export { shouldConfirmClose } from "./shutdown-policy";

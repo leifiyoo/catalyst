@@ -13,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.logging.Level;
 
 /**
@@ -21,6 +22,7 @@ import java.util.logging.Level;
  * Uses batched writes — data is only written to disk periodically, not on every event.
  */
 public class DataManager {
+    private static final int MAX_HISTORY_SAMPLES = 1440;
 
     private final CatalystAnalyticsPlugin plugin;
     private final File dataFolder;
@@ -53,13 +55,13 @@ public class DataManager {
     private final String serverStartTime = Instant.now().toString();
 
     // --- Server-wide stats ---
-    private volatile long totalJoins = 0;
-    private volatile long totalChatMessages = 0;
-    private volatile long totalCommandsExecuted = 0;
-    private volatile long totalBlocksPlaced = 0;
-    private volatile long totalBlocksBroken = 0;
-    private volatile long totalDeaths = 0;
-    private volatile long totalKills = 0;
+    private final LongAdder totalJoins = new LongAdder();
+    private final LongAdder totalChatMessages = new LongAdder();
+    private final LongAdder totalCommandsExecuted = new LongAdder();
+    private final LongAdder totalBlocksPlaced = new LongAdder();
+    private final LongAdder totalBlocksBroken = new LongAdder();
+    private final LongAdder totalDeaths = new LongAdder();
+    private final LongAdder totalKills = new LongAdder();
 
     // --- Dirty flag for batched writes ---
     private volatile boolean dirty = false;
@@ -101,7 +103,7 @@ public class DataManager {
         pd.joinCount++;
         pd.online = true;
         uniquePlayers.add(uuid);
-        totalJoins++;
+        totalJoins.increment();
         dirty = true;
 
         // Track hourly joins
@@ -136,42 +138,42 @@ public class DataManager {
     public void recordChat(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.chatMessages++;
-        totalChatMessages++;
+        totalChatMessages.increment();
         dirty = true;
     }
 
     public void recordDeath(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.deaths++;
-        totalDeaths++;
+        totalDeaths.increment();
         dirty = true;
     }
 
     public void recordKill(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.kills++;
-        totalKills++;
+        totalKills.increment();
         dirty = true;
     }
 
     public void recordBlockPlaced(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.blocksPlaced++;
-        totalBlocksPlaced++;
+        totalBlocksPlaced.increment();
         dirty = true;
     }
 
     public void recordBlockBroken(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.blocksBroken++;
-        totalBlocksBroken++;
+        totalBlocksBroken.increment();
         dirty = true;
     }
 
     public void recordCommand(String uuid) {
         PlayerData pd = players.get(uuid);
         if (pd != null) pd.commandsExecuted++;
-        totalCommandsExecuted++;
+        totalCommandsExecuted.increment();
         dirty = true;
     }
 
@@ -225,7 +227,7 @@ public class DataManager {
     // ========== TPS ==========
 
     public void addTpsSample(double tps) {
-        tpsHistory.add(new TimestampedValue(Instant.now().toString(), tps));
+        addBoundedSample(tpsHistory, new TimestampedValue(Instant.now().toString(), tps));
         dirty = true;
     }
 
@@ -236,7 +238,7 @@ public class DataManager {
     // ========== MSPT ==========
 
     public void addMsptSample(double mspt) {
-        msptHistory.add(new TimestampedValue(Instant.now().toString(), mspt));
+        addBoundedSample(msptHistory, new TimestampedValue(Instant.now().toString(), mspt));
         dirty = true;
     }
 
@@ -247,7 +249,7 @@ public class DataManager {
     // ========== Memory ==========
 
     public void addMemorySample(double usedMB, double maxMB) {
-        memoryHistory.add(new TimestampedValue(Instant.now().toString(), usedMB, maxMB));
+        addBoundedSample(memoryHistory, new TimestampedValue(Instant.now().toString(), usedMB, maxMB));
         dirty = true;
     }
 
@@ -258,7 +260,7 @@ public class DataManager {
     // ========== Player Count Timeline ==========
 
     public void addPlayerCountSnapshot(int count) {
-        playerCountTimeline.add(new TimestampedValue(Instant.now().toString(), count));
+        addBoundedSample(playerCountTimeline, new TimestampedValue(Instant.now().toString(), count));
         dirty = true;
     }
 
@@ -280,13 +282,13 @@ public class DataManager {
 
     public int getPeakOnline() { return peakOnline; }
     public int getUniquePlayerCount() { return uniquePlayers.size(); }
-    public long getTotalJoins() { return totalJoins; }
-    public long getTotalChatMessages() { return totalChatMessages; }
-    public long getTotalCommandsExecuted() { return totalCommandsExecuted; }
-    public long getTotalBlocksPlaced() { return totalBlocksPlaced; }
-    public long getTotalBlocksBroken() { return totalBlocksBroken; }
-    public long getTotalDeaths() { return totalDeaths; }
-    public long getTotalKills() { return totalKills; }
+    public long getTotalJoins() { return totalJoins.sum(); }
+    public long getTotalChatMessages() { return totalChatMessages.sum(); }
+    public long getTotalCommandsExecuted() { return totalCommandsExecuted.sum(); }
+    public long getTotalBlocksPlaced() { return totalBlocksPlaced.sum(); }
+    public long getTotalBlocksBroken() { return totalBlocksBroken.sum(); }
+    public long getTotalDeaths() { return totalDeaths.sum(); }
+    public long getTotalKills() { return totalKills.sum(); }
     public Map<Integer, Long> getHourlyJoins() { return Collections.unmodifiableMap(hourlyJoins); }
 
     public int getCurrentOnline() {
@@ -334,6 +336,10 @@ public class DataManager {
     // ========== Persistence (Batched) ==========
 
     public synchronized void saveAll() {
+        if (!dirty && new File(dataFolder, "analytics.json").exists()) {
+            return;
+        }
+
         try {
             saveJson("players.json", players);
             saveJson("tps_history.json", tpsHistory);
@@ -346,13 +352,13 @@ public class DataManager {
             // Save server-wide stats
             Map<String, Object> serverStats = new HashMap<>();
             serverStats.put("peakOnline", peakOnline);
-            serverStats.put("totalJoins", totalJoins);
-            serverStats.put("totalChatMessages", totalChatMessages);
-            serverStats.put("totalCommandsExecuted", totalCommandsExecuted);
-            serverStats.put("totalBlocksPlaced", totalBlocksPlaced);
-            serverStats.put("totalBlocksBroken", totalBlocksBroken);
-            serverStats.put("totalDeaths", totalDeaths);
-            serverStats.put("totalKills", totalKills);
+            serverStats.put("totalJoins", totalJoins.sum());
+            serverStats.put("totalChatMessages", totalChatMessages.sum());
+            serverStats.put("totalCommandsExecuted", totalCommandsExecuted.sum());
+            serverStats.put("totalBlocksPlaced", totalBlocksPlaced.sum());
+            serverStats.put("totalBlocksBroken", totalBlocksBroken.sum());
+            serverStats.put("totalDeaths", totalDeaths.sum());
+            serverStats.put("totalKills", totalKills.sum());
             serverStats.put("uniquePlayers", new ArrayList<>(uniquePlayers));
             saveJson("server_stats.json", serverStats);
 
@@ -361,6 +367,13 @@ public class DataManager {
             dirty = false;
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to save analytics data", e);
+        }
+    }
+
+    private void addBoundedSample(CopyOnWriteArrayList<TimestampedValue> history, TimestampedValue value) {
+        history.add(value);
+        while (history.size() > MAX_HISTORY_SAMPLES) {
+            history.remove(0);
         }
     }
 
@@ -377,16 +390,16 @@ public class DataManager {
             overview.put("currentOnline", getCurrentOnline());
             overview.put("peakOnline", peakOnline);
             overview.put("uniquePlayers", uniquePlayers.size());
-            overview.put("totalJoins", totalJoins);
+            overview.put("totalJoins", totalJoins.sum());
             overview.put("newPlayers", getNewPlayerCount());
             overview.put("returningPlayers", getReturningPlayerCount());
             overview.put("averagePlayTimeSeconds", getAveragePlayTimeSeconds());
-            overview.put("totalChatMessages", totalChatMessages);
-            overview.put("totalCommandsExecuted", totalCommandsExecuted);
-            overview.put("totalBlocksPlaced", totalBlocksPlaced);
-            overview.put("totalBlocksBroken", totalBlocksBroken);
-            overview.put("totalDeaths", totalDeaths);
-            overview.put("totalKills", totalKills);
+            overview.put("totalChatMessages", totalChatMessages.sum());
+            overview.put("totalCommandsExecuted", totalCommandsExecuted.sum());
+            overview.put("totalBlocksPlaced", totalBlocksPlaced.sum());
+            overview.put("totalBlocksBroken", totalBlocksBroken.sum());
+            overview.put("totalDeaths", totalDeaths.sum());
+            overview.put("totalKills", totalKills.sum());
 
             // Current TPS and memory
             Runtime rt = Runtime.getRuntime();
@@ -599,13 +612,13 @@ public class DataManager {
             Map<String, Object> serverStats = loadJson("server_stats.json", mapType);
             if (serverStats != null) {
                 peakOnline = ((Number) serverStats.getOrDefault("peakOnline", 0)).intValue();
-                totalJoins = ((Number) serverStats.getOrDefault("totalJoins", 0L)).longValue();
-                totalChatMessages = ((Number) serverStats.getOrDefault("totalChatMessages", 0L)).longValue();
-                totalCommandsExecuted = ((Number) serverStats.getOrDefault("totalCommandsExecuted", 0L)).longValue();
-                totalBlocksPlaced = ((Number) serverStats.getOrDefault("totalBlocksPlaced", 0L)).longValue();
-                totalBlocksBroken = ((Number) serverStats.getOrDefault("totalBlocksBroken", 0L)).longValue();
-                totalDeaths = ((Number) serverStats.getOrDefault("totalDeaths", 0L)).longValue();
-                totalKills = ((Number) serverStats.getOrDefault("totalKills", 0L)).longValue();
+                totalJoins.add(((Number) serverStats.getOrDefault("totalJoins", 0L)).longValue());
+                totalChatMessages.add(((Number) serverStats.getOrDefault("totalChatMessages", 0L)).longValue());
+                totalCommandsExecuted.add(((Number) serverStats.getOrDefault("totalCommandsExecuted", 0L)).longValue());
+                totalBlocksPlaced.add(((Number) serverStats.getOrDefault("totalBlocksPlaced", 0L)).longValue());
+                totalBlocksBroken.add(((Number) serverStats.getOrDefault("totalBlocksBroken", 0L)).longValue());
+                totalDeaths.add(((Number) serverStats.getOrDefault("totalDeaths", 0L)).longValue());
+                totalKills.add(((Number) serverStats.getOrDefault("totalKills", 0L)).longValue());
                 Object up = serverStats.get("uniquePlayers");
                 if (up instanceof List) {
                     ((List<String>) up).forEach(uniquePlayers::add);
@@ -624,10 +637,14 @@ public class DataManager {
         Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
         String cutoffStr = cutoff.toString();
 
-        tpsHistory.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
-        msptHistory.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
-        memoryHistory.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
-        playerCountTimeline.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
+        boolean changed = false;
+        changed |= tpsHistory.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
+        changed |= msptHistory.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
+        changed |= memoryHistory.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
+        changed |= playerCountTimeline.removeIf(v -> v.timestamp.compareTo(cutoffStr) < 0);
+        if (changed) {
+            dirty = true;
+        }
 
         plugin.getLogger().info("Cleaned up data older than " + retentionDays + " days");
     }
@@ -700,10 +717,25 @@ public class DataManager {
 
     public static class GeoData {
         public String status;
+        public Boolean success;
+        public Boolean error;
         public String country;
+        public String country_name;
         public String regionName;
+        public String region;
         public String city;
         public String isp;
+        public String org;
         public long cachedAt;
+
+        public boolean isSuccessful() {
+            return "success".equals(status) || Boolean.TRUE.equals(success) || (!Boolean.TRUE.equals(error) && (country != null || country_name != null));
+        }
+
+        public void normalizeProviderFields() {
+            if (country == null) country = country_name;
+            if (regionName == null) regionName = region;
+            if (isp == null) isp = org;
+        }
     }
 }

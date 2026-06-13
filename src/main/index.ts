@@ -1,17 +1,6 @@
-// Linux SUID sandbox fix — must be set before Electron initializes
-if (process.platform === 'linux') {
-  process.env.ELECTRON_DISABLE_SANDBOX = '1'
-}
-
 import { app, shell, BrowserWindow, ipcMain, dialog } from "electron";
 import { join } from "path";
 import { electronApp, is } from "@electron-toolkit/utils";
-
-// Disable Chromium sandbox on Linux to avoid SUID sandbox helper errors (FATAL:setuid_sandbox_host.cc)
-if (process.platform === "linux") {
-  app.commandLine.appendSwitch("no-sandbox");
-  app.commandLine.appendSwitch("disable-gpu-sandbox");
-}
 
 import icon from "../../resources/logoonly.png?asset";
 import {
@@ -25,6 +14,8 @@ import {
   stopServer,
   sendCommand,
   stopAllServers,
+  isRunning,
+  getRunningServerCount,
   getServerProperties,
   saveServerProperties,
   getWhitelist,
@@ -62,7 +53,10 @@ import {
   getBackupStatus,
   isBackupInProgress,
   getAnalyticsData,
-  getSystemInfo
+  getSystemInfo,
+  getAppPreferences,
+  updateAppPreferences,
+  shouldConfirmClose
 } from "@/lib";
 import {
   installNgrok,
@@ -84,7 +78,66 @@ import {
   WindowControlAction,
   CreateServerParams,
   ServerProperty,
+  AppPreferences,
 } from "@shared/types";
+import { getSafeExternalUrl } from "@/lib/safety";
+
+let exitAfterShutdown = false;
+let shutdownPromise: Promise<void> | null = null;
+let closePromptInProgress = false;
+
+async function stopServicesBeforeExit(): Promise<void> {
+  const results = await Promise.allSettled([stopAllServers(), stopAllTunnels()]);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error("Failed during shutdown cleanup:", result.reason);
+    }
+  }
+}
+
+async function shutdownAndExit(): Promise<void> {
+  if (!shutdownPromise) {
+    shutdownPromise = stopServicesBeforeExit();
+  }
+
+  try {
+    await shutdownPromise;
+  } finally {
+    exitAfterShutdown = true;
+    app.exit(0);
+  }
+}
+
+async function confirmWindowClose(mainWindow: BrowserWindow): Promise<boolean> {
+  const preferences = await getAppPreferences();
+  const runningServerCount = getRunningServerCount();
+  if (!shouldConfirmClose(preferences, runningServerCount)) {
+    return true;
+  }
+
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: "warning",
+    buttons: ["Close Catalyst", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+    checkboxLabel: "Do not show this warning again",
+    checkboxChecked: false,
+    title: "Close Catalyst?",
+    message: "Close Catalyst?",
+    detail:
+      runningServerCount === 1
+        ? "1 running Minecraft server and any public tunnels will be stopped before the app closes."
+        : `${runningServerCount} running Minecraft servers and any public tunnels will be stopped before the app closes.`,
+    noLink: true,
+  });
+
+  const shouldClose = result.response === 0;
+  if (shouldClose && result.checkboxChecked) {
+    await updateAppPreferences({ askBeforeClose: false });
+  }
+
+  return shouldClose;
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -113,6 +166,22 @@ function createWindow(): void {
     mainWindow.show();
   });
 
+  mainWindow.on("close", async (event) => {
+    if (exitAfterShutdown) return;
+
+    event.preventDefault();
+    if (closePromptInProgress || shutdownPromise) return;
+
+    closePromptInProgress = true;
+    try {
+      const shouldClose = await confirmWindowClose(mainWindow);
+      if (!shouldClose) return;
+      await shutdownAndExit();
+    } finally {
+      closePromptInProgress = false;
+    }
+  });
+
   if (is.dev) {
     mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
       console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
@@ -139,7 +208,10 @@ function createWindow(): void {
   mainWindow.on("ready-to-show", sendWindowState);
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
+    const safeUrl = getSafeExternalUrl(details.url);
+    if (safeUrl) {
+      shell.openExternal(safeUrl);
+    }
     return { action: "deny" };
   });
 
@@ -217,6 +289,14 @@ app.whenReady().then(() => {
     return { isMaximized: mainWindow.isMaximized() };
   });
 
+  ipcMain.handle("getAppPreferences", () => {
+    return getAppPreferences();
+  });
+
+  ipcMain.handle("updateAppPreferences", (_event, updates: Partial<AppPreferences>) => {
+    return updateAppPreferences(updates);
+  });
+
   ipcMain.handle("windowControl", (_event, action: WindowControlAction) => {
     const mainWindow = BrowserWindow.getAllWindows()[0];
     if (!mainWindow) return;
@@ -250,6 +330,15 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("deleteServer", async (_event, serverId: string) => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (isRunning(serverId)) {
+      const stopResult = await stopServer(serverId, mainWindow);
+      if (!stopResult.success) {
+        return stopResult;
+      }
+    } else if (mainWindow) {
+      await refreshServerStatuses(mainWindow);
+    }
     return deleteServer(serverId);
   });
 
@@ -447,11 +536,11 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("openExternal", async (_event, url: string) => {
-    // Only allow http(s) URLs to prevent arbitrary protocol execution
-    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    const safeUrl = typeof url === "string" ? getSafeExternalUrl(url) : null;
+    if (!safeUrl) {
       return;
     }
-    await shell.openExternal(url);
+    await shell.openExternal(safeUrl);
   });
 
   // Backup IPC handlers - Fire and Forget pattern
@@ -585,19 +674,10 @@ app.whenReady().then(() => {
 });
 
 // Graceful shutdown: stop all running MC servers before quitting
-let isQuitting = false;
 app.on("before-quit", async (e) => {
-  if (!isQuitting) {
-  isQuitting = true;
+  if (exitAfterShutdown) return;
   e.preventDefault();
-  try {
-    await stopAllServers();
-    await stopAllTunnels();
-  } catch {
-    // Ignore errors during shutdown
-  }
-  app.exit();
-}
+  await shutdownAndExit();
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

@@ -51,10 +51,14 @@ export function RadialGauge({
                         y1={tick.y1}
                         x2={tick.x2}
                         y2={tick.y2}
-                        strokeWidth={size * 0.038}
+                        strokeWidth={tick.active ? size * 0.04 : size * 0.034}
                         strokeLinecap="round"
-                        stroke={tick.active ? "hsl(var(--primary))" : "hsl(var(--muted))"}
-                        opacity={1}
+                        stroke={tick.active ? "hsl(var(--primary))" : "hsl(var(--muted-foreground) / 0.28)"}
+                        opacity={tick.active ? 1 : 0.62}
+                        style={{
+                            transition: "stroke 260ms ease, opacity 260ms ease",
+                            transitionDelay: `${tick.active ? i * 10 : (segments - i) * 7}ms`,
+                        }}
                     />
                 ))}
             </svg>

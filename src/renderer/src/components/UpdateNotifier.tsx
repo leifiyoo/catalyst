@@ -17,6 +17,9 @@ export function UpdateNotifier() {
         latestVersion: string;
         currentVersion: string;
         releaseUrl: string;
+        releaseName?: string;
+        publishedAt?: string;
+        releaseNotes?: string;
         changelog?: ChangelogEntry[];
     } | null>(null);
 
@@ -34,6 +37,9 @@ export function UpdateNotifier() {
                         latestVersion: result.latestVersion,
                         currentVersion: result.currentVersion,
                         releaseUrl: result.releaseUrl,
+                        releaseName: result.releaseName,
+                        publishedAt: result.publishedAt,
+                        releaseNotes: result.releaseNotes,
                         changelog: result.changelog,
                     });
                     setOpen(true);
@@ -60,33 +66,52 @@ export function UpdateNotifier() {
 
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
-            <AlertDialogContent className="bg-popover border-border max-h-[80vh] flex flex-col">
+            <AlertDialogContent className="flex max-h-[80vh] flex-col border-border bg-popover">
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Update Available</AlertDialogTitle>
+                    <AlertDialogTitle>Update available</AlertDialogTitle>
                     <AlertDialogDescription asChild>
                         <div className="text-muted-foreground">
                             <p>
-                                A new version of Catalyst is available.<br/>
-                                Current: <span className="text-destructive font-medium">{updateInfo.currentVersion}</span>
-                                {" → "}
-                                Latest: <span className="text-primary font-medium">{updateInfo.latestVersion}</span>
+                                A new version of Catalyst is available.
+                                <br />
+                                Current:{" "}
+                                <span className="font-medium text-destructive">
+                                    {updateInfo.currentVersion}
+                                </span>
+                                {" -> "}
+                                Latest:{" "}
+                                <span className="font-medium text-primary">
+                                    {updateInfo.latestVersion}
+                                </span>
                             </p>
+                            {(updateInfo.releaseName || updateInfo.publishedAt) && (
+                                <p className="mt-2 text-xs">
+                                    {updateInfo.releaseName || `Catalyst ${updateInfo.latestVersion}`}
+                                    {updateInfo.publishedAt
+                                        ? ` - ${updateInfo.publishedAt.slice(0, 10)}`
+                                        : ""}
+                                </p>
+                            )}
                         </div>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
 
-                {updateInfo.changelog && updateInfo.changelog.length > 0 && (
-                    <div className="overflow-y-auto max-h-[40vh] pr-1 -mr-1 space-y-4">
+                {updateInfo.releaseNotes ? (
+                    <div className="max-h-[40vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-3 pr-4 text-sm leading-relaxed text-muted-foreground">
+                        {updateInfo.releaseNotes}
+                    </div>
+                ) : updateInfo.changelog && updateInfo.changelog.length > 0 ? (
+                    <div className="-mr-1 max-h-[40vh] space-y-4 overflow-y-auto pr-1">
                         {updateInfo.changelog.map((entry) => (
                             <div key={entry.version} className="space-y-1.5">
                                 <h4 className="text-sm font-semibold text-foreground">
                                     v{entry.version}
                                     <span className="ml-2 text-xs font-normal text-muted-foreground">
                                         {entry.date}
-                                        {entry.title ? ` — ${entry.title}` : ""}
+                                        {entry.title ? ` - ${entry.title}` : ""}
                                     </span>
                                 </h4>
-                                <ul className="space-y-0.5 text-sm text-muted-foreground list-disc list-inside pl-1">
+                                <ul className="list-inside list-disc space-y-0.5 pl-1 text-sm text-muted-foreground">
                                     {entry.changes.map((change, i) => (
                                         <li key={i}>{change}</li>
                                     ))}
@@ -94,7 +119,7 @@ export function UpdateNotifier() {
                             </div>
                         ))}
                     </div>
-                )}
+                ) : null}
 
                 <AlertDialogFooter>
                     <AlertDialogCancel className="border-border bg-transparent text-foreground hover:bg-muted">

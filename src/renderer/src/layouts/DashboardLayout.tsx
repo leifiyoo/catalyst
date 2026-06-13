@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import { Minus, Square, X, Copy } from "@/components/icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AnimatedOutlet } from "@/components/AnimatedOutlet"
-import { CommandPalette } from "@/components/CommandPalette"
 import { startServerSync } from "@/stores/serverStore"
 
 const dragRegion = { WebkitAppRegion: "drag" } as React.CSSProperties
 const noDragRegion = { WebkitAppRegion: "no-drag" } as React.CSSProperties
+const CommandPalette = lazy(() => import("@/components/CommandPalette").then((m) => ({ default: m.CommandPalette })))
 
 export function DashboardLayout() {
     const [isMaximized, setIsMaximized] = useState(false)
+    const [mountCommandPalette, setMountCommandPalette] = useState(false)
 
     useEffect(() => {
         startServerSync()
@@ -22,6 +23,24 @@ export function DashboardLayout() {
             setIsMaximized(state.isMaximized)
         })
     }, [])
+
+    useEffect(() => {
+        if (mountCommandPalette) return
+
+        const openCommandPalette = (event?: KeyboardEvent) => {
+            if (event && (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k")) return
+            event?.preventDefault()
+            setMountCommandPalette(true)
+        }
+        const openCommandPaletteFromEvent = () => openCommandPalette()
+
+        window.addEventListener("keydown", openCommandPalette)
+        window.addEventListener("catalyst:command-palette", openCommandPaletteFromEvent)
+        return () => {
+            window.removeEventListener("keydown", openCommandPalette)
+            window.removeEventListener("catalyst:command-palette", openCommandPaletteFromEvent)
+        }
+    }, [mountCommandPalette])
 
     const handleControl = useCallback((action: "minimize" | "toggle-maximize" | "close") => {
         window.context?.windowControl?.(action)
@@ -69,7 +88,11 @@ export function DashboardLayout() {
                 </main>
             </div>
 
-            <CommandPalette />
+            {mountCommandPalette && (
+                <Suspense fallback={null}>
+                    <CommandPalette initialOpen />
+                </Suspense>
+            )}
         </div>
     )
 }

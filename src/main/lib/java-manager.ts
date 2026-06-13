@@ -2,9 +2,11 @@ import { app } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import { createWriteStream, existsSync } from "fs";
-import { spawn, execSync, exec } from "child_process";
+import { spawn, execFile, execFileSync } from "child_process";
 import https from "https";
 import AdmZip from "adm-zip";
+import crypto from "crypto";
+import { isPathWithin } from "./safety";
 
 const RUNTIMES_DIR = path.join(app.getPath("userData"), "runtimes");
 
@@ -64,18 +66,8 @@ function getArchString(): string {
  */
 export async function getJavaVersion(javaPath: string): Promise<number | null> {
   return new Promise((resolve) => {
-    // Wrap path in quotes to handle spaces
-    const cmd = process.platform === "win32" ? `"${javaPath}" -version` : `"${javaPath}" -version`;
-    exec(cmd, (error, _stdout, stderr) => {
-      if (error) {
-        // Fallback for some environments
-        exec(`${javaPath} -version`, (error2, _stdout2, stderr2) => {
-          if (error2) return resolve(null);
-          const versionStr = stderr2.split("\n")[0];
-          resolve(parseJavaVersion(versionStr));
-        });
-        return;
-      }
+    execFile(javaPath, ["-version"], { timeout: 10000 }, (error, _stdout, stderr) => {
+      if (error) return resolve(null);
       const versionStr = stderr.split("\n")[0];
       resolve(parseJavaVersion(versionStr));
     });
@@ -111,8 +103,8 @@ export async function discoverInstalledJavas(): Promise<Array<{ path: string; ve
 
   // 2. Check system PATH
   try {
-    const whichCmd = process.platform === "win32" ? "where java" : "which java";
-    const pathOutput = execSync(whichCmd).toString().trim().split(/\r?\n/);
+    const whichCmd = process.platform === "win32" ? "where" : "which";
+    const pathOutput = execFileSync(whichCmd, ["java"]).toString().trim().split(/\r?\n/);
     for (const p of pathOutput) {
         if (p) searchPaths.add(p);
     }
@@ -207,6 +199,11 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
   const tempPath = `${destPath}.${Date.now()}.tmp`;
 
   return new Promise((resolve, reject) => {
+    if (new URL(url).protocol !== "https:") {
+      reject(new Error("Downloads must use HTTPS"));
+      return;
+    }
+
     let settled = false;
     const settle = (fn: () => void) => {
       if (!settled) {
@@ -249,7 +246,8 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
         cleanupTimers();
         file.close();
         fs.unlink(tempPath).catch(() => {});
-        downloadFile(response.headers.location, destPath, onProgress).then(resolve).catch(reject);
+        const redirectUrl = new URL(response.headers.location, url).toString();
+        downloadFile(redirectUrl, destPath, onProgress).then(resolve).catch(reject);
         return;
       }
 
@@ -262,12 +260,15 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
       }
       
       const totalBytes = parseInt(response.headers['content-length'] || "0", 10);
+      const expectedSha256 = String(response.headers["x-checksum-sha256"] || response.headers["x-amz-meta-sha256"] || "").trim().toLowerCase();
+      const sha256 = crypto.createHash("sha256");
       let downloadedBytes = 0;
 
       resetStallTimer();
 
       response.on('data', (chunk) => {
         downloadedBytes += chunk.length;
+        sha256.update(chunk);
         resetStallTimer();
         if (onProgress) onProgress(downloadedBytes, totalBytes);
       });
@@ -282,6 +283,12 @@ async function downloadFile(url: string, destPath: string, onProgress?: (downloa
                 return;
             }
             try {
+                const actualSha256 = sha256.digest("hex");
+                if (expectedSha256 && actualSha256 !== expectedSha256) {
+                    await fs.unlink(tempPath).catch(() => {});
+                    settle(() => reject(new Error("Java download integrity check failed")));
+                    return;
+                }
                 try { await fs.rm(destPath, { force: true }); } catch {}
                 await fs.rename(tempPath, destPath);
                 settle(() => resolve());
@@ -307,6 +314,14 @@ function extractArchive(archivePath: string, destDir: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         const zip = new AdmZip(archivePath);
+        const resolvedDestDir = path.resolve(destDir);
+        for (const entry of zip.getEntries()) {
+          const outputPath = path.resolve(destDir, entry.entryName);
+          if (!isPathWithin(outputPath, resolvedDestDir)) {
+            reject(new Error(`Unsafe ZIP entry in Java runtime archive: ${entry.entryName}`));
+            return;
+          }
+        }
         zip.extractAllTo(destDir, true);
         resolve();
       } catch (err) {

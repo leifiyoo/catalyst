@@ -27,6 +27,7 @@ import {
   LogToMainFn,
   NgrokTunnelInfo,
   AnalyticsData,
+  AppPreferences,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -48,6 +49,10 @@ try {
     getWindowState: () => ipcRenderer.invoke("getWindowState"),
     setAlwaysOnTop: (value: Parameters<SetAlwaysOnTopFn>[0]) =>
       ipcRenderer.invoke("setAlwaysOnTop", value),
+    getAppPreferences: (): Promise<AppPreferences> =>
+      ipcRenderer.invoke("getAppPreferences"),
+    updateAppPreferences: (updates: Partial<AppPreferences>): Promise<AppPreferences> =>
+      ipcRenderer.invoke("updateAppPreferences", updates),
     onWindowStateChanged: (handler: Parameters<OnWindowStateChangedFn>[0]) => {
       const listener = (_event: unknown, state: Awaited<ReturnType<GetWindowStateFn>>) =>
         handler(state);

@@ -82,18 +82,22 @@ jobs:
           fi
           
           # 4. Export for GitHub
+          DELIMITER="ai_triage_$(uuidgen)"
           {
-            echo "comment<<EOF"
+            echo "comment<<$DELIMITER"
             echo "$COMMENT"
-            echo "EOF"
+            echo "$DELIMITER"
           } >> "$GITHUB_OUTPUT"
 
       - name: Post AI Analysis Comment
         if: steps.ai_request.outputs.comment != ''
-        run: |
-          gh issue comment ${{ github.event.issue.number }} --body "${{ steps.ai_request.outputs.comment }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          AI_COMMENT: ${{ steps.ai_request.outputs.comment }}
+        run: |
+          printf '%s' "$AI_COMMENT" > ai-comment.md
+          gh issue comment "$ISSUE_NUMBER" --body-file ai-comment.md
 
       - name: Label as Bug
         if: steps.ai_request.outputs.is_bug == 'true'

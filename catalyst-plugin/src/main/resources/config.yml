@@ -26,7 +26,7 @@ tracking:
   track-player-joins: true
   track-player-versions: true
   track-player-clients: true
-  track-geolocation: true
+  track-geolocation: false
   track-os: true
   track-tps: true
   track-ram: true
@@ -36,7 +36,7 @@ tracking:
 # Legacy stats toggles (still supported for backwards compatibility)
 stats:
   player-join-leave: true
-  geolocation: true
+  geolocation: false
   play-time: true
   client-os: true
   client-version: true
@@ -52,9 +52,9 @@ stats:
 
 # Geolocation settings
 geolocation:
-  # Free API endpoint for IP geolocation
-  api-url: "http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp"
-  # Rate limit: max requests per minute (ip-api.com free tier allows 45/min)
-  rate-limit: 40
+  # HTTPS endpoint for IP geolocation. Disabled by default via tracking.track-geolocation.
+  api-url: "https://ipapi.co/{ip}/json/"
+  # Rate limit: max requests per minute
+  rate-limit: 30
   # Cache duration in minutes
   cache-minutes: 1440

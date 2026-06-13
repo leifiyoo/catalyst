@@ -15,8 +15,8 @@ interface CommandAction {
   keywords?: string[]
 }
 
-export function CommandPalette() {
-  const [open, setOpen] = useState(false)
+export function CommandPalette({ initialOpen = false }: { initialOpen?: boolean }) {
+  const [open, setOpen] = useState(initialOpen)
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
   const { servers, startServer, stopServer, restartServer } = useServerStore()

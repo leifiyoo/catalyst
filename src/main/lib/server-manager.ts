@@ -4,7 +4,6 @@ import path from "path";
 import fs from "fs/promises";
 import { createWriteStream, existsSync } from "fs";
 import https from "https";
-import http from "http";
 import crypto from "crypto";
 import archiver from "archiver";
 import AdmZip from "adm-zip";
@@ -18,6 +17,11 @@ import {
   ServerRecord,
 } from "@shared/types";
 import { getRequiredJavaVersion, ensureJavaInstalled } from "./java-manager";
+import {
+  isPathWithin,
+  resolveSafeServerPath,
+  sanitizeDownloadFileName,
+} from "./safety";
 
 // ---- CatalystAnalytics Plugin Helper ----
 
@@ -109,6 +113,8 @@ const SERVERS_JSON_TMP = path.join(app.getPath("userData"), "servers.json.tmp");
 
 // Backup rotation settings
 const MAX_BACKUP_COUNT = 5;
+const MAX_IMPORT_ENTRIES = 20000;
+const MAX_IMPORT_UNCOMPRESSED_BYTES = 4 * 1024 * 1024 * 1024;
 const getBackupPath = (index: number) => path.join(app.getPath("userData"), `servers.json.bak.${index}`);
 
 /**
@@ -194,6 +200,11 @@ type FrameworkDownloadResult = {
   url: string;
   filename: string;
   jarFile: string; // the main jar to launch
+  hashes?: {
+    sha1?: string;
+    sha256?: string;
+    sha512?: string;
+  };
   requiresInstaller?: boolean;
   installerArgs?: string[];
 };
@@ -223,7 +234,12 @@ async function getPaperDownloadUrl(version: string): Promise<FrameworkDownloadRe
 
   const filename = latestBuild.downloads.application.name;
   const url = `${PAPER_API_BASE}/versions/${version}/builds/${latestBuild.build}/downloads/${filename}`;
-  return { url, filename, jarFile: "server.jar" };
+  return {
+    url,
+    filename,
+    jarFile: "server.jar",
+    hashes: { sha256: latestBuild.downloads.application.sha256 },
+  };
 }
 
 async function getPurpurDownloadUrl(version: string): Promise<FrameworkDownloadResult> {
@@ -261,6 +277,7 @@ async function getVanillaDownloadUrl(version: string): Promise<FrameworkDownload
     url: versionData.downloads.server.url,
     filename: `server-${version}.jar`,
     jarFile: "server.jar",
+    hashes: { sha1: versionData.downloads.server.sha1 },
   };
 }
 
@@ -328,16 +345,6 @@ function validateServerPath(serverPath: string): boolean {
   const resolved = path.resolve(serverPath);
   const serversResolved = path.resolve(SERVERS_DIR);
   return resolved.startsWith(serversResolved + path.sep) || resolved === serversResolved;
-}
-
-/**
- * Validate that a resolved path is within the given root directory.
- * Prevents path traversal attacks.
- */
-function isPathWithin(targetPath: string, rootPath: string): boolean {
-  const resolvedTarget = path.resolve(targetPath);
-  const resolvedRoot = path.resolve(rootPath);
-  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
 async function ensureServersJson(): Promise<void> {
@@ -609,10 +616,21 @@ async function saveServerList(servers: ServerRecord[]): Promise<void> {
 function downloadFile(
   url: string,
   destPath: string,
-  onProgress: (downloaded: number, total: number) => void
+  onProgress: (downloaded: number, total: number) => void,
+  hashes?: FrameworkDownloadResult["hashes"]
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const protocol = url.startsWith("https") ? https : http;
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "https:") {
+      reject(new Error("Downloads must use HTTPS"));
+      return;
+    }
+    const protocol = https;
+    const hashers = {
+      sha1: hashes?.sha1 ? crypto.createHash("sha1") : null,
+      sha256: hashes?.sha256 ? crypto.createHash("sha256") : null,
+      sha512: hashes?.sha512 ? crypto.createHash("sha512") : null,
+    };
 
     const request = protocol.get(url, (response) => {
       // Handle redirects
@@ -622,7 +640,8 @@ function downloadFile(
         response.statusCode < 400 &&
         response.headers.location
       ) {
-        downloadFile(response.headers.location, destPath, onProgress)
+        const redirectUrl = new URL(response.headers.location, url).toString();
+        downloadFile(redirectUrl, destPath, onProgress, hashes)
           .then(resolve)
           .catch(reject);
         return;
@@ -640,14 +659,36 @@ function downloadFile(
 
       response.on("data", (chunk: Buffer) => {
         downloadedBytes += chunk.length;
+        hashers.sha1?.update(chunk);
+        hashers.sha256?.update(chunk);
+        hashers.sha512?.update(chunk);
         onProgress(downloadedBytes, totalBytes);
       });
 
       response.pipe(fileStream);
 
       fileStream.on("finish", () => {
-        fileStream.close();
-        resolve();
+        fileStream.close(async () => {
+          const mismatches = [
+            hashes?.sha1 && hashers.sha1?.digest("hex").toLowerCase() !== hashes.sha1.toLowerCase()
+              ? "sha1"
+              : null,
+            hashes?.sha256 && hashers.sha256?.digest("hex").toLowerCase() !== hashes.sha256.toLowerCase()
+              ? "sha256"
+              : null,
+            hashes?.sha512 && hashers.sha512?.digest("hex").toLowerCase() !== hashes.sha512.toLowerCase()
+              ? "sha512"
+              : null,
+          ].filter(Boolean);
+
+          if (mismatches.length > 0) {
+            await fs.unlink(destPath).catch(() => {});
+            reject(new Error(`Download integrity check failed (${mismatches.join(", ")})`));
+            return;
+          }
+
+          resolve();
+        });
       });
 
       fileStream.on("error", (err: Error) => {
@@ -668,10 +709,10 @@ function downloadFile(
 }
 
 function generateStartBat(ramMB: number, jarFile: string = "server.jar"): string {
-  // Sanitize jarFile to prevent command injection in batch file
-  const safeJarFile = jarFile.replace(/[^a-zA-Z0-9._\-]/g, "");
+  const safeJarFile = sanitizeDownloadFileName(jarFile);
   const safeRam = Math.max(256, Math.min(65536, Math.floor(Number(ramMB) || 1024)));
-  return `@echo off\r\njava -Xms${safeRam}M -Xmx${safeRam}M -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar ${safeJarFile} nogui\r\npause\r\n`;
+  const initialRam = Math.max(256, Math.min(safeRam, Math.floor(safeRam * 0.4)));
+  return `@echo off\r\njava -Xms${initialRam}M -Xmx${safeRam}M -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar "${safeJarFile}" nogui\r\npause\r\n`;
 }
 
 // ---- Exports ----
@@ -740,7 +781,9 @@ export async function createServer(
     sendProgress({ stage: "downloading", message: `Downloading ${params.framework} ${params.version}...`, percent: 20 });
 
     // For Fabric, the jar filename is the launcher jar; for others, save as server.jar
-    const destFilename = downloadInfo.jarFile === "server.jar" ? "server.jar" : downloadInfo.jarFile;
+    const destFilename = sanitizeDownloadFileName(
+      downloadInfo.jarFile === "server.jar" ? "server.jar" : downloadInfo.jarFile
+    );
     const jarPath = path.join(finalDir, destFilename);
     await downloadFile(downloadInfo.url, jarPath, (downloaded, total) => {
       const downloadedMB = (downloaded / 1024 / 1024).toFixed(1);
@@ -771,13 +814,13 @@ export async function createServer(
           bytesTotal: 0,
         });
       }
-    });
+    }, downloadInfo.hashes);
 
     // 4. Write start.bat
     sendProgress({ stage: "writing-files", message: "Creating start.bat...", percent: 85 });
     await fs.writeFile(
       path.join(finalDir, "start.bat"),
-      generateStartBat(clampRam(params.ramMB), downloadInfo.jarFile),
+      generateStartBat(clampRam(params.ramMB), destFilename),
       "utf-8"
     );
 
@@ -806,7 +849,7 @@ export async function createServer(
       createdAt: new Date().toISOString(),
       serverPath: finalDir,
       eulaAccepted: false,
-      jarFile: downloadInfo.jarFile,
+      jarFile: destFilename,
       analyticsEnabled,
     };
 
@@ -837,6 +880,10 @@ export async function deleteServer(
     const server = servers.find((s) => s.id === serverId);
     if (!server) {
       return { success: false, error: "Server not found" };
+    }
+
+    if (server.status !== "Offline" && server.status !== "Idle") {
+      return { success: false, error: "Stop the server before deleting it" };
     }
 
     try {
@@ -1089,11 +1136,10 @@ export async function listServerFiles(
   const server = servers.find((s) => s.id === serverId);
   if (!server) return [];
 
-  const serverRoot = path.resolve(server.serverPath);
-  const targetPath = path.resolve(serverRoot, relativePath);
-
-  // Security: prevent path traversal
-  if (!isPathWithin(targetPath, serverRoot)) {
+  let targetPath: string;
+  try {
+    targetPath = resolveSafeServerPath(server.serverPath, relativePath, { allowRoot: true });
+  } catch {
     return [];
   }
 
@@ -1135,10 +1181,10 @@ export async function readServerFile(
   const server = servers.find((s) => s.id === serverId);
   if (!server) return { success: false, error: "Server not found" };
 
-  const serverRoot = path.resolve(server.serverPath);
-  const targetPath = path.resolve(serverRoot, relativePath);
-
-  if (!isPathWithin(targetPath, serverRoot)) {
+  let targetPath: string;
+  try {
+    targetPath = resolveSafeServerPath(server.serverPath, relativePath);
+  } catch {
     return { success: false, error: "Access denied" };
   }
 
@@ -1167,14 +1213,17 @@ export async function writeServerFile(
   const server = servers.find((s) => s.id === serverId);
   if (!server) return { success: false, error: "Server not found" };
 
-  const serverRoot = path.resolve(server.serverPath);
-  const targetPath = path.resolve(serverRoot, relativePath);
-
-  if (!isPathWithin(targetPath, serverRoot)) {
+  let targetPath: string;
+  try {
+    targetPath = resolveSafeServerPath(server.serverPath, relativePath);
+  } catch {
       return { success: false, error: "Access denied" };
   }
 
   try {
+    if (Buffer.byteLength(content, "utf-8") > MAX_FILE_READ_SIZE) {
+      return { success: false, error: "File too large to edit (> 2 MB)" };
+    }
     await fs.writeFile(targetPath, content, "utf-8");
     return { success: true };
   } catch (err) {
@@ -1191,10 +1240,10 @@ export async function deleteServerFile(
     const server = servers.find((s) => s.id === serverId);
     if (!server) return { success: false, error: "Server not found" };
 
-    const serverRoot = path.resolve(server.serverPath);
-    const targetPath = path.resolve(serverRoot, relativePath);
-  
-    if (!isPathWithin(targetPath, serverRoot)) {
+    let targetPath: string;
+    try {
+      targetPath = resolveSafeServerPath(server.serverPath, relativePath);
+    } catch {
       return { success: false, error: "Access denied" };
     }
 
@@ -1216,19 +1265,26 @@ export async function renameServerFile(
     const server = servers.find((s) => s.id === serverId);
     if (!server) return { success: false, error: "Server not found" };
 
-    // Validate newName doesn't contain path separators or traversal
-    if (!newName || newName.includes('/') || newName.includes('\\') || newName.includes('..') || newName.includes('\0')) {
+    let safeNewName: string;
+    try {
+        safeNewName = sanitizeDownloadFileName(newName);
+    } catch {
         return { success: false, error: "Invalid file name" };
     }
 
     const serverRoot = path.resolve(server.serverPath);
-    const oldPath = path.resolve(serverRoot, relativePath);
+    let oldPath: string;
+    try {
+        oldPath = resolveSafeServerPath(serverRoot, relativePath);
+    } catch {
+        return { success: false, error: "Access denied" };
+    }
     
     // Calculate new path based on the directory of the old path
     const dir = path.dirname(oldPath);
-    const newPath = path.join(dir, newName);
+    const newPath = path.join(dir, safeNewName);
 
-    if (!isPathWithin(oldPath, serverRoot) || !isPathWithin(newPath, serverRoot)) {
+    if (!isPathWithin(newPath, serverRoot) || newPath === serverRoot) {
         return { success: false, error: "Access denied" };
     }
 
@@ -1250,19 +1306,26 @@ export async function copyServerFile(
     const server = servers.find((s) => s.id === serverId);
     if (!server) return { success: false, error: "Server not found" };
 
-    // Validate newName doesn't contain path separators or traversal
-    if (!newName || newName.includes('/') || newName.includes('\\') || newName.includes('..') || newName.includes('\0')) {
+    let safeNewName: string;
+    try {
+        safeNewName = sanitizeDownloadFileName(newName);
+    } catch {
         return { success: false, error: "Invalid file name" };
     }
 
     const serverRoot = path.resolve(server.serverPath);
-    const sourcePath = path.resolve(serverRoot, relativePath);
+    let sourcePath: string;
+    try {
+        sourcePath = resolveSafeServerPath(serverRoot, relativePath);
+    } catch {
+        return { success: false, error: "Access denied" };
+    }
     
     // Calculate new path based on the directory of the old path
     const dir = path.dirname(sourcePath);
-    const destPath = path.join(dir, newName);
+    const destPath = path.join(dir, safeNewName);
 
-    if (!isPathWithin(sourcePath, serverRoot) || !isPathWithin(destPath, serverRoot)) {
+    if (!isPathWithin(destPath, serverRoot) || destPath === serverRoot) {
         return { success: false, error: "Access denied" };
     }
 
@@ -1351,7 +1414,11 @@ export async function exportServer(
     // Add entire server directory
     archive.directory(server.serverPath, false, (entry) => {
       // Skip large unnecessary files like logs
-      if (entry.name.startsWith("logs/")) {
+      if (
+        entry.name.startsWith("logs/") ||
+        entry.name.startsWith("backups/") ||
+        entry.name.startsWith("cache/")
+      ) {
         return false;
       }
       return entry;
@@ -1366,10 +1433,14 @@ export async function importServer(
   customName: string,
   _mainWindow: BrowserWindow
 ): Promise<{ success: boolean; error?: string; server?: ServerRecord }> {
+  let serverPath: string | null = null;
   try {
     // Read the zip file
     const zip = new AdmZip(zipPath);
     const zipEntries = zip.getEntries();
+    if (zipEntries.length > MAX_IMPORT_ENTRIES) {
+      return { success: false, error: "Import archive contains too many files" };
+    }
 
     // Find and read manifest
     const manifestEntry = zipEntries.find((e) => e.entryName === "manifest.json");
@@ -1382,16 +1453,22 @@ export async function importServer(
 
     // Generate new server ID
     const serverId = crypto.randomUUID();
-    const serverPath = path.join(SERVERS_DIR, serverId);
+    serverPath = path.join(SERVERS_DIR, serverId);
 
     // Create server directory
     await fs.mkdir(serverPath, { recursive: true });
 
     // Extract all files except manifest (with zip slip protection)
     const resolvedServerPath = path.resolve(serverPath);
+    let totalUncompressedBytes = 0;
     for (const entry of zipEntries) {
       if (entry.entryName === "manifest.json") continue;
       if (entry.isDirectory) continue;
+
+      totalUncompressedBytes += entry.header.size;
+      if (totalUncompressedBytes > MAX_IMPORT_UNCOMPRESSED_BYTES) {
+        throw new Error("Import archive is too large");
+      }
 
       const outputPath = path.resolve(serverPath, entry.entryName);
 
@@ -1432,6 +1509,9 @@ export async function importServer(
 
     return { success: true, server: newServer };
   } catch (err) {
+    if (serverPath) {
+      await fs.rm(serverPath, { recursive: true, force: true }).catch(() => {});
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     return { success: false, error: msg };
   }

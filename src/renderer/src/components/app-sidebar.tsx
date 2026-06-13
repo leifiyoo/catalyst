@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom"
-import { motion } from "motion/react"
 import { Activity, LayoutGrid, Server, Settings } from "@/components/icons"
 import { useServerStore } from "@/stores/serverStore"
+import catalystIcon from "../../../../resources/icon.png"
 
 const navItems = [
     { label: "Dashboard", icon: LayoutGrid, path: "/" },
@@ -12,11 +12,8 @@ const navItems = [
 
 function CatalystMark() {
     return (
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-selected text-strong" aria-hidden="true">
-            <svg viewBox="0 0 40 40" className="h-5 w-5" fill="none">
-                <path d="M20 4 34 12v16L20 36 6 28V12L20 4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                <path d="M20 20 6.5 12.5M20 20l13.5-7.5M20 20v15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+        <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]" aria-hidden="true">
+            <img src={catalystIcon} alt="" className="h-full w-full object-cover" />
         </div>
     )
 }
@@ -57,10 +54,8 @@ export function AppSidebar() {
                             }`}
                         >
                             {active && (
-                                <motion.span
-                                    layoutId="sidebar-active"
+                                <span
                                     className="absolute inset-0 rounded-lg border border-border bg-selected"
-                                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
                                 />
                             )}
                             <item.icon className="relative z-[1] h-4 w-4" />

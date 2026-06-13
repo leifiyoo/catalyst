@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, type MutableRefObject, type ReactNode } from "react"
 import { AnalyticsTab } from "@/components/AnalyticsTab"
 import { ConsoleTab } from "@/components/ConsoleTab"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -94,6 +94,7 @@ import type {
     ModrinthProjectType,
     ModrinthProjectDetails,
     ModrinthVersionOption,
+    ModrinthGalleryImage,
     BackupEntry,
     NgrokStatus,
 } from "@shared/types"
@@ -127,6 +128,22 @@ const SERVER_STATUS_DOT: Record<ServerRecord["status"], string> = {
     Idle: "status-dot-idle",
 }
 
+const MODRINTH_LOADER_CATEGORIES = new Set([
+    "fabric",
+    "forge",
+    "neoforge",
+    "quilt",
+    "paper",
+    "spigot",
+    "folia",
+    "bukkit",
+    "bungeecord",
+    "velocity",
+    "waterfall",
+    "sponge",
+    "purpur",
+])
+
 function isMarkdownBoundary(line: string) {
     const trimmed = line.trim()
     return (
@@ -134,34 +151,202 @@ function isMarkdownBoundary(line: string) {
         trimmed.startsWith("#") ||
         trimmed.startsWith("```") ||
         trimmed.startsWith(">") ||
-        /^[-*]\s+/.test(trimmed)
+        /^[-*]\s+/.test(trimmed) ||
+        /^\d+[.)]\s+/.test(trimmed) ||
+        trimmed.startsWith("![") ||
+        /^-{3,}$/.test(trimmed)
     )
 }
 
-function renderMarkdownInline(text: string): ReactNode[] {
-    const nodes: ReactNode[] = []
-    const pattern = /(`[^`]+`|\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g
-    let lastIndex = 0
-    let match: RegExpExecArray | null
+function isSafeExternalUrl(url: string) {
+    try {
+        const protocol = new URL(url).protocol
+        return protocol === "http:" || protocol === "https:"
+    } catch {
+        return false
+    }
+}
 
-    while ((match = pattern.exec(text))) {
-        if (match.index > lastIndex) {
-            nodes.push(text.slice(lastIndex, match.index))
+function isProbablyImageUrl(url: string) {
+    try {
+        const parsed = new URL(url)
+        return (
+            /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(parsed.pathname) ||
+            parsed.hostname === "img.shields.io" ||
+            parsed.hostname === "raw.githubusercontent.com" ||
+            (parsed.hostname === "cdn.modrinth.com" && parsed.pathname.includes("/cached_images/"))
+        )
+    } catch {
+        return false
+    }
+}
+
+function parseMarkdownDestination(raw: string) {
+    const cleaned = raw.trim().replace(/^<|>$/g, "")
+    const nestedMarkdownLink = cleaned.match(/\[https?:\/\/[^\]]+]\((https?:\/\/[^\s)]+)\)?/)
+    if (nestedMarkdownLink) return nestedMarkdownLink[1]
+    const match = cleaned.match(/^(https?:\/\/\S+?)(?:\s+["'][^"']*["'])?$/)
+    return match?.[1] ?? cleaned
+}
+
+function humanizeMarkdownLabel(label: string) {
+    return label
+        .replace(/\.(png|jpe?g|gif|webp|svg)$/i, "")
+        .replace(/[-_]+/g, " ")
+        .replace(/\bbadge\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim() || "Open link"
+}
+
+function MarkdownImage({
+    src,
+    alt,
+    inline = false,
+    width,
+}: {
+    src: string
+    alt: string
+    inline?: boolean
+    width?: number
+}) {
+    const [failed, setFailed] = useState(!isProbablyImageUrl(src))
+    const safeWidth = width && width >= 80 ? Math.min(width, inline ? 360 : 720) : undefined
+
+    if (failed) {
+        return (
+            <a
+                href={src}
+                className="mx-1 inline-flex max-w-full items-center rounded-md border border-primary/25 bg-primary/10 px-2 py-0.5 align-middle text-[12px] font-medium leading-5 text-primary no-underline hover:bg-primary/15"
+                onClick={(event) => {
+                    event.preventDefault()
+                    window.context?.openExternal?.(src)
+                }}
+            >
+                {humanizeMarkdownLabel(alt)}
+            </a>
+        )
+    }
+
+    return (
+        <img
+            src={src}
+            alt={alt}
+            className={
+                inline
+                    ? "mx-1 my-1 inline-block max-h-28 max-w-full rounded border border-border/70 align-middle object-contain"
+                    : "my-3 max-h-[520px] max-w-full rounded-lg border border-border object-contain"
+            }
+            style={safeWidth ? { width: safeWidth } : undefined}
+            loading="lazy"
+            onError={() => setFailed(true)}
+        />
+    )
+}
+
+function stripHtmlTags(value: string) {
+    return value.replace(/<[^>]+>/g, "").trim()
+}
+
+function normalizeMarkdownBody(value: string) {
+    return value
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+        .replace(/<\/?(p|div|section|center)[^>]*>/gi, "\n")
+        .replace(/<a\b[^>]*href=(?:"([^"]+)"|'([^']+)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi, (_match, a, b, c, label) => {
+            const href = parseMarkdownDestination(a || b || c || "")
+            const text = stripHtmlTags(label).replace(/\s+/g, " ") || "Open link"
+            return isSafeExternalUrl(href) ? `[${text}](${href})` : text
+        })
+        .replace(/\[https?:\/\/[^\]]+]\((https?:\/\/[^\s)]+)\)?/g, "$1")
+        .replace(/<(strong|b)>([\s\S]*?)<\/\1>/gi, "**$2**")
+        .replace(/<(em|i)>([\s\S]*?)<\/\1>/gi, "*$2*")
+        .replace(/<\/?(span|small)[^>]*>/gi, "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&quot;/gi, "\"")
+        .replace(/&#39;/gi, "'")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+}
+
+type MarkdownInlineToken = {
+    index: number
+    end: number
+    priority: number
+    render: (key: string) => ReactNode
+}
+
+function findDelimitedToken(
+    text: string,
+    delimiter: string,
+    start: number,
+    priority: number,
+    render: (content: string, index: number, key: string) => ReactNode
+): MarkdownInlineToken | null {
+    const index = text.indexOf(delimiter, start)
+    if (index === -1) return null
+
+    const contentStart = index + delimiter.length
+    const end = text.indexOf(delimiter, contentStart)
+    if (end === -1 || end === contentStart) return null
+
+    return {
+        index,
+        end: end + delimiter.length,
+        priority,
+        render: (key) => render(text.slice(contentStart, end), index, key),
+    }
+}
+
+function findMarkdownDestinationEnd(text: string, start: number) {
+    let depth = 0
+    for (let index = start; index < text.length; index += 1) {
+        const char = text[index]
+        if (char === "(") {
+            depth += 1
+        } else if (char === ")") {
+            if (depth === 0) return index
+            depth -= 1
         }
+    }
+    return -1
+}
 
-        const token = match[0]
-        if (token.startsWith("`")) {
-            nodes.push(
-                <code key={`code-${match.index}`} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">
-                    {token.slice(1, -1)}
-                </code>
-            )
-        } else {
-            const label = match[2]
-            const href = match[3]
-            nodes.push(
+function findLinkToken(text: string, start: number): MarkdownInlineToken | null {
+    const imageIndex = text.indexOf("![", start)
+    const linkIndex = text.indexOf("[", start)
+    const candidates = [imageIndex, linkIndex].filter((index) => index >= 0)
+    if (candidates.length === 0) return null
+
+    const index = Math.min(...candidates)
+    const isImage = text.startsWith("![", index)
+    const labelStart = index + (isImage ? 2 : 1)
+    const labelEnd = text.indexOf("](", labelStart)
+    if (labelEnd === -1) return null
+
+    const urlStart = labelEnd + 2
+    const urlEnd = findMarkdownDestinationEnd(text, urlStart)
+    if (urlEnd === -1) return null
+
+    const href = parseMarkdownDestination(text.slice(urlStart, urlEnd))
+    if (!isSafeExternalUrl(href)) return null
+
+    const label = text.slice(labelStart, labelEnd)
+    return {
+        index,
+        end: urlEnd + 1,
+        priority: 1,
+        render: (key) =>
+            isImage ? (
+                <MarkdownImage
+                    key={key}
+                    src={href}
+                    alt={label}
+                    inline
+                />
+            ) : (
                 <a
-                    key={`link-${match.index}`}
+                    key={key}
                     href={href}
                     className="text-primary underline underline-offset-4 hover:text-primary/80"
                     onClick={(event) => {
@@ -169,23 +354,204 @@ function renderMarkdownInline(text: string): ReactNode[] {
                         window.context?.openExternal?.(href)
                     }}
                 >
-                    {label}
+                    {renderMarkdownInline(label, `${key}-label`)}
                 </a>
+            ),
+    }
+}
+
+function findLinkedImageToken(text: string, start: number): MarkdownInlineToken | null {
+    const index = text.indexOf("[![", start)
+    if (index === -1) return null
+
+    const altStart = index + 3
+    const altEnd = text.indexOf("](", altStart)
+    if (altEnd === -1) return null
+
+    const srcStart = altEnd + 2
+    const srcEnd = findMarkdownDestinationEnd(text, srcStart)
+    if (srcEnd === -1 || text.slice(srcEnd + 1, srcEnd + 3) !== "](") return null
+
+    const hrefStart = srcEnd + 3
+    const hrefEnd = findMarkdownDestinationEnd(text, hrefStart)
+    if (hrefEnd === -1) return null
+
+    const alt = text.slice(altStart, altEnd)
+    const src = parseMarkdownDestination(text.slice(srcStart, srcEnd))
+    const href = parseMarkdownDestination(text.slice(hrefStart, hrefEnd))
+    const safeHref = isSafeExternalUrl(href) ? href : undefined
+    if (!isSafeExternalUrl(src)) return null
+
+    return {
+        index,
+        end: hrefEnd + 1,
+        priority: 1,
+        render: (key) =>
+            safeHref ? (
+                <a
+                    key={key}
+                    href={safeHref}
+                    className="inline-block align-middle"
+                    onClick={(event) => {
+                        event.preventDefault()
+                        window.context?.openExternal?.(safeHref)
+                    }}
+                >
+                    <MarkdownImage src={src} alt={alt} inline />
+                </a>
+            ) : (
+                <MarkdownImage key={key} src={src} alt={alt} inline />
+            ),
+    }
+}
+
+function findHtmlImageToken(text: string, start: number): MarkdownInlineToken | null {
+    const pattern = /<img\b[^>]*>/gi
+    pattern.lastIndex = start
+    const match = pattern.exec(text)
+    if (!match) return null
+
+    const tag = match[0]
+    const src = tag.match(/\bsrc=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i)?.slice(1).find(Boolean)
+    if (!src || !isSafeExternalUrl(src)) return null
+
+    const alt =
+        tag.match(/\balt=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i)?.slice(1).find((value) => value != null) ?? "Image"
+    const widthValue = tag.match(/\bwidth=(?:"(\d+)"|'(\d+)'|(\d+))/i)?.slice(1).find(Boolean)
+    const width = widthValue ? Number(widthValue) : undefined
+
+    return {
+        index: match.index,
+        end: match.index + tag.length,
+        priority: 1,
+        render: (key) => <MarkdownImage key={key} src={src} alt={alt} inline width={width} />,
+    }
+}
+
+function findBareUrlToken(text: string, start: number): MarkdownInlineToken | null {
+    const urlPattern = /https?:\/\/[^\s<]+/g
+    urlPattern.lastIndex = start
+    const match = urlPattern.exec(text)
+    if (!match) return null
+
+    const href = match[0].replace(/[),.;:!?]+$/, "")
+    if (!isSafeExternalUrl(href)) return null
+
+    return {
+        index: match.index,
+        end: match.index + href.length,
+        priority: 8,
+        render: (key) => (
+            <a
+                key={key}
+                href={href}
+                className="text-primary underline underline-offset-4 hover:text-primary/80"
+                onClick={(event) => {
+                    event.preventDefault()
+                    window.context?.openExternal?.(href)
+                }}
+            >
+                {href}
+            </a>
+        ),
+    }
+}
+
+function findNextInlineToken(text: string, start: number): MarkdownInlineToken | null {
+    const candidates = [
+        findLinkedImageToken(text, start),
+        findLinkToken(text, start),
+        findHtmlImageToken(text, start),
+        findDelimitedToken(text, "`", start, 2, (content, _index, key) => (
+            <code key={key} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground">
+                {content}
+            </code>
+        )),
+        findDelimitedToken(text, "**", start, 3, (content, _index, key) => (
+            <strong key={key} className="font-semibold text-foreground">
+                {renderMarkdownInline(content, `${key}-strong`)}
+            </strong>
+        )),
+        findDelimitedToken(text, "__", start, 4, (content, _index, key) => (
+            <strong key={key} className="font-semibold text-foreground">
+                {renderMarkdownInline(content, `${key}-strong`)}
+            </strong>
+        )),
+        findDelimitedToken(text, "~~", start, 5, (content, _index, key) => (
+            <del key={key} className="text-muted-foreground/70">
+                {renderMarkdownInline(content, `${key}-del`)}
+            </del>
+        )),
+        findDelimitedToken(text, "*", start, 6, (content, index, key) => {
+            if (text[index - 1] === "*" || text[index + 1] === "*") return text.slice(index, index + content.length + 2)
+            return (
+                <em key={key} className="italic text-foreground/90">
+                    {renderMarkdownInline(content, `${key}-em`)}
+                </em>
             )
+        }),
+        findDelimitedToken(text, "_", start, 7, (content, index, key) => {
+            if (text[index - 1] === "_" || text[index + 1] === "_") return text.slice(index, index + content.length + 2)
+            return (
+                <em key={key} className="italic text-foreground/90">
+                    {renderMarkdownInline(content, `${key}-em`)}
+                </em>
+            )
+        }),
+        findBareUrlToken(text, start),
+    ].filter((candidate): candidate is MarkdownInlineToken => Boolean(candidate))
+
+    if (candidates.length === 0) return null
+    let best = candidates[0]
+    for (let index = 1; index < candidates.length; index += 1) {
+        const candidate = candidates[index]
+        if (
+            candidate.index < best.index ||
+            (candidate.index === best.index && candidate.priority < best.priority)
+        ) {
+            best = candidate
         }
+    }
+    return best
+}
 
-        lastIndex = pattern.lastIndex
+function renderMarkdownInline(text: string, keyPrefix = "inline"): ReactNode[] {
+    const nodes: ReactNode[] = []
+    let index = 0
+
+    while (index < text.length) {
+        const token = findNextInlineToken(text, index)
+        if (!token) break
+        if (token.index > index) nodes.push(text.slice(index, token.index))
+        nodes.push(token.render(`${keyPrefix}-${token.index}`))
+        index = token.end
     }
 
-    if (lastIndex < text.length) {
-        nodes.push(text.slice(lastIndex))
-    }
+    if (index < text.length) nodes.push(text.slice(index))
 
     return nodes
 }
 
+function parseMarkdownTableRow(line: string) {
+    return line
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((cell) => cell.trim())
+}
+
+function isMarkdownTableSeparator(line: string) {
+    return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+}
+
+function ModrinthInlineMarkdown({ text }: { text: string }) {
+    return <>{renderMarkdownInline(text)}</>
+}
+
 function ModrinthReadme({ body }: { body: string }) {
-    const lines = body.split(/\r?\n/)
+    const blocks = useMemo(() => {
+    const lines = normalizeMarkdownBody(body).split(/\r?\n/)
     const blocks: ReactNode[] = []
     let index = 0
 
@@ -214,6 +580,63 @@ function ModrinthReadme({ body }: { body: string }) {
             continue
         }
 
+        if (trimmed.startsWith("![")) {
+            const image = trimmed.match(/^!\[([^\]]*)]\(([^)]+)\)$/)
+            const src = image ? parseMarkdownDestination(image[2]) : ""
+            blocks.push(
+                <div key={`image-${index}`} className="overflow-hidden rounded-lg border border-border bg-muted/30 p-2">
+                    {image && isSafeExternalUrl(src)
+                        ? <MarkdownImage src={src} alt={image[1]} />
+                        : renderMarkdownInline(trimmed, `image-${index}`)}
+                </div>
+            )
+            index += 1
+            continue
+        }
+
+        if (/^-{3,}$/.test(trimmed)) {
+            blocks.push(<hr key={`rule-${index}`} className="border-border" />)
+            index += 1
+            continue
+        }
+
+        if (index + 1 < lines.length && trimmed.includes("|") && isMarkdownTableSeparator(lines[index + 1])) {
+            const headers = parseMarkdownTableRow(trimmed)
+            const rows: string[][] = []
+            index += 2
+            while (index < lines.length && lines[index].trim().includes("|") && lines[index].trim() !== "") {
+                rows.push(parseMarkdownTableRow(lines[index]))
+                index += 1
+            }
+            blocks.push(
+                <div key={`table-${index}`} className="overflow-x-auto rounded-lg border border-border">
+                    <table className="min-w-full text-left text-[13px] text-muted-foreground">
+                        <thead className="bg-muted/50 text-foreground">
+                            <tr>
+                                {headers.map((header, headerIndex) => (
+                                    <th key={`${header}-${headerIndex}`} className="border-b border-border px-3 py-2 font-medium">
+                                        {renderMarkdownInline(header, `table-${index}-header-${headerIndex}`)}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((row, rowIndex) => (
+                                <tr key={`row-${rowIndex}`} className="border-b border-border last:border-0">
+                                    {row.map((cell, cellIndex) => (
+                                        <td key={`${rowIndex}-${cellIndex}`} className="px-3 py-2 align-top">
+                                            {renderMarkdownInline(cell, `table-${index}-row-${rowIndex}-${cellIndex}`)}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )
+            continue
+        }
+
         const heading = trimmed.match(/^(#{1,4})\s+(.+)$/)
         if (heading) {
             const level = heading[1].length
@@ -228,32 +651,38 @@ function ModrinthReadme({ body }: { body: string }) {
             continue
         }
 
-        if (/^[-*]\s+/.test(trimmed)) {
+        if (/^[-*]\s+/.test(trimmed) || /^\d+[.)]\s+/.test(trimmed)) {
             const items: string[] = []
-            while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
-                items.push(lines[index].trim().replace(/^[-*]\s+/, ""))
+            const ordered = /^\d+[.)]\s+/.test(trimmed)
+            const marker = ordered ? /^\d+[.)]\s+/ : /^[-*]\s+/
+            while (index < lines.length && marker.test(lines[index].trim())) {
+                items.push(lines[index].trim().replace(marker, "").replace(/^\[[ xX]]\s+/, ""))
                 index += 1
             }
+            const ListTag = ordered ? "ol" : "ul"
             blocks.push(
-                <ul key={`list-${index}`} className="space-y-2 pl-5 text-[13.5px] leading-relaxed text-muted-foreground">
+                <ListTag key={`list-${index}`} className="space-y-2 pl-5 text-[13.5px] leading-relaxed text-muted-foreground">
                     {items.map((item, itemIndex) => (
-                        <li key={`${item}-${itemIndex}`} className="list-disc marker:text-primary/70">
+                        <li key={`${item}-${itemIndex}`} className={ordered ? "list-decimal marker:text-primary/70" : "list-disc marker:text-primary/70"}>
                             {renderMarkdownInline(item)}
                         </li>
                     ))}
-                </ul>
+                </ListTag>
             )
             continue
         }
 
         if (trimmed.startsWith(">")) {
-            const quote = trimmed.replace(/^>\s?/, "")
+            const quote: string[] = []
+            while (index < lines.length && lines[index].trim().startsWith(">")) {
+                quote.push(lines[index].trim().replace(/^>\s?/, ""))
+                index += 1
+            }
             blocks.push(
-                <blockquote key={`quote-${index}`} className="rounded-xl border-l-2 border-primary bg-primary/5 px-4 py-3 text-[13.5px] leading-relaxed text-muted-foreground">
-                    {renderMarkdownInline(quote)}
+                <blockquote key={`quote-${index}`} className="rounded-xl border border-primary/20 border-l-primary bg-primary/5 px-4 py-3 text-[13.5px] leading-relaxed text-muted-foreground">
+                    <ModrinthReadme body={quote.join("\n")} />
                 </blockquote>
             )
-            index += 1
             continue
         }
 
@@ -269,6 +698,8 @@ function ModrinthReadme({ body }: { body: string }) {
             </p>
         )
     }
+    return blocks
+    }, [body])
 
     if (blocks.length === 0) {
         return <p className="text-sm text-muted-foreground">No description provided.</p>
@@ -277,16 +708,136 @@ function ModrinthReadme({ body }: { body: string }) {
     return <div className="space-y-4">{blocks}</div>
 }
 
+type ModrinthProjectPreviewSource = {
+    projectId: string
+    slug?: string
+    title?: string
+    description?: string
+    iconUrl?: string
+    downloads?: number
+    follows?: number
+    categories?: string[]
+    clientSide?: string
+    serverSide?: string
+}
+
+function createModrinthDetailPreview(project: ModrinthProjectPreviewSource): ModrinthProjectDetails {
+    return {
+        projectId: project.projectId,
+        slug: project.slug ?? project.projectId,
+        title: project.title ?? "Modrinth Project",
+        description: project.description ?? "",
+        body: "",
+        iconUrl: project.iconUrl,
+        downloads: project.downloads ?? 0,
+        followers: project.follows ?? 0,
+        clientSide: project.clientSide,
+        serverSide: project.serverSide,
+        categories: project.categories,
+        gallery: [],
+    }
+}
+
+function getVersionChannelMeta(type: ModrinthVersionOption["versionType"]) {
+    if (type === "release") {
+        return {
+            label: "Stable",
+            className: "border-primary/30 bg-primary/10 text-primary",
+        }
+    }
+    if (type === "beta") {
+        return {
+            label: "Beta",
+            className: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+        }
+    }
+    return {
+        label: "Alpha",
+        className: "border-orange-500/30 bg-orange-500/10 text-orange-300",
+    }
+}
+
+function formatVersionDate(value: string) {
+    return new Date(value).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    })
+}
+
+function formatGameVersions(versions: string[]) {
+    if (versions.length === 0) return "No Minecraft version listed"
+    if (versions.length <= 4) return versions.join(", ")
+    return `${versions.slice(0, 4).join(", ")} +${versions.length - 4}`
+}
+
+function useLazyRef<T>(factory: () => T): MutableRefObject<T> {
+    const ref = useRef<T | null>(null)
+    if (ref.current === null) {
+        ref.current = factory()
+    }
+    return ref as MutableRefObject<T>
+}
+
+function supportsMinecraftVersion(version: ModrinthVersionOption, gameVersion: string) {
+    return version.gameVersions.includes(gameVersion)
+}
+
+function pickRecommendedModrinthVersion(
+    versions: ModrinthVersionOption[],
+    gameVersion: string
+) {
+    return versions.find(
+        (version) =>
+            version.versionType === "release" &&
+            supportsMinecraftVersion(version, gameVersion)
+    )
+}
+
+function pickDefaultModrinthVersion(
+    versions: ModrinthVersionOption[],
+    gameVersion: string
+) {
+    return (
+        pickRecommendedModrinthVersion(versions, gameVersion) ??
+        versions.find((version) => supportsMinecraftVersion(version, gameVersion)) ??
+        versions.find((version) => version.versionType === "release") ??
+        versions[0]
+    )
+}
+
+function ServerDetailSkeleton() {
+    return (
+        <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-8 py-8">
+            <div className="h-5 w-28 rounded-md bg-muted/70" />
+            <div className="flex items-center gap-5">
+                <div className="h-16 w-16 rounded-xl border border-border bg-card" />
+                <div className="space-y-3">
+                    <div className="h-8 w-56 rounded-lg bg-muted/70" />
+                    <div className="h-4 w-36 rounded-md bg-muted/60" />
+                </div>
+            </div>
+            <div className="h-12 rounded-lg border border-border bg-card" />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="h-[460px] rounded-lg border border-border bg-card" />
+                <div className="h-[300px] rounded-lg border border-border bg-card" />
+            </div>
+        </section>
+    )
+}
+
 export function ServerDetailPage() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
+    const shouldAutoStart = searchParams.get("start") === "true"
     const storeStats = useServerStore((state) => (id ? state.stats[id] : undefined))
     const storeServer = useServerStore((state) => state.servers.find((entry) => entry.id === id))
     const refreshServers = useServerStore((state) => state.refresh)
     const removeServerFromStore = useServerStore((state) => state.removeServer)
 
-    const [server, setServer] = useState<ServerRecord | null>(null)
-    const [loading, setLoading] = useState(true)
+    const [server, setServer] = useState<ServerRecord | null>(() => storeServer ?? null)
+    const [loading, setLoading] = useState(() => !storeServer)
     
     // File Context Menu & Actions
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry: FileEntry } | null>(null)
@@ -412,12 +963,19 @@ export function ServerDetailPage() {
     const [modrinthDetailLoading, setModrinthDetailLoading] = useState(false)
     const [modrinthDetailError, setModrinthDetailError] = useState<string | null>(null)
     const [modrinthDetail, setModrinthDetail] = useState<ModrinthProjectDetails | null>(null)
+    const [modrinthGalleryPreview, setModrinthGalleryPreview] = useState<ModrinthGalleryImage | null>(null)
     const [modrinthInstallOpen, setModrinthInstallOpen] = useState(false)
     const [modrinthInstallTarget, setModrinthInstallTarget] = useState<ModrinthInstallTarget | null>(null)
     const [modrinthVersions, setModrinthVersions] = useState<ModrinthVersionOption[]>([])
     const [modrinthVersionsLoading, setModrinthVersionsLoading] = useState(false)
     const [modrinthVersionsError, setModrinthVersionsError] = useState<string | null>(null)
     const [selectedModrinthVersionId, setSelectedModrinthVersionId] = useState<string>("")
+    const [showModrinthAlternates, setShowModrinthAlternates] = useState(false)
+    const modrinthDetailCacheRef = useLazyRef(() => new Map<string, ModrinthProjectDetails>())
+    const modrinthDetailRequestsRef = useLazyRef(() => new Map<string, Promise<ModrinthProjectDetails>>())
+    const modrinthVersionsCacheRef = useLazyRef(() => new Map<string, ModrinthVersionOption[]>())
+    const modrinthVersionRequestsRef = useLazyRef(() => new Map<string, Promise<ModrinthVersionOption[]>>())
+    const autoStartConsumedRef = useRef<string | null>(null)
 
     const [starting, setStarting] = useState(false)
     const [stopping, setStopping] = useState(false)
@@ -431,7 +989,7 @@ export function ServerDetailPage() {
     const [diskUsageLoading, setDiskUsageLoading] = useState(false)
 
     // Track all auto-clearing timeouts so they can be cleaned up on unmount
-    const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+    const timersRef = useLazyRef(() => new Set<ReturnType<typeof setTimeout>>())
     useEffect(() => {
         return () => {
             timersRef.current.forEach((t) => clearTimeout(t))
@@ -470,8 +1028,78 @@ export function ServerDetailPage() {
         return new Set(modrinthInstalls.map((entry) => entry.projectId))
     }, [modrinthInstalls])
 
+    const getModrinthDetail = useCallback((projectId: string) => {
+        const cached = modrinthDetailCacheRef.current.get(projectId)
+        if (cached) return Promise.resolve(cached)
+
+        const inFlight = modrinthDetailRequestsRef.current.get(projectId)
+        if (inFlight) return inFlight
+
+        const request = window.context.getModrinthProject(projectId).then((detail) => {
+            modrinthDetailCacheRef.current.set(projectId, detail)
+            modrinthDetailRequestsRef.current.delete(projectId)
+            return detail
+        }).catch((err) => {
+            modrinthDetailRequestsRef.current.delete(projectId)
+            throw err
+        })
+        modrinthDetailRequestsRef.current.set(projectId, request)
+        return request
+    }, [])
+
+    const getModrinthVersionsCacheKey = useCallback((projectId: string) => {
+        return `${projectId}:${modrinthContext?.loader ?? "any"}:${server?.version ?? "any"}`
+    }, [modrinthContext?.loader, server?.version])
+
+    const getModrinthVersionOptions = useCallback((projectId: string) => {
+        if (!modrinthContext || !server) return Promise.resolve([])
+        const key = getModrinthVersionsCacheKey(projectId)
+        const cached = modrinthVersionsCacheRef.current.get(key)
+        if (cached) return Promise.resolve(cached)
+
+        const inFlight = modrinthVersionRequestsRef.current.get(key)
+        if (inFlight) return inFlight
+
+        const request = window.context.listModrinthVersions(
+            projectId,
+            modrinthContext.loader,
+            server.version
+        ).then((versions) => {
+            modrinthVersionsCacheRef.current.set(key, versions)
+            modrinthVersionRequestsRef.current.delete(key)
+            return versions
+        }).catch((err) => {
+            modrinthVersionRequestsRef.current.delete(key)
+            throw err
+        })
+        modrinthVersionRequestsRef.current.set(key, request)
+        return request
+    }, [getModrinthVersionsCacheKey, modrinthContext, server])
+
+    const handlePrefetchModrinthDetails = useCallback((projectId: string) => {
+        if (!projectId || modrinthDetailCacheRef.current.has(projectId) || modrinthDetailRequestsRef.current.has(projectId)) return
+        void getModrinthDetail(projectId).catch(() => undefined)
+    }, [getModrinthDetail])
+
+    const handlePrefetchModrinthVersions = useCallback((projectId: string) => {
+        if (!projectId || !modrinthContext || !server) return
+        const key = getModrinthVersionsCacheKey(projectId)
+        if (modrinthVersionsCacheRef.current.has(key) || modrinthVersionRequestsRef.current.has(key)) return
+        void getModrinthVersionOptions(projectId).catch(() => undefined)
+    }, [getModrinthVersionOptions, getModrinthVersionsCacheKey, modrinthContext, server])
+
 
     // Load server
+    useEffect(() => {
+        if (storeServer) {
+            setServer(storeServer)
+            setLoading(false)
+        } else if (id) {
+            setServer(null)
+            setLoading(true)
+        }
+    }, [id, storeServer])
+
     useEffect(() => {
         if (!id) return
         refreshServers()
@@ -501,6 +1129,9 @@ export function ServerDetailPage() {
                     setPropsLoaded(true)
                 })
             }
+        }).catch(() => {
+            setServer(null)
+            setLoading(false)
         })
     }, [id, refreshServers])
 
@@ -681,6 +1312,14 @@ export function ServerDetailPage() {
         }
         setStarting(false)
     }
+
+    useEffect(() => {
+        if (!shouldAutoStart || !id || !server || loading) return
+        if (autoStartConsumedRef.current === id) return
+        autoStartConsumedRef.current = id
+        navigate(`/servers/${id}`, { replace: true })
+        void handleStart()
+    }, [shouldAutoStart, id, server, loading])
 
     const handleAcceptEula = async () => {
         if (!id) return
@@ -1118,18 +1757,28 @@ export function ServerDetailPage() {
         setModrinthInstallOpen(true)
         setModrinthVersions([])
         setSelectedModrinthVersionId("")
+        setShowModrinthAlternates(false)
         setModrinthVersionsError(null)
+        const cacheKey = getModrinthVersionsCacheKey(target.projectId)
+        const cachedVersions = modrinthVersionsCacheRef.current.get(cacheKey)
+        if (cachedVersions) {
+            const defaultVersion = pickDefaultModrinthVersion(cachedVersions, server.version)
+            setModrinthVersions(cachedVersions)
+            setSelectedModrinthVersionId(defaultVersion?.id ?? "")
+            setModrinthVersionsLoading(false)
+            if (cachedVersions.length === 0) {
+                setModrinthVersionsError("No builds were returned by Modrinth for this project.")
+            }
+            return
+        }
         setModrinthVersionsLoading(true)
         try {
-            const versions = await window.context.listModrinthVersions(
-                target.projectId,
-                modrinthContext.loader,
-                server.version
-            )
+            const versions = await getModrinthVersionOptions(target.projectId)
+            const defaultVersion = pickDefaultModrinthVersion(versions, server.version)
             setModrinthVersions(versions)
-            setSelectedModrinthVersionId(versions[0]?.id ?? "")
+            setSelectedModrinthVersionId(defaultVersion?.id ?? "")
             if (versions.length === 0) {
-                setModrinthVersionsError("No compatible versions found for this server.")
+                setModrinthVersionsError("No builds were returned by Modrinth for this project.")
             }
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Failed to load versions"
@@ -1175,17 +1824,23 @@ export function ServerDetailPage() {
         await loadModrinthInstalls()
     }
 
-    const handleOpenModrinthDetails = async (project: { projectId: string }) => {
+    const handleOpenModrinthDetails = async (project: ModrinthProjectPreviewSource) => {
         if (!project.projectId) {
             setError("Modrinth project is missing an id.")
             return
         }
         setModrinthDetailOpen(true)
-        setModrinthDetail(null)
         setModrinthDetailError(null)
+        const cached = modrinthDetailCacheRef.current.get(project.projectId)
+        if (cached) {
+            setModrinthDetail(cached)
+            setModrinthDetailLoading(false)
+            return
+        }
+        setModrinthDetail(createModrinthDetailPreview(project))
         setModrinthDetailLoading(true)
         try {
-            const detail = await window.context.getModrinthProject(project.projectId)
+            const detail = await getModrinthDetail(project.projectId)
             setModrinthDetail(detail)
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Failed to load details"
@@ -1346,13 +2001,13 @@ export function ServerDetailPage() {
 
     const filteredProperties = useMemo(() => {
         const needle = propsFilter.trim().toLowerCase()
-        return properties
-            .map((prop, index) => ({ prop, index }))
-            .filter(({ prop }) => {
-                if (prop.comment) return false
-                if (!needle) return true
-                return prop.key.toLowerCase().includes(needle)
-            })
+        const visible: Array<{ prop: ServerProperty; index: number }> = []
+        properties.forEach((prop, index) => {
+            if (prop.comment) return
+            if (needle && !prop.key.toLowerCase().includes(needle)) return
+            visible.push({ prop, index })
+        })
+        return visible
     }, [properties, propsFilter])
 
     const liveStats = storeStats ?? stats ?? null
@@ -1362,14 +2017,42 @@ export function ServerDetailPage() {
         memoryUsed != null && memoryMax
             ? Math.min(100, Math.max(0, Math.round((memoryUsed / memoryMax) * 100)))
             : null
-    const selectedModrinthVersion = modrinthVersions.find((version) => version.id === selectedModrinthVersionId)
+    const recommendedModrinthVersion = useMemo(
+        () => (server ? pickRecommendedModrinthVersion(modrinthVersions, server.version) : undefined),
+        [modrinthVersions, server]
+    )
+    const selectedModrinthVersion = useMemo(
+        () => modrinthVersions.find((version) => version.id === selectedModrinthVersionId),
+        [modrinthVersions, selectedModrinthVersionId]
+    )
+    const otherModrinthVersions = useMemo(
+        () =>
+            modrinthVersions.filter(
+                (version) => version.id !== recommendedModrinthVersion?.id
+            ),
+        [modrinthVersions, recommendedModrinthVersion]
+    )
+    const hasMinecraftVersionBuild = useMemo(
+        () =>
+            server
+                ? modrinthVersions.some((version) =>
+                    supportsMinecraftVersion(version, server.version)
+                )
+                : false,
+        [modrinthVersions, server]
+    )
+    const installVersionWarning = server && modrinthVersions.length > 0
+        ? !hasMinecraftVersionBuild
+            ? `No build lists Minecraft ${server.version}. You can still install another build, but it may not work on this server.`
+            : !recommendedModrinthVersion
+                ? `No stable build lists Minecraft ${server.version}. Choose one of the non-stable builds below if you still want to continue.`
+                : selectedModrinthVersion && selectedModrinthVersion.id !== recommendedModrinthVersion.id
+                    ? `Selected build is ${getVersionChannelMeta(selectedModrinthVersion.versionType).label.toLowerCase()} or not the recommended stable release.`
+                    : null
+        : null
 
     if (loading) {
-        return (
-            <section className="flex flex-1 items-center justify-center">
-                <Spinner className="text-primary" />
-            </section>
-        )
+        return <ServerDetailSkeleton />
     }
 
     if (!server) {
@@ -1878,7 +2561,7 @@ export function ServerDetailPage() {
                 </TabsContent>
 
                 {/* Library Tab */}
-                <TabsContent value="library" className="mt-0 px-8 pt-6 max-h-[740px] overflow-auto pr-1">
+                <TabsContent value="library" className="mt-0 px-8 pt-6">
                     {!modrinthContext ? (
                         <Card>
                             <CardHeader>
@@ -1890,16 +2573,16 @@ export function ServerDetailPage() {
                             </CardHeader>
                         </Card>
                     ) : (
-                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                            <Card>
-                                <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+                            <Card className="overflow-hidden">
+                                <CardHeader className="border-b border-border bg-card">
                                     <div>
-                                        <CardTitle>Modrinth {modrinthContext.label}</CardTitle>
+                                        <CardTitle>Browse</CardTitle>
                                         <CardDescription>
-                                            Search and install for {server?.version}
+                                            {modrinthContext.label} for Minecraft {server?.version}
                                         </CardDescription>
                                     </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                                         <Input
                                             value={modrinthQuery}
                                             onChange={(e) => {
@@ -1911,8 +2594,8 @@ export function ServerDetailPage() {
                                                     handleSearchModrinth(0)
                                                 }
                                             }}
-                                            placeholder={`Search ${modrinthContext.label.toLowerCase()}`}
-                                            className="h-9 w-full sm:w-[240px]"
+                                            placeholder="Name or keyword"
+                                            className="h-9 w-full sm:flex-1"
                                         />
                                         <Select value={modrinthSort} onValueChange={(value) => {
                                             setModrinthSort(value as typeof modrinthSort)
@@ -1947,23 +2630,42 @@ export function ServerDetailPage() {
                                         </Alert>
                                     )}
                                     {modrinthLoading && modrinthResults.length === 0 ? (
-                                        <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                                            <Spinner className="text-primary" />
-                                            <span>Loading Modrinth {modrinthContext.label.toLowerCase()}...</span>
+                                        <div className="grid gap-3 py-2">
+                                            {Array.from({ length: 5 }).map((_, index) => (
+                                                <div key={index} className="flex gap-3 rounded-lg border border-border bg-card p-3">
+                                                    <div className="h-16 w-16 shrink-0 rounded-lg bg-muted" />
+                                                    <div className="min-w-0 flex-1 space-y-3">
+                                                        <div className="h-4 w-44 rounded bg-muted" />
+                                                        <div className="h-3 w-full rounded bg-muted/80" />
+                                                        <div className="h-3 w-2/3 rounded bg-muted/70" />
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     ) : modrinthResults.length === 0 ? (
-                                        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                                            <Info className="h-4 w-4" />
-                                            <span>Run a search to see results.</span>
+                                        <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                                            <div className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-muted/40">
+                                                <Search className="h-4 w-4" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm text-foreground">Search Modrinth</p>
+                                                <p className="mt-1 text-[12.5px]">Find a plugin or mod by name.</p>
+                                            </div>
                                         </div>
                                     ) : (
-                                        <div className="max-h-[600px] overflow-auto pr-2 custom-scrollbar">
+                                        <div className="max-h-[680px] overflow-auto pr-2 custom-scrollbar">
                                             <div className="flex flex-col gap-3">
                                                 {modrinthResults.map((hit) => (
                                                 <div
                                                     key={hit.projectId}
-                                                    className="group relative flex flex-row w-full items-stretch gap-4 rounded-xl border border-border bg-card p-3 transition-all hover:border-border hover:bg-muted/50 cursor-pointer"
+                                                    className="group relative flex w-full cursor-pointer items-stretch gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/45"
                                                     onClick={() => handleOpenModrinthDetails(hit)}
+                                                    onMouseEnter={() => {
+                                                        handlePrefetchModrinthDetails(hit.projectId)
+                                                    }}
+                                                    onFocus={() => {
+                                                        handlePrefetchModrinthDetails(hit.projectId)
+                                                    }}
                                                     role="button"
                                                     tabIndex={0}
                                                     onKeyDown={(e) => {
@@ -1971,8 +2673,8 @@ export function ServerDetailPage() {
                                                     }}
                                                 >
                                                     {/* Left: Icon Frame */}
-                                                    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-muted p-2 border border-border overflow-hidden">
-                                                         <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-muted-foreground/20 z-0 select-none">
+                                                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background p-2">
+                                                         <div className="absolute inset-0 z-0 flex items-center justify-center text-2xl font-medium text-muted-foreground/20 select-none">
                                                             {hit.title.charAt(0).toUpperCase()}
                                                          </div>
                                                          <img
@@ -1986,19 +2688,19 @@ export function ServerDetailPage() {
                                                     </div>
 
                                                     {/* Middle: Content */}
-                                                    <div className="flex flex-1 flex-col justify-between py-1 min-w-0">
+                                                    <div className="flex min-w-0 flex-1 flex-col justify-between">
                                                         <div>
                                                             <div className="flex items-baseline gap-2">
-                                                                <h3 className="text-base font-bold text-foreground underline decoration-muted-foreground/30 underline-offset-4 truncate">{hit.title}</h3>
+                                                                <h3 className="truncate text-[14px] font-medium text-foreground">{hit.title}</h3>
                                                                 <span className="text-xs text-muted-foreground truncate">by {hit.author}</span>
                                                             </div>
-                                                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground leading-snug">
-                                                                {hit.description}
+                                                            <p className="mt-1 line-clamp-2 text-sm leading-snug text-foreground/80">
+                                                                <ModrinthInlineMarkdown text={hit.description} />
                                                             </p>
                                                         </div>
                                                         
                                                         {/* Tags */}
-                                                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                                             {/* Client/Server Tag */}
                                                             {(hit.clientSide !== 'unsupported' || hit.serverSide !== 'unsupported') && (
                                                                 <Badge variant="outline" className="flex items-center gap-1.5 border-border bg-muted text-muted-foreground hover:bg-muted/80 px-2 py-0.5 font-normal">
@@ -2013,16 +2715,19 @@ export function ServerDetailPage() {
                                                             
                                                             {/* Categories */}
                                                             {(() => {
-                                                                const loaders = ['fabric', 'forge', 'neoforge', 'quilt', 'paper', 'spigot', 'folia', 'bukkit', 'bungeecord', 'velocity', 'waterfall', 'sponge', 'purpur'];
                                                                 const allCats = hit.categories || [];
-                                                                const sortedCats = [...allCats].sort((a, b) => {
-                                                                    const isLoaderA = loaders.includes(a.toLowerCase());
-                                                                    const isLoaderB = loaders.includes(b.toLowerCase());
-                                                                    // Loaders go last
-                                                                    if (isLoaderA && !isLoaderB) return 1;
-                                                                    if (!isLoaderA && isLoaderB) return -1;
-                                                                    return a.localeCompare(b);
+                                                                const loaderCats: string[] = [];
+                                                                const featureCats: string[] = [];
+                                                                allCats.forEach((cat) => {
+                                                                    if (MODRINTH_LOADER_CATEGORIES.has(cat.toLowerCase())) {
+                                                                        loaderCats.push(cat);
+                                                                    } else {
+                                                                        featureCats.push(cat);
+                                                                    }
                                                                 });
+                                                                featureCats.sort((a, b) => a.localeCompare(b));
+                                                                loaderCats.sort((a, b) => a.localeCompare(b));
+                                                                const sortedCats = featureCats.concat(loaderCats);
 
                                                                 const visible = sortedCats.slice(0, 6);
                                                                 const overflow = sortedCats.slice(6);
@@ -2074,9 +2779,9 @@ export function ServerDetailPage() {
                                                     </div>
 
                                                     {/* Right: Metadata & Actions */}
-                                                    <div className="flex shrink-0 flex-col items-end justify-between py-1 pl-4 min-w-[140px]">
+                                                    <div className="flex min-w-[118px] shrink-0 flex-col items-end justify-between border-l border-border pl-3">
                                                         {/* Top Right: Stats */}
-                                                        <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+                                                        <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground">
                                                              <div className="flex items-center gap-1.5" title={`${hit.downloads} Downloads`}>
                                                                  <Download className="h-3.5 w-3.5" />
                                                                  <span>
@@ -2106,6 +2811,8 @@ export function ServerDetailPage() {
                                                                 <Button
                                                                     size="sm"
                                                                     className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                                                                    onMouseEnter={() => handlePrefetchModrinthVersions(hit.projectId)}
+                                                                    onFocus={() => handlePrefetchModrinthVersions(hit.projectId)}
                                                                     onClick={(e) => {
                                                                         e.stopPropagation()
                                                                         handleOpenModrinthInstall(hit)
@@ -2176,12 +2883,12 @@ export function ServerDetailPage() {
                                 </CardContent>
                             </Card>
 
-                            <Card>
-                                <CardHeader className="flex flex-row items-center justify-between">
+                            <Card className="h-fit overflow-hidden">
+                                <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-card pb-4">
                                     <div>
-                                        <CardTitle>Installed {modrinthContext.label}</CardTitle>
+                                        <CardTitle className="text-[15px]">Installed</CardTitle>
                                         <CardDescription className="text-muted-foreground">
-                                            Manage installed {modrinthContext.label.toLowerCase()}
+                                            {modrinthInstalls.length} item{modrinthInstalls.length === 1 ? "" : "s"}
                                         </CardDescription>
                                     </div>
                                     <Button
@@ -2199,16 +2906,20 @@ export function ServerDetailPage() {
                                             <Spinner className="text-primary" />
                                         </div>
                                     ) : modrinthInstalls.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground">Nothing installed yet.</p>
+                                        <div className="rounded-lg border border-dashed border-border bg-background/40 px-3 py-8 text-center text-xs text-muted-foreground">
+                                            No installs yet.
+                                        </div>
                                     ) : (
-                                        <div className="flex flex-col gap-2 max-h-[420px] overflow-auto pr-1">
+                                        <div className="flex max-h-[520px] flex-col gap-2 overflow-auto pr-1 custom-scrollbar">
                                             {modrinthInstalls.map((entry) => (
                                                 <div
                                                     key={entry.projectId}
-                                                    className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-muted/50 px-3 py-3 transition-colors hover:bg-muted"
+                                                    className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-background/45 px-3 py-2.5 transition-colors hover:bg-muted/50"
                                                     role="button"
                                                     tabIndex={0}
                                                     onClick={() => handleOpenModrinthDetails(entry)}
+                                                    onMouseEnter={() => handlePrefetchModrinthDetails(entry.projectId)}
+                                                    onFocus={() => handlePrefetchModrinthDetails(entry.projectId)}
                                                     onKeyDown={(e) => {
                                                         if (e.key === "Enter") handleOpenModrinthDetails(entry)
                                                     }}
@@ -2230,7 +2941,7 @@ export function ServerDetailPage() {
                                                             )}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <p className="text-sm font-semibold truncate">{entry.title}</p>
+                                                            <p className="truncate text-[13px] font-medium">{entry.title}</p>
                                                             <p className="text-[10px] text-muted-foreground/60 truncate">
                                                                 {entry.fileName}
                                                             </p>
@@ -3006,14 +3717,14 @@ export function ServerDetailPage() {
             </Tabs>
 
             <Dialog open={modrinthDetailOpen} onOpenChange={setModrinthDetailOpen}>
-                <DialogContent className="max-w-[960px] border-border bg-card max-h-[88vh] overflow-y-auto custom-scrollbar">
+                <DialogContent className="max-w-[960px] border-border bg-card max-h-[88vh] overflow-y-auto custom-scrollbar select-text">
                     <DialogHeader>
                         <DialogTitle>Modrinth Project</DialogTitle>
                         <DialogDescription className="text-muted-foreground">
                             README, gallery, versions, and install status
                         </DialogDescription>
                     </DialogHeader>
-                    {modrinthDetailLoading ? (
+                    {modrinthDetailLoading && !modrinthDetail ? (
                         <div className="flex items-center justify-center py-12">
                             <Spinner className="text-primary" />
                         </div>
@@ -3041,12 +3752,12 @@ export function ServerDetailPage() {
                                         />
                                     )}
                                 </div>
-                                <div className="min-w-0 flex-1">
+                                <div className="min-w-0 flex-1 select-text">
                                     <h2 className="text-2xl font-bold text-foreground truncate">
                                         {modrinthDetail.title}
                                     </h2>
                                     <p className="text-base text-muted-foreground mt-1">
-                                        {modrinthDetail.description}
+                                        <ModrinthInlineMarkdown text={modrinthDetail.description} />
                                     </p>
                                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                         <Badge variant="secondary" className="bg-muted/50 hover:bg-muted/50 text-muted-foreground font-normal">
@@ -3122,13 +3833,19 @@ export function ServerDetailPage() {
                                     <h3 className="text-sm font-medium text-muted-foreground">Gallery</h3>
                                     <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
                                         {modrinthDetail.gallery.map((image) => (
-                                            <img
+                                            <button
                                                 key={image.url}
-                                                src={image.url}
-                                                alt={image.title || modrinthDetail.title}
-                                                className="h-48 rounded-lg object-cover border border-border bg-muted snap-start"
-                                                loading="lazy"
-                                            />
+                                                type="button"
+                                                className="snap-start overflow-hidden rounded-lg border border-border bg-muted"
+                                                onClick={() => setModrinthGalleryPreview(image)}
+                                            >
+                                                <img
+                                                    src={image.url}
+                                                    alt={image.title || modrinthDetail.title}
+                                                    className="h-48 cursor-zoom-in object-cover transition-transform duration-200 hover:scale-[1.02]"
+                                                    loading="lazy"
+                                                />
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
@@ -3136,8 +3853,15 @@ export function ServerDetailPage() {
 
                             <div className="space-y-2">
                                 <h3 className="text-sm font-medium text-muted-foreground">README</h3>
-                                <div className="rounded-2xl border border-border bg-background/70 p-6">
-                                    <ModrinthReadme body={modrinthDetail.body || modrinthDetail.description} />
+                                <div className="rounded-2xl border border-border bg-background/70 p-6 select-text">
+                                    {modrinthDetailLoading ? (
+                                        <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                                            <Spinner className="h-4 w-4 text-primary" />
+                                            Loading README...
+                                        </div>
+                                    ) : (
+                                        <ModrinthReadme body={modrinthDetail.body || modrinthDetail.description} />
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -3145,19 +3869,42 @@ export function ServerDetailPage() {
                 </DialogContent>
             </Dialog>
 
+            <Dialog open={!!modrinthGalleryPreview} onOpenChange={(open) => !open && setModrinthGalleryPreview(null)}>
+                <DialogContent className="max-w-[92vw] border-border bg-card p-4">
+                    <DialogHeader>
+                        <DialogTitle>{modrinthGalleryPreview?.title ?? "Gallery image"}</DialogTitle>
+                        {modrinthGalleryPreview?.description && (
+                            <DialogDescription className="select-text text-muted-foreground">
+                                {modrinthGalleryPreview.description}
+                            </DialogDescription>
+                        )}
+                    </DialogHeader>
+                    {modrinthGalleryPreview && (
+                        <div className="flex max-h-[78vh] items-center justify-center overflow-auto rounded-xl bg-background/70 p-2">
+                            <img
+                                src={modrinthGalleryPreview.url}
+                                alt={modrinthGalleryPreview.title ?? "Gallery image"}
+                                className="max-h-[74vh] max-w-full rounded-lg object-contain"
+                            />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={modrinthInstallOpen} onOpenChange={setModrinthInstallOpen}>
-                <DialogContent className="max-w-[620px] border-border bg-card">
+                <DialogContent className="max-w-[560px] border-border bg-card">
                     <DialogHeader>
                         <DialogTitle>Install {modrinthInstallTarget?.title ?? modrinthContext?.label}</DialogTitle>
                         <DialogDescription className="text-muted-foreground">
-                            Choose the exact version to install for {server.version}. Catalyst will download the selected compatible file into the server&apos;s {modrinthContext?.projectType === "plugin" ? "plugins" : "mods"} folder.
+                            Recommended is only shown for the newest stable build that matches Minecraft {server.version}.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="mt-4 space-y-4">
                         {modrinthVersionsLoading ? (
-                            <div className="flex items-center justify-center py-10">
+                            <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-background/60 py-8 text-sm text-muted-foreground">
                                 <Spinner className="text-primary" />
+                                Loading builds...
                             </div>
                         ) : modrinthVersionsError ? (
                             <Alert variant="destructive">
@@ -3166,59 +3913,136 @@ export function ServerDetailPage() {
                             </Alert>
                         ) : (
                             <>
-                                <div className="grid gap-2">
-                                    <label className="text-[12.5px] font-medium text-muted-foreground">
-                                        Version
-                                    </label>
-                                    <Select value={selectedModrinthVersionId} onValueChange={setSelectedModrinthVersionId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a version" />
-                                        </SelectTrigger>
-                                        <SelectContent className="max-h-72">
-                                            {modrinthVersions.map((version) => (
-                                                <SelectItem key={version.id} value={version.id}>
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="font-medium">{version.versionNumber}</span>
-                                                        <span className="text-muted-foreground">{version.name}</span>
-                                                    </span>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                {installVersionWarning && (
+                                    <Alert>
+                                        <Info className="h-4 w-4" />
+                                        <AlertTitle>Check compatibility</AlertTitle>
+                                        <AlertDescription>{installVersionWarning}</AlertDescription>
+                                    </Alert>
+                                )}
 
-                                {selectedModrinthVersion && (
-                                    <div className="rounded-xl border border-border bg-background/60 p-4">
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <p className="text-[14px] font-medium text-foreground">
-                                                    {selectedModrinthVersion.name}
+                                {recommendedModrinthVersion && (
+                                    <div className="rounded-xl border border-primary/35 bg-primary/10 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className="bg-primary text-primary-foreground hover:bg-primary">Recommended</Badge>
+                                                    <Badge variant="outline" className={getVersionChannelMeta(recommendedModrinthVersion.versionType).className}>
+                                                        {getVersionChannelMeta(recommendedModrinthVersion.versionType).label}
+                                                    </Badge>
+                                                </div>
+                                                <p className="mt-3 truncate text-[15px] font-medium text-foreground">
+                                                    {recommendedModrinthVersion.versionNumber}
                                                 </p>
-                                                <p className="mt-1 text-[12.5px] text-muted-foreground">
-                                                    Published {new Date(selectedModrinthVersion.datePublished).toLocaleDateString()} - {selectedModrinthVersion.fileName}
+                                                <p className="mt-1 truncate text-[12.5px] text-muted-foreground">
+                                                    {recommendedModrinthVersion.name}
                                                 </p>
                                             </div>
-                                            <Badge variant="outline" className="capitalize">
-                                                {selectedModrinthVersion.versionType}
-                                            </Badge>
+                                            {selectedModrinthVersionId === recommendedModrinthVersion.id ? (
+                                                <Check className="h-5 w-5 shrink-0 text-primary" />
+                                            ) : (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setSelectedModrinthVersionId(recommendedModrinthVersion.id)}
+                                                >
+                                                    Use
+                                                </Button>
+                                            )}
                                         </div>
-                                        <div className="mt-3 flex flex-wrap gap-2">
-                                            {selectedModrinthVersion.gameVersions.slice(0, 6).map((version) => (
-                                                <Badge key={version} variant="secondary" className="bg-muted/50 text-muted-foreground">
-                                                    {version}
-                                                </Badge>
-                                            ))}
-                                            {selectedModrinthVersion.loaders.map((loader) => (
-                                                <Badge key={loader} variant="outline" className="capitalize">
+                                        <div className="mt-3 flex flex-wrap gap-1.5">
+                                            <Badge variant="secondary" className={recommendedModrinthVersion.gameVersions.includes(server.version) ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground"}>
+                                                {recommendedModrinthVersion.gameVersions.includes(server.version)
+                                                    ? `Minecraft ${server.version}`
+                                                    : formatGameVersions(recommendedModrinthVersion.gameVersions)}
+                                            </Badge>
+                                            {recommendedModrinthVersion.loaders.slice(0, 3).map((loader) => (
+                                                <Badge key={loader} variant="outline" className="capitalize text-muted-foreground">
                                                     {loader}
                                                 </Badge>
                                             ))}
-                                            {selectedModrinthVersion.fileSize && (
-                                                <Badge variant="outline">
-                                                    {formatBytes(selectedModrinthVersion.fileSize)}
+                                            <Badge variant="outline" className="text-muted-foreground">
+                                                {formatVersionDate(recommendedModrinthVersion.datePublished)}
+                                            </Badge>
+                                            {recommendedModrinthVersion.fileSize && (
+                                                <Badge variant="outline" className="text-muted-foreground">
+                                                    {formatBytes(recommendedModrinthVersion.fileSize)}
                                                 </Badge>
                                             )}
                                         </div>
+                                        <p className="mt-3 truncate font-mono text-[11px] text-muted-foreground/70">
+                                            {recommendedModrinthVersion.fileName}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {!recommendedModrinthVersion && selectedModrinthVersion && (
+                                    <div className="rounded-xl border border-border bg-background/60 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline" className={getVersionChannelMeta(selectedModrinthVersion.versionType).className}>
+                                                        {getVersionChannelMeta(selectedModrinthVersion.versionType).label}
+                                                    </Badge>
+                                                    {supportsMinecraftVersion(selectedModrinthVersion, server.version) && (
+                                                        <Badge variant="secondary" className="bg-primary/10 text-primary">
+                                                            Minecraft {server.version}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <p className="mt-3 truncate text-[15px] font-medium text-foreground">
+                                                    {selectedModrinthVersion.versionNumber}
+                                                </p>
+                                                <p className="mt-1 truncate text-[12.5px] text-muted-foreground">
+                                                    {selectedModrinthVersion.name}
+                                                </p>
+                                            </div>
+                                            <Check className="h-5 w-5 shrink-0 text-muted-foreground" />
+                                        </div>
+                                        <p className="mt-3 truncate font-mono text-[11px] text-muted-foreground/80">
+                                            {selectedModrinthVersion.fileName}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {otherModrinthVersions.length > 0 && (
+                                    <div className="rounded-xl border border-border bg-background/50">
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center justify-between px-3 py-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                                            onClick={() => setShowModrinthAlternates((value) => !value)}
+                                        >
+                                            All builds
+                                            <ChevronRight className={`h-4 w-4 transition-transform ${showModrinthAlternates ? "rotate-90" : ""}`} />
+                                        </button>
+                                        {showModrinthAlternates && (
+                                            <div className="grid max-h-52 gap-1 overflow-auto border-t border-border p-2 custom-scrollbar">
+                                                {otherModrinthVersions.map((version) => {
+                                                    const selected = version.id === selectedModrinthVersionId
+                                                    const channel = getVersionChannelMeta(version.versionType)
+                                                    return (
+                                                        <button
+                                                            key={version.id}
+                                                            type="button"
+                                                            onClick={() => setSelectedModrinthVersionId(version.id)}
+                                                            className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+                                                                selected ? "bg-primary/10 text-foreground" : "hover:bg-muted/50"
+                                                            }`}
+                                                        >
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-[13px] font-medium">{version.versionNumber}</p>
+                                                                <p className="truncate text-[11.5px] text-muted-foreground">
+                                                                    {supportsMinecraftVersion(version, server.version) ? `Minecraft ${server.version}` : formatGameVersions(version.gameVersions)} - {formatVersionDate(version.datePublished)}
+                                                                </p>
+                                                            </div>
+                                                            <Badge variant="outline" className={`shrink-0 ${channel.className}`}>
+                                                                {channel.label}
+                                                            </Badge>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </>
@@ -3244,7 +4068,7 @@ export function ServerDetailPage() {
                             ) : (
                                 <Download className="mr-2 h-4 w-4" />
                             )}
-                            Install selected version
+                            {selectedModrinthVersionId === recommendedModrinthVersion?.id ? "Install recommended" : "Install selected"}
                         </Button>
                     </div>
                 </DialogContent>
@@ -3364,8 +4188,8 @@ export function ServerDetailPage() {
                             <Spinner className="h-5 w-5" />
                             {ngrokInstallProgress < 0 ? "Configuring ngrok..." : "Installing ngrok..."}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
-                            <div className="mt-4">
+                        <AlertDialogDescription asChild>
+                            <div className="mt-4 text-sm text-muted-foreground">
                                 {ngrokInstallProgress < 0 ? (
                                     <p className="text-center text-sm">Setting up your authtoken...</p>
                                 ) : (

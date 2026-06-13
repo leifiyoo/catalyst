@@ -10,6 +10,15 @@ export type GetWindowStateFn = () => Promise<WindowState>;
 export type OnWindowStateChangedFn = (handler: (state: WindowState) => void) => () => void;
 export type SetAlwaysOnTopFn = (value: boolean) => Promise<void>;
 
+export type AppPreferences = {
+  askBeforeClose: boolean;
+};
+
+export type GetAppPreferencesFn = () => Promise<AppPreferences>;
+export type UpdateAppPreferencesFn = (
+  updates: Partial<AppPreferences>
+) => Promise<AppPreferences>;
+
 // ---- Server Types ----
 
 export type ProcessPriority = "Low" | "Normal" | "High";
@@ -283,6 +292,9 @@ export type UpdateCheckResult = {
   latestVersion: string;
   currentVersion: string;
   releaseUrl: string;
+  releaseName?: string;
+  publishedAt?: string;
+  releaseNotes?: string;
   changelog?: ChangelogEntry[];
   error?: string;
 };

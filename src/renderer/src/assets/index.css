@@ -75,6 +75,10 @@
       "calt" 1;
     border-radius: 12px;
   }
+
+  :where(.font-semibold, .font-bold, b, strong) {
+    letter-spacing: 0 !important;
+  }
 }
 
 body {

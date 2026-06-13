@@ -5,6 +5,8 @@ import {
   OnResizeStepFn,
   ResizeWindowFn,
   SetAlwaysOnTopFn,
+  GetAppPreferencesFn,
+  UpdateAppPreferencesFn,
   WindowControlFn,
   CreateServerFn,
   GetServersFn,
@@ -74,6 +76,8 @@ declare global {
       windowControl: WindowControlFn;
       getWindowState: GetWindowStateFn;
       setAlwaysOnTop: SetAlwaysOnTopFn;
+      getAppPreferences: GetAppPreferencesFn;
+      updateAppPreferences: UpdateAppPreferencesFn;
       onWindowStateChanged: OnWindowStateChangedFn;
       onResizeStep: OnResizeStepFn;
       createServer: CreateServerFn;

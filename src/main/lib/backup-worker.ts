@@ -45,13 +45,20 @@ function getFilesToBackup(dirPath: string, excludeDir: string): { path: string; 
       continue;
     }
     
-    const stat = fs.statSync(fullPath);
-    
-    if (stat.isDirectory()) {
-      const subFiles = getFilesToBackup(fullPath, excludeDir);
-      files.push(...subFiles);
-    } else {
-      files.push({ path: fullPath, size: stat.size });
+    try {
+      const stat = fs.statSync(fullPath);
+
+      if (stat.isDirectory()) {
+        const subFiles = getFilesToBackup(fullPath, excludeDir);
+        files.push(...subFiles);
+      } else {
+        files.push({ path: fullPath, size: stat.size });
+      }
+    } catch (error) {
+      sendMessage({
+        type: 'log',
+        data: `[BACKUP_WORKER] Skipping unreadable file: ${fullPath} (${error instanceof Error ? error.message : String(error)})`
+      });
     }
   }
   
@@ -122,6 +129,7 @@ async function runBackup(): Promise<void> {
     // Track individual files
     archive.on('entry', (_entry) => {
       archivedFiles++;
+      processedFiles = archivedFiles;
     });
 
     archive.on('warning', (err) => {

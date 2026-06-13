@@ -17,7 +17,7 @@ import java.net.InetSocketAddress;
  *
  * Version detection priority:
  *   1. ViaVersion API (if installed) — shows the actual client version
- *   2. Bukkit.getMinecraftVersion() — shows the server version as fallback
+ *   2. Reflected Bukkit server-version APIs — show the server version as fallback
  *
  * No hardcoded protocol mappings or wiki.vg lookups.
  */
@@ -82,7 +82,7 @@ public class PlayerJoinLeaveListener implements Listener {
      * Priority 1: ViaVersion API — if ViaVersion is installed, it knows the actual
      *             client version even when the server runs a different version.
      *
-     * Priority 2: Bukkit.getMinecraftVersion() — returns the server's Minecraft version
+     * Priority 2: reflected Bukkit server-version APIs return the server's Minecraft version
      *             string (e.g. "1.21.4"). This is the fallback when ViaVersion is not
      *             installed, meaning all players connect with the server version.
      */
@@ -137,10 +137,11 @@ public class PlayerJoinLeaveListener implements Listener {
                 // ViaVersion API error — fall through to Bukkit
             }
 
-            // Priority 2: Bukkit.getMinecraftVersion() — returns server version string like "1.21.4"
+            // Priority 2: reflectively call newer Bukkit/Paper server-version APIs when present.
             // This is reliable and always available on modern Bukkit/Spigot/Paper
             try {
-                String serverVersion = Bukkit.getMinecraftVersion();
+                Object value = Bukkit.class.getMethod("getMinecraftVersion").invoke(null);
+                String serverVersion = value instanceof String ? (String) value : null;
                 if (serverVersion != null && !serverVersion.isEmpty()) {
                     dm.setPlayerClientVersionString(uuid, serverVersion);
                     return;

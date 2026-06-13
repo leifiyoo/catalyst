@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { RadialGauge } from "@/components/ui/radial-gauge"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { useServerStore, type ServerEvent } from "@/stores/serverStore"
+import catalystIcon from "../../../../resources/icon.png"
 
 const DASHBOARD_EASE = [0.22, 1, 0.36, 1] as const
 
@@ -23,20 +24,19 @@ const dashboardSequence = {
     hidden: {},
     show: {
         transition: {
-            staggerChildren: 0.07,
-            delayChildren: 0.04,
+            staggerChildren: 0.025,
+            delayChildren: 0.02,
         },
     },
 }
 
 const dashboardItem = {
-    hidden: { opacity: 0, y: 24, scale: 0.985 },
+    hidden: { opacity: 0, y: 8 },
     show: {
         opacity: 1,
         y: 0,
-        scale: 1,
         transition: {
-            duration: 0.46,
+            duration: 0.22,
             ease: DASHBOARD_EASE,
         },
     },
@@ -100,7 +100,7 @@ function HeroStat({
 
 function ServerRow({ server, stats }: { server: ServerRecord; stats?: ServerStats }) {
     const navigate = useNavigate()
-    const { startServer, stopServer } = useServerStore()
+    const { stopServer } = useServerStore()
     const online = server.status === "Online"
     const busy = server.status === "Starting" || server.status === "Stopping"
 
@@ -121,7 +121,7 @@ function ServerRow({ server, stats }: { server: ServerRecord; stats?: ServerStat
         if (online) {
             stopServer(server.id)
         } else {
-            startServer(server.id)
+            navigate(`/servers/${server.id}?start=true`)
         }
     }
 
@@ -299,7 +299,7 @@ export function DashboardPage() {
 
     if (!loaded) {
         return (
-            <div className="flex flex-1 items-center justify-center">
+            <div className="flex min-h-[calc(100vh-60px)] flex-1 items-center justify-center">
                 <Spinner className="h-5 w-5 text-muted-foreground" />
             </div>
         )
@@ -307,19 +307,27 @@ export function DashboardPage() {
 
     if (servers.length === 0) {
         return (
-            <div className="flex flex-1 items-center justify-center px-8">
-                <div className="flex max-w-sm flex-col items-center text-center">
-                    <div className="grid h-14 w-14 place-items-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
-                        <Server className="h-6 w-6" />
+            <div className="flex min-h-[calc(100vh-60px)] flex-1 items-center justify-center px-8 pb-10">
+                <div className="flex max-w-md flex-col items-center text-center">
+                    <div className="grid h-20 w-20 place-items-center rounded-2xl border border-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                        <img src={catalystIcon} alt="Catalyst" className="h-11 w-11 object-contain" />
                     </div>
-                    <h1 className="mt-5 text-xl font-semibold tracking-tight">Welcome to Catalyst</h1>
-                    <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
-                        Spin up a local Minecraft server in under a minute. Paper, Purpur, Fabric and Vanilla are supported.
+                    <h1 className="mt-6 text-[28px] font-medium leading-tight tracking-normal text-foreground">
+                        Welcome to Catalyst
+                    </h1>
+                    <p className="mt-3 max-w-sm text-[14px] leading-7 text-muted-foreground">
+                        Create a Minecraft server, import an existing world, or connect your current setup.
                     </p>
-                    <Button className="mt-6" onClick={() => navigate("/servers?create=true")}>
-                        <Plus className="h-4 w-4" />
-                        Create your first server
-                    </Button>
+                    <div className="mt-7 flex flex-wrap justify-center gap-3">
+                        <Button onClick={() => navigate("/servers?create=true")}>
+                            <Plus className="h-4 w-4" />
+                            Create server
+                        </Button>
+                        <Button variant="outline" onClick={() => navigate("/servers")}>
+                            <Server className="h-4 w-4" />
+                            Open servers
+                        </Button>
+                    </div>
                 </div>
             </div>
         )

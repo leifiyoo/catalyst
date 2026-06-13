@@ -1,9 +1,16 @@
 import path from "path";
 import fs from "fs/promises";
+import { createWriteStream } from "fs";
+import crypto from "crypto";
+import { Readable, Transform } from "stream";
+import { pipeline } from "stream/promises";
+
+import { isPathWithin, sanitizeDownloadFileName } from "./safety";
 
 const MODRINTH_API_BASE = "https://api.modrinth.com/v2";
 const META_DIR_NAME = ".catalyst";
 const MANIFEST_NAME = "modrinth.json";
+const MODRINTH_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type ModrinthProjectType = "plugin" | "mod";
 
@@ -117,6 +124,16 @@ type ModrinthVersionFile = {
   filename: string;
   primary?: boolean;
   size?: number;
+  hashes?: {
+    sha1?: string;
+    sha512?: string;
+  };
+};
+
+type ModrinthVersionDependency = {
+  version_id?: string;
+  project_id?: string;
+  dependency_type: "required" | "optional" | "incompatible" | "embedded";
 };
 
 type ModrinthVersion = {
@@ -128,7 +145,35 @@ type ModrinthVersion = {
   loaders: string[];
   game_versions: string[];
   files: ModrinthVersionFile[];
+  dependencies?: ModrinthVersionDependency[];
 };
+
+type CacheEntry<T> = {
+  expiresAt: number;
+  value: T;
+};
+
+const versionCache = new Map<string, CacheEntry<ModrinthVersion[]>>();
+const versionRequests = new Map<string, Promise<ModrinthVersion[]>>();
+const projectCache = new Map<string, CacheEntry<ModrinthProjectDetails>>();
+const projectRequests = new Map<string, Promise<ModrinthProjectDetails>>();
+
+function getCacheEntry<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCacheEntry<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
+  cache.set(key, {
+    expiresAt: Date.now() + MODRINTH_CACHE_TTL_MS,
+    value,
+  });
+}
 
 function buildVersionsUrl(projectId: string, loader?: string, gameVersion?: string): URL {
   const url = new URL(`${MODRINTH_API_BASE}/project/${projectId}/version`);
@@ -146,20 +191,113 @@ async function fetchModrinthVersions(
   loader?: string,
   gameVersion?: string
 ): Promise<ModrinthVersion[]> {
-  const res = await fetch(buildVersionsUrl(projectId, loader, gameVersion).toString(), {
+  const cacheKey = `${projectId}:${loader ?? "any"}:${gameVersion ?? "any"}`;
+  const cached = getCacheEntry(versionCache, cacheKey);
+  if (cached) return cached;
+
+  const inFlight = versionRequests.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const request = fetch(buildVersionsUrl(projectId, loader, gameVersion).toString(), {
     headers: {
       "User-Agent": "Catalyst/1.0 (Modrinth API)",
     },
-  });
-  if (!res.ok) {
-    throw new Error(`Modrinth versions failed: ${res.status}`);
-  }
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(`Modrinth versions failed: ${res.status}`);
+      }
 
-  const versions = (await res.json()) as ModrinthVersion[];
-  versions.sort((a, b) =>
-    new Date(b.date_published).getTime() - new Date(a.date_published).getTime()
-  );
-  return versions;
+      const versions = (await res.json()) as ModrinthVersion[];
+      versions.sort((a, b) =>
+        new Date(b.date_published).getTime() - new Date(a.date_published).getTime()
+      );
+      setCacheEntry(versionCache, cacheKey, versions);
+      return versions;
+    })
+    .finally(() => {
+      versionRequests.delete(cacheKey);
+    });
+
+  versionRequests.set(cacheKey, request);
+  return request;
+}
+
+async function fetchModrinthProject(projectId: string): Promise<ModrinthProjectDetails> {
+  const cached = getCacheEntry(projectCache, projectId);
+  if (cached) return cached;
+
+  const inFlight = projectRequests.get(projectId);
+  if (inFlight) return inFlight;
+
+  const request = fetch(`${MODRINTH_API_BASE}/project/${projectId}`, {
+    headers: {
+      "User-Agent": "Catalyst/1.0 (Modrinth API)",
+    },
+  })
+    .then(async (projectRes) => {
+      if (!projectRes.ok) {
+        throw new Error(`Modrinth project failed: ${projectRes.status}`);
+      }
+
+      const project = (await projectRes.json()) as {
+        slug: string;
+        title: string;
+        description: string;
+        body: string;
+        icon_url?: string;
+        downloads: number;
+        followers: number;
+        client_side?: string;
+        server_side?: string;
+        categories?: string[];
+        project_url?: string;
+        source_url?: string;
+        issues_url?: string;
+        wiki_url?: string;
+        gallery?: Array<{
+          url: string;
+          title?: string;
+          description?: string;
+          featured?: boolean;
+        }>;
+      };
+
+      const gallery: ModrinthGalleryImage[] = (project.gallery || []).map((item) => ({
+        url: item.url,
+        title: item.title,
+        description: item.description,
+        featured: item.featured,
+      }));
+
+      const detail: ModrinthProjectDetails = {
+        projectId,
+        slug: project.slug,
+        title: project.title,
+        description: project.description,
+        body: project.body,
+        iconUrl: project.icon_url,
+        downloads: project.downloads,
+        followers: project.followers,
+        clientSide: project.client_side,
+        serverSide: project.server_side,
+        categories: project.categories,
+        projectUrl: project.project_url,
+        sourceUrl: project.source_url,
+        issuesUrl: project.issues_url,
+        wikiUrl: project.wiki_url,
+        gallery,
+      };
+
+      setCacheEntry(projectCache, projectId, detail);
+      return detail;
+    })
+    .finally(() => {
+      projectRequests.delete(projectId);
+    });
+
+  projectRequests.set(projectId, request);
+  return request;
 }
 
 export async function listModrinthVersions(
@@ -219,6 +357,16 @@ async function writeManifest(
 
 function getInstallFolder(projectType: ModrinthProjectType): string {
   return projectType === "plugin" ? "plugins" : "mods";
+}
+
+function getSafeInstallPath(installDir: string, fileName: string): { fileName: string; filePath: string } {
+  const safeFileName = sanitizeDownloadFileName(fileName);
+  const resolvedInstallDir = path.resolve(installDir);
+  const filePath = path.join(resolvedInstallDir, safeFileName);
+  if (!isPathWithin(filePath, resolvedInstallDir) || filePath === resolvedInstallDir) {
+    throw new Error("Invalid install filename");
+  }
+  return { fileName: safeFileName, filePath };
 }
 
 function buildFacets(
@@ -331,63 +479,7 @@ export async function searchModrinthProjects(
 export async function getModrinthProjectDetails(
   projectId: string
 ): Promise<ModrinthProjectDetails> {
-  const projectRes = await fetch(`${MODRINTH_API_BASE}/project/${projectId}`, {
-    headers: {
-      "User-Agent": "Catalyst/1.0 (Modrinth API)",
-    },
-  });
-  if (!projectRes.ok) {
-    throw new Error(`Modrinth project failed: ${projectRes.status}`);
-  }
-
-  const project = (await projectRes.json()) as {
-    slug: string;
-    title: string;
-    description: string;
-    body: string;
-    icon_url?: string;
-    downloads: number;
-    followers: number;
-    client_side?: string;
-    server_side?: string;
-    categories?: string[];
-    project_url?: string;
-    source_url?: string;
-    issues_url?: string;
-    wiki_url?: string;
-    gallery?: Array<{
-        url: string;
-        title?: string;
-        description?: string;
-        featured?: boolean;
-    }>;
-  };
-
-  const gallery: ModrinthGalleryImage[] = (project.gallery || []).map((item) => ({
-    url: item.url,
-    title: item.title,
-    description: item.description,
-    featured: item.featured,
-  }));
-
-  return {
-    projectId,
-    slug: project.slug,
-    title: project.title,
-    description: project.description,
-    body: project.body,
-    iconUrl: project.icon_url,
-    downloads: project.downloads,
-    followers: project.followers,
-    clientSide: project.client_side,
-    serverSide: project.server_side,
-    categories: project.categories,
-    projectUrl: project.project_url,
-    sourceUrl: project.source_url,
-    issuesUrl: project.issues_url,
-    wikiUrl: project.wiki_url,
-    gallery,
-  };
+  return fetchModrinthProject(projectId);
 }
 
 async function getLatestVersion(
@@ -417,13 +509,57 @@ async function getVersionById(
   return version;
 }
 
-async function downloadFile(url: string, filePath: string): Promise<void> {
+function verifyHash(actual: string, expected?: string): boolean {
+  if (!expected) return true;
+  const normalizedExpected = expected.trim().toLowerCase();
+  if (!normalizedExpected) return true;
+  return actual.toLowerCase() === normalizedExpected;
+}
+
+async function downloadFile(
+  url: string,
+  filePath: string,
+  hashes?: ModrinthVersionFile["hashes"]
+): Promise<void> {
+  if (new URL(url).protocol !== "https:") {
+    throw new Error("Downloads must use HTTPS");
+  }
+
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Download failed: ${res.status}`);
   }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  await fs.writeFile(filePath, buffer);
+  if (!res.body) {
+    throw new Error("Download response did not include a body");
+  }
+
+  const sha1 = hashes?.sha1 ? crypto.createHash("sha1") : null;
+  const sha512 = hashes?.sha512 ? crypto.createHash("sha512") : null;
+  const hashStream = new Transform({
+    transform(chunk, _encoding, callback) {
+      sha1?.update(chunk);
+      sha512?.update(chunk);
+      callback(null, chunk);
+    },
+  });
+
+  try {
+    await pipeline(
+      Readable.fromWeb(res.body as any),
+      hashStream,
+      createWriteStream(filePath)
+    );
+
+    const sha1Ok = verifyHash(sha1?.digest("hex") ?? "", hashes?.sha1);
+    const sha512Ok = verifyHash(sha512?.digest("hex") ?? "", hashes?.sha512);
+    if (!sha1Ok || !sha512Ok) {
+      await fs.rm(filePath, { force: true });
+      throw new Error("Download integrity check failed");
+    }
+  } catch (err) {
+    await fs.rm(filePath, { force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 export async function listModrinthInstalls(
@@ -435,12 +571,12 @@ export async function listModrinthInstalls(
 
   for (const entry of entries) {
     if (entry.projectType !== projectType) continue;
-    const filePath = path.join(
-      serverPath,
-      getInstallFolder(entry.projectType),
-      entry.fileName
-    );
     try {
+      const filePath = path.join(
+        serverPath,
+        getInstallFolder(entry.projectType),
+        sanitizeDownloadFileName(entry.fileName)
+      );
       await fs.stat(filePath);
       filtered.push(entry);
     } catch {
@@ -451,6 +587,92 @@ export async function listModrinthInstalls(
   return filtered;
 }
 
+async function installVersionWithDependencies(
+  serverPath: string,
+  request: ModrinthInstallRequest,
+  version: ModrinthVersion,
+  entries: ModrinthInstallEntry[],
+  visited: Set<string>
+): Promise<ModrinthInstallEntry> {
+  if (visited.has(request.projectId)) {
+    const existing = entries.find((entry) => entry.projectId === request.projectId);
+    if (existing) return existing;
+    throw new Error(`Circular Modrinth dependency detected for ${request.projectId}`);
+  }
+  visited.add(request.projectId);
+
+  const requiredDependencies = (version.dependencies ?? []).filter(
+    (dependency) => dependency.dependency_type === "required" && dependency.project_id
+  );
+
+  for (const dependency of requiredDependencies) {
+    const dependencyProjectId = dependency.project_id!;
+    const alreadyInstalled = entries.some((entry) => entry.projectId === dependencyProjectId);
+    if (alreadyInstalled) continue;
+
+    const dependencyVersion = dependency.version_id
+      ? await getVersionById(dependencyProjectId, dependency.version_id)
+      : await getLatestVersion(dependencyProjectId, request.loader, request.gameVersion);
+    const dependencyProject = await fetchModrinthProject(dependencyProjectId).catch(() => null);
+
+    await installVersionWithDependencies(
+      serverPath,
+      {
+        projectId: dependencyProjectId,
+        projectType: request.projectType,
+        loader: request.loader,
+        gameVersion: request.gameVersion,
+        versionId: dependency.version_id,
+        title: dependencyProject?.title ?? dependencyProjectId,
+        slug: dependencyProject?.slug,
+        iconUrl: dependencyProject?.iconUrl,
+      },
+      dependencyVersion,
+      entries,
+      visited
+    );
+  }
+
+  const file = version.files.find((f) => f.primary) ?? version.files[0];
+  if (!file) {
+    throw new Error("No downloadable file available");
+  }
+
+  const installDir = path.join(serverPath, getInstallFolder(request.projectType));
+  await fs.mkdir(installDir, { recursive: true });
+
+  const existing = entries.find((e) => e.projectId === request.projectId);
+  if (existing) {
+    const existingPath = getSafeInstallPath(installDir, existing.fileName).filePath;
+    await fs.rm(existingPath, { force: true });
+  }
+
+  const target = getSafeInstallPath(installDir, file.filename);
+  await downloadFile(file.url, target.filePath, file.hashes);
+
+  const entry: ModrinthInstallEntry = {
+    projectId: request.projectId,
+    versionId: version.id,
+    fileName: target.fileName,
+    title: request.title ?? request.projectId,
+    slug: request.slug,
+    iconUrl: request.iconUrl,
+    projectType: request.projectType,
+    loader: request.loader,
+    gameVersion: request.gameVersion,
+    installedAt: new Date().toISOString(),
+  };
+
+  const existingIndex = entries.findIndex((e) => e.projectId === request.projectId);
+  if (existingIndex >= 0) {
+    entries[existingIndex] = entry;
+  } else {
+    entries.push(entry);
+  }
+
+  return entry;
+}
+
 export async function installModrinthProject(
   serverPath: string,
   request: ModrinthInstallRequest
@@ -459,40 +681,9 @@ export async function installModrinthProject(
     const version = request.versionId
       ? await getVersionById(request.projectId, request.versionId, request.loader, request.gameVersion)
       : await getLatestVersion(request.projectId, request.loader, request.gameVersion);
-    const file = version.files.find((f) => f.primary) ?? version.files[0];
-    if (!file) {
-      return { success: false, error: "No downloadable file available" };
-    }
-
-    const installDir = path.join(serverPath, getInstallFolder(request.projectType));
-    await fs.mkdir(installDir, { recursive: true });
-
     const entries = await readManifest(serverPath);
-    const existing = entries.find((e) => e.projectId === request.projectId);
-    if (existing) {
-      const existingPath = path.join(installDir, existing.fileName);
-      await fs.rm(existingPath, { force: true });
-    }
-
-    const targetPath = path.join(installDir, file.filename);
-    await downloadFile(file.url, targetPath);
-
-    const entry: ModrinthInstallEntry = {
-      projectId: request.projectId,
-      versionId: version.id,
-      fileName: file.filename,
-      title: request.title ?? request.projectId,
-      slug: request.slug,
-      iconUrl: request.iconUrl,
-      projectType: request.projectType,
-      loader: request.loader,
-      gameVersion: request.gameVersion,
-      installedAt: new Date().toISOString(),
-    };
-
-    const updated = entries.filter((e) => e.projectId !== request.projectId);
-    updated.push(entry);
-    await writeManifest(serverPath, updated);
+    const entry = await installVersionWithDependencies(serverPath, request, version, entries, new Set());
+    await writeManifest(serverPath, entries);
 
     return { success: true, entry };
   } catch (err) {
@@ -522,31 +713,14 @@ export async function updateModrinthInstall(
       return { success: true, updated: false, entry: existing };
     }
 
-    const file = version.files.find((f) => f.primary) ?? version.files[0];
-    if (!file) {
-      return { success: false, updated: false, error: "No downloadable file available" };
-    }
-
-    const installDir = path.join(serverPath, getInstallFolder(existing.projectType));
-    await fs.mkdir(installDir, { recursive: true });
-
-    const existingPath = path.join(installDir, existing.fileName);
-    await fs.rm(existingPath, { force: true });
-
-    const targetPath = path.join(installDir, file.filename);
-    await downloadFile(file.url, targetPath);
-
-    const entry: ModrinthInstallEntry = {
-      ...existing,
-      versionId: version.id,
-      fileName: file.filename,
-      installedAt: new Date().toISOString(),
-    };
-
-    const updatedEntries = entries.map((e) =>
-      e.projectId === request.projectId ? entry : e
+    const entry = await installVersionWithDependencies(
+      serverPath,
+      { ...request, projectType: existing.projectType, title: existing.title, slug: existing.slug, iconUrl: existing.iconUrl },
+      version,
+      entries,
+      new Set()
     );
-    await writeManifest(serverPath, updatedEntries);
+    await writeManifest(serverPath, entries);
 
     return { success: true, updated: true, entry };
   } catch (err) {
@@ -565,7 +739,7 @@ export async function removeModrinthInstall(
     if (!entry) return { success: true };
 
     const installDir = path.join(serverPath, getInstallFolder(entry.projectType));
-    const filePath = path.join(installDir, entry.fileName);
+    const filePath = getSafeInstallPath(installDir, entry.fileName).filePath;
     await fs.rm(filePath, { force: true });
 
     const updated = entries.filter((e) => e.projectId !== projectId);

@@ -7,18 +7,14 @@ export function AnimatedOutlet() {
 
     return (
         <div className="flex min-h-full flex-col overflow-hidden">
-            <AnimatePresence mode="popLayout" initial={false}>
+            <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                     key={location.pathname}
                     className="flex min-h-full flex-col"
-                    initial={{ opacity: 0, y: 18, scale: 0.985 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -10, scale: 0.992 }}
-                    transition={{
-                        opacity: { duration: 0.22, ease: "easeOut" },
-                        y: { type: "spring", stiffness: 260, damping: 30, mass: 0.72 },
-                        scale: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
-                    }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
                 >
                     {outlet}
                 </motion.div>

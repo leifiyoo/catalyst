@@ -4,9 +4,15 @@ import { ConsoleLine, ServerStats, ServerStatusUpdate } from "@shared/types";
 import { getServer, getServers, getServerProperties, updateServerStatus, updateServerSettings, installCatalystPlugin } from "./server-manager";
 import { getRequiredJavaVersion, ensureJavaInstalled, getJavaHome } from "./java-manager";
 import { startNgrokTunnel, isNgrokEnabled, isAuthtokenConfigured } from "./ngrok-manager";
+import {
+  buildGracefulStopCommands,
+  SAVE_ALL_FLUSH_COMMAND,
+  WORLD_SAVE_INTERVAL_MS,
+} from "./shutdown-policy";
 
 const runningServers = new Map<string, ChildProcess>();
 const serverStatsTimers = new Map<string, ReturnType<typeof setInterval>>();
+const serverSaveTimers = new Map<string, ReturnType<typeof setInterval>>();
 const serverStatsData = new Map<string, ServerStats>();
 const serverReady = new Map<string, boolean>();
 const lastMemCommandAt = new Map<string, number>();
@@ -40,6 +46,16 @@ const userStatsBypassUntil = new Map<string, number>();
 const disableInServerStats = new Map<string, boolean>();
 
 const IN_SERVER_STATS_FRAMEWORKS = new Set(["Paper", "Purpur"]);
+const STATS_POLL_INTERVAL_MS = 10000;
+const PROCESS_MEMORY_POLL_INTERVAL_MS = 30000;
+
+function writeServerCommand(child: ChildProcess, command: string): boolean {
+  if (!child.stdin || child.stdin.destroyed) {
+    return false;
+  }
+  child.stdin.write(`${command}\n`);
+  return true;
+}
 
 function stripAnsi(text: string): string {
   return text.replace(ANSI_ESCAPE_PATTERN, "");
@@ -65,11 +81,13 @@ function isStatsLine(serverId: string, line: string): boolean {
   return STATS_FILTER_PATTERNS.some((pattern) => pattern.test(line));
 }
 
-function buildJavaArgs(ramMB: number, jarFile: string = "server.jar"): string[] {
+export function buildJavaArgs(ramMB: number, jarFile: string = "server.jar"): string[] {
+  const safeRam = Math.max(256, Math.floor(ramMB));
+  const initialRam = Math.max(256, Math.min(safeRam, Math.floor(safeRam * 0.4)));
+
   return [
-    `-Xms${ramMB}M`,
-    `-Xmx${ramMB}M`,
-    "-XX:+AlwaysPreTouch",
+    `-Xms${initialRam}M`,
+    `-Xmx${safeRam}M`,
     "-XX:+DisableExplicitGC",
     "-XX:+ParallelRefProcEnabled",
     "-XX:+PerfDisableSharedMem",
@@ -304,10 +322,10 @@ function startStatsPolling(
     const child = runningServers.get(serverId);
     if (child && child.pid) {
       const lastMemAt = lastMemCommandAt.get(serverId) ?? 0;
-      const allowProcessMemory =
-        !canUseInServerStats(serverId, framework) || Date.now() - lastMemAt > 15000;
+      const allowProcessMemory = Date.now() - lastMemAt > PROCESS_MEMORY_POLL_INTERVAL_MS;
       if (allowProcessMemory) {
         const memMB = await getProcessMemoryMB(child.pid);
+        lastMemCommandAt.set(serverId, Date.now());
         if (memMB !== null) {
           stats.memoryUsedMB = memMB;
         }
@@ -330,7 +348,7 @@ function startStatsPolling(
 
     // Send current stats to renderer
     sendStats(mainWindow, { ...stats });
-  }, 5000);
+  }, STATS_POLL_INTERVAL_MS);
 
   serverStatsTimers.set(serverId, timer);
 
@@ -367,6 +385,24 @@ function stopStatsPolling(serverId: string): void {
   userStatsBypassUntil.delete(serverId);
   lastMemCommandAt.delete(serverId);
   disableInServerStats.delete(serverId);
+}
+
+function startWorldSaveTimer(serverId: string): void {
+  stopWorldSaveTimer(serverId);
+  const timer = setInterval(() => {
+    const child = runningServers.get(serverId);
+    if (!child) return;
+    writeServerCommand(child, SAVE_ALL_FLUSH_COMMAND);
+  }, WORLD_SAVE_INTERVAL_MS);
+  serverSaveTimers.set(serverId, timer);
+}
+
+function stopWorldSaveTimer(serverId: string): void {
+  const timer = serverSaveTimers.get(serverId);
+  if (timer) {
+    clearInterval(timer);
+    serverSaveTimers.delete(serverId);
+  }
 }
 
 export async function refreshServerStatuses(mainWindow: BrowserWindow): Promise<void> {
@@ -437,6 +473,7 @@ export async function startServer(
     });
 
     runningServers.set(serverId, child);
+    startWorldSaveTimer(serverId);
 
     sendConsoleLine(mainWindow, serverId, "Starting server...", "system");
     await updateServerStatus(serverId, "Starting");
@@ -483,6 +520,7 @@ export async function startServer(
     child.on("close", async (code) => {
       runningServers.delete(serverId);
       stopStatsPolling(serverId);
+      stopWorldSaveTimer(serverId);
       
       // Check if server was restarting (in-game /restart command)
       const wasRestarting = serverRestarting.get(serverId) || false;
@@ -557,6 +595,7 @@ export async function startServer(
     child.on("error", async (err) => {
       runningServers.delete(serverId);
       stopStatsPolling(serverId);
+      stopWorldSaveTimer(serverId);
       if (!mainWindow.isDestroyed()) {
         sendConsoleLine(mainWindow, serverId, `Error: ${err.message}`, "stderr");
       }
@@ -601,6 +640,7 @@ export async function stopServer(
       clearTimeout(timeout);
       runningServers.delete(serverId);
       stopStatsPolling(serverId);
+      stopWorldSaveTimer(serverId);
       // Clear the ngrok URL from server record when server stops
       await updateServerSettings(serverId, { ngrokUrl: undefined }).catch(() => {});
       await updateServerStatus(serverId, "Offline", "0/20");
@@ -614,9 +654,11 @@ export async function stopServer(
       finishStopped();
     };
 
-    // Send graceful "stop" command to MC server
-    if (child.stdin && !child.stdin.destroyed) {
-      child.stdin.write("stop\n");
+    stopWorldSaveTimer(serverId);
+
+    // Flush world data, then send the graceful stop command.
+    for (const command of buildGracefulStopCommands()) {
+      writeServerCommand(child, command);
     }
 
     timeout = setTimeout(() => {
@@ -642,6 +684,10 @@ export function sendCommand(serverId: string, command: string): void {
 
 export function isRunning(serverId: string): boolean {
   return runningServers.has(serverId);
+}
+
+export function getRunningServerCount(): number {
+  return runningServers.size;
 }
 
 export async function stopAllServers(): Promise<void> {

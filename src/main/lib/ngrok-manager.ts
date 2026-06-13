@@ -7,6 +7,8 @@ import http from "http";
 import os from "os";
 import { spawn, ChildProcess } from "child_process";
 import { NgrokStatus, InstallNgrokResult, StartNgrokResult } from "@shared/types";
+import AdmZip from "adm-zip";
+import { isPathWithin } from "./safety";
 
 const NGROK_DIR = path.join(app.getPath("userData"), "ngrok");
 const NGROK_CONFIG_DIR = path.join(NGROK_DIR, "config");
@@ -159,24 +161,30 @@ async function downloadFile(
 ): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve) => {
     const file = createWriteStream(destPath);
-    const protocol = url.startsWith("https") ? https : http;
+    if (new URL(url).protocol !== "https:") {
+      file.close();
+      resolve({ success: false, error: "Downloads must use HTTPS" });
+      return;
+    }
 
     let totalBytes = 0;
     let downloadedBytes = 0;
 
-    const request = protocol.get(url, (response) => {
+    const request = https.get(url, (response) => {
       // Handle redirects
       if (response.statusCode === 301 || response.statusCode === 302) {
         const redirectUrl = response.headers.location;
         if (redirectUrl) {
           file.close();
-          downloadFile(redirectUrl, destPath, onProgress).then(resolve);
+          fs.unlink(destPath).catch(() => {});
+          downloadFile(new URL(redirectUrl, url).toString(), destPath, onProgress).then(resolve);
           return;
         }
       }
 
       if (response.statusCode !== 200) {
         file.close();
+        fs.unlink(destPath).catch(() => {});
         resolve({ success: false, error: `HTTP ${response.statusCode}` });
         return;
       }
@@ -200,11 +208,13 @@ async function downloadFile(
 
     request.on("error", (err) => {
       file.close();
+      fs.unlink(destPath).catch(() => {});
       resolve({ success: false, error: err.message });
     });
 
     file.on("error", (err) => {
       file.close();
+      fs.unlink(destPath).catch(() => {});
       resolve({ success: false, error: err.message });
     });
   });
@@ -218,6 +228,15 @@ async function extractZip(
   destDir: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const zip = new AdmZip(zipPath);
+    const resolvedDestDir = path.resolve(destDir);
+    for (const entry of zip.getEntries()) {
+      const outputPath = path.resolve(destDir, entry.entryName);
+      if (!isPathWithin(outputPath, resolvedDestDir)) {
+        return { success: false, error: `Unsafe zip entry: ${entry.entryName}` };
+      }
+    }
+
     // Use the system's unzip command or PowerShell on Windows
     const platform = process.platform;
     

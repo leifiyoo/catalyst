@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, type MutableRefObject } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "motion/react"
 import { Button } from "@/components/ui/button"
@@ -47,7 +47,6 @@ const ITEMS_PER_PAGE = 20
 const EASE = [0.22, 1, 0.36, 1] as const
 
 const MC_VERSIONS = [
-    "26.2", "26.1",
     "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
     "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
     "1.20.6", "1.20.5", "1.20.4", "1.20.2", "1.20.1", "1.20",
@@ -61,6 +60,7 @@ const MC_VERSIONS = [
     "1.12.2", "1.12.1", "1.12",
     "1.11.2", "1.10.2", "1.9.4", "1.8.8", "1.7.10",
 ]
+const DEFAULT_MC_VERSION = MC_VERSIONS[0]
 
 const STATUS_LABEL: Record<ServerRecord["status"], string> = {
     Starting: "Starting",
@@ -100,6 +100,14 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
     )
 }
 
+function useLazyRef<T>(factory: () => T): MutableRefObject<T> {
+    const ref = useRef<T | null>(null)
+    if (ref.current === null) {
+        ref.current = factory()
+    }
+    return ref as MutableRefObject<T>
+}
+
 export function ServersPage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
@@ -115,7 +123,7 @@ export function ServersPage() {
 
     // Import state
     const [showImportDialog, setShowImportDialog] = useState(false)
-    const [importZipPath, setImportZipPath] = useState<string | null>(null)
+    const importZipPathRef = useRef<string | null>(null)
     const [importName, setImportName] = useState("")
     const [isImporting, setIsImporting] = useState(false)
     const [importError, setImportError] = useState<string | null>(null)
@@ -127,7 +135,7 @@ export function ServersPage() {
 
     const isCreatingRef = useRef(false)
 
-    const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+    const timersRef = useLazyRef(() => new Set<ReturnType<typeof setTimeout>>())
     useEffect(() => {
         return () => {
             timersRef.current.forEach((t) => clearTimeout(t))
@@ -150,7 +158,7 @@ export function ServersPage() {
 
     // Form state
     const [newServerName, setNewServerName] = useState("")
-    const [version, setVersion] = useState("1.21.11")
+    const [version, setVersion] = useState(DEFAULT_MC_VERSION)
     const [framework, setFramework] = useState("Paper")
     const [ramOption, setRamOption] = useState("4096")
     const [customRamMB, setCustomRamMB] = useState("")
@@ -205,6 +213,8 @@ export function ServersPage() {
         if (result.success && result.server) {
             await refresh()
             setNewServerName("")
+            setVersion(DEFAULT_MC_VERSION)
+            setFramework("Paper")
             setRamOption("4096")
             setCustomRamMB("")
             setShowCreateForm(false)
@@ -226,7 +236,7 @@ export function ServersPage() {
     const handleSelectImportFile = async () => {
         const result = await window.context.openImportDialog()
         if (result.success && result.filePath) {
-            setImportZipPath(result.filePath)
+            importZipPathRef.current = result.filePath
             const fileName = result.filePath.split(/[/\\]/).pop() || "Imported Server"
             setImportName(fileName.replace(/\.zip$/i, ""))
             setShowImportDialog(true)
@@ -234,6 +244,7 @@ export function ServersPage() {
     }
 
     const handleImportServer = async () => {
+        const importZipPath = importZipPathRef.current
         if (!importZipPath || !importName.trim()) return
 
         setIsImporting(true)
@@ -244,7 +255,7 @@ export function ServersPage() {
         if (result.success && result.server) {
             await refresh()
             setShowImportDialog(false)
-            setImportZipPath(null)
+            importZipPathRef.current = null
             setImportName("")
             flashSuccess(`Server "${result.server.name}" was imported.`)
         } else {
@@ -661,7 +672,7 @@ export function ServersPage() {
                 onOpenChange={(open) => {
                     if (!open) {
                         setShowImportDialog(false)
-                        setImportZipPath(null)
+                        importZipPathRef.current = null
                         setImportName("")
                         setImportError(null)
                     }
