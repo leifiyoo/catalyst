@@ -56,6 +56,12 @@ import {
   getSystemInfo,
   getAppPreferences,
   updateAppPreferences,
+  getAiAssistantSettings,
+  updateAiAssistantSettings,
+  sendAiAssistantMessage,
+  applyAiAssistantAction,
+  updatePlayerCapacityString,
+  updateServerStatus,
   shouldConfirmClose
 } from "@/lib";
 import {
@@ -79,6 +85,9 @@ import {
   CreateServerParams,
   ServerProperty,
   AppPreferences,
+  AiAssistantAction,
+  AiAssistantChatRequest,
+  AiAssistantSettingsUpdate,
 } from "@shared/types";
 import { getSafeExternalUrl } from "@/lib/safety";
 
@@ -297,6 +306,22 @@ app.whenReady().then(() => {
     return updateAppPreferences(updates);
   });
 
+  ipcMain.handle("getAiAssistantSettings", () => {
+    return getAiAssistantSettings();
+  });
+
+  ipcMain.handle("updateAiAssistantSettings", (_event, updates: AiAssistantSettingsUpdate) => {
+    return updateAiAssistantSettings(updates);
+  });
+
+  ipcMain.handle("sendAiAssistantMessage", (_event, request: AiAssistantChatRequest) => {
+    return sendAiAssistantMessage(request);
+  });
+
+  ipcMain.handle("applyAiAssistantAction", (_event, action: AiAssistantAction) => {
+    return applyAiAssistantAction(action);
+  });
+
   ipcMain.handle("windowControl", (_event, action: WindowControlAction) => {
     const mainWindow = BrowserWindow.getAllWindows()[0];
     if (!mainWindow) return;
@@ -389,7 +414,18 @@ app.whenReady().then(() => {
   ipcMain.handle("saveServerProperties", async (_event, id: string, properties: ServerProperty[]) => {
     const server = await getServer(id);
     if (!server) return { success: false, error: "Server not found" };
-    return saveServerProperties(server.serverPath, properties);
+    const result = await saveServerProperties(server.serverPath, properties);
+    if (result.success) {
+      const maxPlayers = properties.find((property) => property.key === "max-players")?.value;
+      if (maxPlayers !== undefined) {
+        await updateServerStatus(
+          id,
+          server.status,
+          updatePlayerCapacityString(server.players, maxPlayers)
+        );
+      }
+    }
+    return result;
   });
 
   ipcMain.handle("getWhitelist", async (_event, id: string) => {

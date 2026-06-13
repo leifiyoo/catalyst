@@ -19,6 +19,98 @@ export type UpdateAppPreferencesFn = (
   updates: Partial<AppPreferences>
 ) => Promise<AppPreferences>;
 
+// ---- AI Assistant Types ----
+
+export type AiAssistantProvider = "openai" | "openrouter" | "groq" | "custom";
+
+export type AiAssistantSettings = {
+  enabled: boolean;
+  onboardingCompleted: boolean;
+  provider: AiAssistantProvider;
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+};
+
+export type PublicAiAssistantSettings = Omit<AiAssistantSettings, "apiKey"> & {
+  hasApiKey: boolean;
+  censoredApiKey: string | null;
+};
+
+export type AiAssistantSettingsUpdate = Partial<AiAssistantSettings>;
+
+export type AiAssistantMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type AiAssistantClientContext = {
+  locale?: string;
+  route: string;
+  pageTitle: string;
+  serverId?: string;
+};
+
+export type AiAssistantBaseAction = {
+  id: string;
+  serverId: string;
+  label: string;
+  requiresConfirmation: true;
+};
+
+export type SetServerPropertyAction = AiAssistantBaseAction & {
+  kind: "setServerProperty";
+  key: string;
+  value: string;
+};
+
+export type WriteServerFileAction = AiAssistantBaseAction & {
+  kind: "writeServerFile";
+  relativePath: string;
+  content: string;
+};
+
+export type SendServerCommandAction = AiAssistantBaseAction & {
+  kind: "sendServerCommand";
+  command: string;
+};
+
+export type AiAssistantAction =
+  | SetServerPropertyAction
+  | WriteServerFileAction
+  | SendServerCommandAction;
+
+export type AiAssistantChatRequest = {
+  messages: AiAssistantMessage[];
+  context: AiAssistantClientContext;
+};
+
+export type AiAssistantChatResult = {
+  success: boolean;
+  reply?: string;
+  actions?: AiAssistantAction[];
+  error?: string;
+};
+
+export type AiAssistantActionResult = {
+  success: boolean;
+  message?: string;
+  serverId?: string;
+  undoAction?: AiAssistantAction;
+  error?: string;
+};
+
+export type GetAiAssistantSettingsFn = () => Promise<PublicAiAssistantSettings>;
+export type UpdateAiAssistantSettingsFn = (
+  updates: AiAssistantSettingsUpdate
+) => Promise<PublicAiAssistantSettings>;
+export type SendAiAssistantMessageFn = (
+  request: AiAssistantChatRequest
+) => Promise<AiAssistantChatResult>;
+export type ApplyAiAssistantActionFn = (
+  action: AiAssistantAction
+) => Promise<AiAssistantActionResult>;
+
 // ---- Server Types ----
 
 export type ProcessPriority = "Low" | "Normal" | "High";

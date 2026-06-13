@@ -86,7 +86,9 @@ export const useServerStore = create<ServerStore>((set) => ({
     useServerStore.getState().applyStatus({ serverId: id, status: 'Stopping' })
     const result = await window.context.stopServer(id)
     if (result?.success) {
-      useServerStore.getState().applyStatus({ serverId: id, status: 'Offline', players: '0/20' })
+      const current = useServerStore.getState().servers.find((server) => server.id === id)
+      const capacity = /^\d+\s*\/\s*(\d+)$/.exec(current?.players || "")?.[1] || "20"
+      useServerStore.getState().applyStatus({ serverId: id, status: 'Offline', players: `0/${capacity}` })
     } else {
       useServerStore.getState().refresh()
     }
@@ -121,6 +123,9 @@ export function startServerSync() {
   })
   window.context.onServerStats((stats) => {
     useServerStore.getState().applyStats(stats)
+  })
+  window.addEventListener('catalyst:servers-refresh', () => {
+    useServerStore.getState().refresh()
   })
   window.addEventListener('focus', () => {
     useServerStore.getState().refresh()

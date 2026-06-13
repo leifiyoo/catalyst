@@ -907,6 +907,15 @@ export async function getServer(id: string): Promise<ServerRecord | null> {
   return servers.find((s) => s.id === id) || null;
 }
 
+function preserveKnownPlayerCapacity(currentPlayers: string, nextPlayers: string): string {
+  if (nextPlayers !== "0/20") return nextPlayers;
+
+  const match = /^\d+\s*\/\s*(\d+)$/.exec(currentPlayers);
+  if (!match || match[1] === "20") return nextPlayers;
+
+  return `0/${match[1]}`;
+}
+
 export async function updateServerStatus(
   id: string,
   status: ServerRecord["status"],
@@ -916,7 +925,9 @@ export async function updateServerStatus(
   const server = servers.find((s) => s.id === id);
   if (server) {
     server.status = status;
-    if (players !== undefined) server.players = players;
+    if (players !== undefined) {
+      server.players = preserveKnownPlayerCapacity(server.players, players);
+    }
     await saveServerList(servers);
   }
 }

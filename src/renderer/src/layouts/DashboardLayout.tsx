@@ -3,14 +3,18 @@ import { Minus, Square, X, Copy } from "@/components/icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AnimatedOutlet } from "@/components/AnimatedOutlet"
 import { startServerSync } from "@/stores/serverStore"
+import { Bot } from "lucide-react"
 
 const dragRegion = { WebkitAppRegion: "drag" } as React.CSSProperties
 const noDragRegion = { WebkitAppRegion: "no-drag" } as React.CSSProperties
 const CommandPalette = lazy(() => import("@/components/CommandPalette").then((m) => ({ default: m.CommandPalette })))
+const AiAssistantPanel = lazy(() => import("@/components/AiAssistantPanel").then((m) => ({ default: m.AiAssistantPanel })))
+const AiAssistantOnboarding = lazy(() => import("@/components/AiAssistantOnboarding").then((m) => ({ default: m.AiAssistantOnboarding })))
 
 export function DashboardLayout() {
     const [isMaximized, setIsMaximized] = useState(false)
     const [mountCommandPalette, setMountCommandPalette] = useState(false)
+    const [assistantOpen, setAssistantOpen] = useState(false)
 
     useEffect(() => {
         startServerSync()
@@ -42,6 +46,12 @@ export function DashboardLayout() {
         }
     }, [mountCommandPalette])
 
+    useEffect(() => {
+        const openAssistant = () => setAssistantOpen(true)
+        window.addEventListener("catalyst:ai-assistant", openAssistant)
+        return () => window.removeEventListener("catalyst:ai-assistant", openAssistant)
+    }, [])
+
     const handleControl = useCallback((action: "minimize" | "toggle-maximize" | "close") => {
         window.context?.windowControl?.(action)
     }, [])
@@ -56,6 +66,18 @@ export function DashboardLayout() {
                     style={dragRegion}
                 >
                     <div className="flex items-center gap-1" style={noDragRegion}>
+                        <button
+                            type="button"
+                            className={`mr-2 inline-flex h-8 items-center gap-2 rounded-full border border-border px-3 text-[12.5px] font-medium transition-colors duration-150 hover:bg-muted hover:text-foreground ${
+                                assistantOpen ? "bg-muted text-foreground" : "bg-card text-muted-foreground"
+                            }`}
+                            aria-label={assistantOpen ? "Close AI Assistant" : "Open AI Assistant"}
+                            title={assistantOpen ? "Close AI Assistant" : "Open AI Assistant"}
+                            onClick={() => setAssistantOpen((value) => !value)}
+                        >
+                            <Bot className="h-4 w-4" />
+                            AI
+                        </button>
                         <button
                             type="button"
                             className="grid h-8 w-9 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
@@ -93,6 +115,11 @@ export function DashboardLayout() {
                     <CommandPalette initialOpen />
                 </Suspense>
             )}
+
+            <Suspense fallback={null}>
+                <AiAssistantPanel open={assistantOpen} onOpenChange={setAssistantOpen} />
+                <AiAssistantOnboarding onOpenAssistant={() => setAssistantOpen(true)} />
+            </Suspense>
         </div>
     )
 }

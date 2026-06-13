@@ -826,6 +826,11 @@ function ServerDetailSkeleton() {
     )
 }
 
+function getOfflinePlayersString(players: string | undefined): string {
+    const match = /^\d+\s*\/\s*(\d+)$/.exec(players || "")
+    return `0/${match?.[1] || "20"}`
+}
+
 export function ServerDetailPage() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
@@ -1135,6 +1140,25 @@ export function ServerDetailPage() {
         })
     }, [id, refreshServers])
 
+    useEffect(() => {
+        if (!id) return
+
+        const handleRefresh = (event: Event) => {
+            const detail = (event as CustomEvent<{ serverId?: string }>).detail
+            if (detail?.serverId && detail.serverId !== id) return
+
+            refreshServers()
+            window.context.getServer(id).then(setServer)
+            window.context.getServerProperties(id).then((props) => {
+                setProperties(props)
+                setPropsLoaded(true)
+            })
+        }
+
+        window.addEventListener("catalyst:servers-refresh", handleRefresh)
+        return () => window.removeEventListener("catalyst:servers-refresh", handleRefresh)
+    }, [id, refreshServers])
+
     // Load system info for RAM limits
     useEffect(() => {
         window.context.getSystemInfo().then((info) => {
@@ -1433,13 +1457,13 @@ export function ServerDetailPage() {
         setStopping(true)
         setError(null)
         setStats(null)
-        setServer((prev) => prev ? { ...prev, status: "Stopping", players: "0/20" } : prev)
+        setServer((prev) => prev ? { ...prev, status: "Stopping", players: getOfflinePlayersString(prev.players) } : prev)
         const result = await window.context.stopServer(id)
         if (!result.success) {
             setError(result.error || "Failed to stop server")
             await refreshServers()
         } else {
-            setServer((prev) => prev ? { ...prev, status: "Offline", players: "0/20" } : prev)
+            setServer((prev) => prev ? { ...prev, status: "Offline", players: getOfflinePlayersString(prev.players) } : prev)
             await refreshServers()
         }
         setStopping(false)
@@ -1483,6 +1507,9 @@ export function ServerDetailPage() {
         const result = await window.context.saveServerProperties(id, properties)
         setPropsSaving(false)
         if (result.success) {
+            const nextServer = await window.context.getServer(id)
+            setServer(nextServer)
+            await refreshServers()
             setPropsSuccess(true)
             safeTimeout(() => setPropsSuccess(false), 3000)
         }

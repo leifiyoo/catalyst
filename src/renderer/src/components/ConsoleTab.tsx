@@ -203,6 +203,7 @@ export function ConsoleTab({ serverId, isOnline }: ConsoleTabProps) {
                 <div className="flex items-center gap-2 px-4 py-3 border-t border-border bg-card/50">
                     <Send className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <Input
+                        data-console-input="true"
                         value={commandInput}
                         onChange={(e) => setCommandInput(e.target.value)}
                         onKeyDown={(e) => {

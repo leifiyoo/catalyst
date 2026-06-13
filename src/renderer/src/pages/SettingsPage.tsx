@@ -22,8 +22,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
-import { CheckCircle2, ExternalLink, Trash2, Palette, Globe, Info, ShieldAlert } from "lucide-react"
+import { Bot, CheckCircle2, ExternalLink, KeyRound, Trash2, Palette, Globe, Info, ShieldAlert } from "lucide-react"
+import type { AiAssistantProvider, PublicAiAssistantSettings } from "@shared/types"
 import { getStoredTheme, setStoredTheme, type ThemeMode } from "@/utils/theme"
+import { AI_PROVIDER_OPTIONS, getAiProviderOption } from "@/utils/ai-assistant"
 
 function SettingsSection({
     icon: Icon,
@@ -63,6 +65,14 @@ export function SettingsPage() {
     const [theme, setTheme] = useState<ThemeMode>("dark")
     const [ngrokEnabled, setNgrokEnabledState] = useState(true)
     const [askBeforeClose, setAskBeforeClose] = useState(true)
+    const [aiSettings, setAiSettings] = useState<PublicAiAssistantSettings | null>(null)
+    const [aiEnabled, setAiEnabled] = useState(false)
+    const [aiProvider, setAiProvider] = useState<AiAssistantProvider>("openai")
+    const [aiModel, setAiModel] = useState("gpt-4o-mini")
+    const [aiBaseUrl, setAiBaseUrl] = useState("https://api.openai.com/v1")
+    const [aiApiKey, setAiApiKey] = useState("")
+    const [aiSaving, setAiSaving] = useState(false)
+    const [aiSuccess, setAiSuccess] = useState(false)
     const [censoredToken, setCensoredToken] = useState<string | null>(null)
     const [hasToken, setHasToken] = useState(false)
     const [loading, setLoading] = useState(true)
@@ -87,20 +97,31 @@ export function SettingsPage() {
         }
 
         try {
-            const [enabled, token, appPreferences] = await Promise.all([
+            const [enabled, token, appPreferences, assistantSettings] = await Promise.all([
                 window.context.isNgrokEnabled(),
                 window.context.getNgrokAuthtokenCensored(),
-                window.context.getAppPreferences()
+                window.context.getAppPreferences(),
+                window.context.getAiAssistantSettings()
             ])
             setNgrokEnabledState(enabled)
             setCensoredToken(token)
             setHasToken(!!token)
             setAskBeforeClose(appPreferences.askBeforeClose)
+            syncAiSettings(assistantSettings)
         } catch (error) {
             console.error("Failed to load settings:", error)
         } finally {
             setLoading(false)
         }
+    }
+
+    const syncAiSettings = (assistantSettings: PublicAiAssistantSettings) => {
+        setAiSettings(assistantSettings)
+        setAiEnabled(assistantSettings.enabled)
+        setAiProvider(assistantSettings.provider)
+        setAiModel(assistantSettings.model)
+        setAiBaseUrl(assistantSettings.baseUrl)
+        setAiApiKey("")
     }
 
     const handleToggleNgrok = async (enabled: boolean) => {
@@ -111,6 +132,42 @@ export function SettingsPage() {
     const handleToggleCloseWarning = async (enabled: boolean) => {
         const preferences = await window.context.updateAppPreferences({ askBeforeClose: enabled })
         setAskBeforeClose(preferences.askBeforeClose)
+    }
+
+    const handleToggleAiEnabled = async (enabled: boolean) => {
+        const updated = await window.context.updateAiAssistantSettings({
+            enabled,
+            onboardingCompleted: true,
+        })
+        syncAiSettings(updated)
+    }
+
+    const handleAiProviderChange = (value: string) => {
+        const provider = value as AiAssistantProvider
+        const option = getAiProviderOption(provider)
+        setAiProvider(provider)
+        setAiModel(option.defaultModel)
+        setAiBaseUrl(option.defaultBaseUrl)
+    }
+
+    const handleSaveAiAssistant = async () => {
+        setAiSaving(true)
+        try {
+            const updated = await window.context.updateAiAssistantSettings({
+                enabled: aiEnabled,
+                onboardingCompleted: true,
+                provider: aiProvider,
+                model: aiModel.trim(),
+                baseUrl: aiBaseUrl.trim(),
+                ...(aiApiKey.trim() ? { apiKey: aiApiKey.trim() } : {}),
+            })
+            syncAiSettings(updated)
+            setAiSuccess(true)
+            if (successTimerRef.current) clearTimeout(successTimerRef.current)
+            successTimerRef.current = setTimeout(() => setAiSuccess(false), 3000)
+        } finally {
+            setAiSaving(false)
+        }
     }
 
     const handleThemeChange = (value: string) => {
@@ -268,6 +325,84 @@ export function SettingsPage() {
                                         <ExternalLink className="ml-1 inline h-3 w-3" />
                                     </button>
                                 </p>
+                            </div>
+                        </div>
+                    </SettingsSection>
+
+                    <SettingsSection
+                        icon={Bot}
+                        title="AI Assistant"
+                        description="Optional chat help for pages, settings and server issues"
+                    >
+                        <div className="flex flex-col gap-5">
+                            {aiSuccess && (
+                                <Alert className="border-primary/30 bg-primary/10">
+                                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                                    <AlertDescription className="text-foreground">
+                                        AI assistant settings have been saved.
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
+                            <div className="flex items-center justify-between gap-6">
+                                <div>
+                                    <p className="text-sm font-medium">Enable AI assistant</p>
+                                    <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                                        Show the global assistant and allow provider-backed chat
+                                    </p>
+                                </div>
+                                <Switch checked={aiEnabled} onCheckedChange={handleToggleAiEnabled} />
+                            </div>
+
+                            <div className="grid gap-3">
+                                <div className="grid gap-1.5">
+                                    <label className="text-[12.5px] font-medium text-foreground">Provider</label>
+                                    <Select value={aiProvider} onValueChange={handleAiProviderChange}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Choose provider" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {AI_PROVIDER_OPTIONS.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid gap-1.5">
+                                    <label className="text-[12.5px] font-medium text-foreground">Model</label>
+                                    <Input value={aiModel} onChange={(event) => setAiModel(event.target.value)} />
+                                </div>
+
+                                <div className="grid gap-1.5">
+                                    <label className="text-[12.5px] font-medium text-foreground">Base URL</label>
+                                    <Input value={aiBaseUrl} onChange={(event) => setAiBaseUrl(event.target.value)} />
+                                </div>
+
+                                <div className="grid gap-1.5">
+                                    <label className="flex items-center gap-2 text-[12.5px] font-medium text-foreground">
+                                        <KeyRound className="h-3.5 w-3.5" />
+                                        API key
+                                    </label>
+                                    <Input
+                                        type="password"
+                                        value={aiApiKey}
+                                        placeholder={aiSettings?.hasApiKey ? aiSettings.censoredApiKey || "Saved key" : "Paste provider key"}
+                                        onChange={(event) => setAiApiKey(event.target.value)}
+                                    />
+                                    <p className="text-[12px] leading-relaxed text-muted-foreground">
+                                        Requests are sent to the selected provider. The key is stored locally in Catalyst app data.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button onClick={handleSaveAiAssistant} disabled={aiSaving}>
+                                    {aiSaving ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                                    Save AI Settings
+                                </Button>
                             </div>
                         </div>
                     </SettingsSection>

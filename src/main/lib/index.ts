@@ -52,6 +52,7 @@ export {
   deleteServerFile,
   renameServerFile,
   copyServerFile,
+  updateServerStatus,
 } from "./server-manager";
 
 export {
@@ -78,3 +79,10 @@ export {
 export { checkForUpdates } from "./update-checker";
 export { getAppPreferences, updateAppPreferences } from "./app-preferences";
 export { shouldConfirmClose } from "./shutdown-policy";
+export {
+  applyAiAssistantAction,
+  getAiAssistantSettings,
+  sendAiAssistantMessage,
+  updateAiAssistantSettings,
+  updatePlayerCapacityString,
+} from "./ai-assistant";

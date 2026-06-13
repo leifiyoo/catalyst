@@ -4,7 +4,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent } from './ui/dialog'
 import { DialogTitle } from '@radix-ui/react-dialog'
 import { useServerStore } from '../stores/serverStore'
-import { Search, Play, Square, RotateCw, Settings, LayoutGrid, Server, Activity, Plus } from 'lucide-react'
+import { Search, Play, Square, RotateCw, Settings, LayoutGrid, Server, Activity, Plus, Bot } from 'lucide-react'
 
 interface CommandAction {
   id: string
@@ -102,6 +102,17 @@ export function CommandPalette({ initialOpen = false }: { initialOpen?: boolean 
         },
         group: 'Actions',
         keywords: ['create', 'new', 'server', 'add'],
+      },
+      {
+        id: 'open-ai-assistant',
+        label: 'Open AI Assistant',
+        icon: <Bot className="w-4 h-4" />,
+        action: () => {
+          window.dispatchEvent(new Event('catalyst:ai-assistant'))
+          close()
+        },
+        group: 'Actions',
+        keywords: ['ai', 'assistant', 'help', 'crash', 'settings'],
       },
       ...servers.flatMap((server): CommandAction[] => {
         const online = server.status === 'Online'

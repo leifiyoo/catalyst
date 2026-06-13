@@ -7,6 +7,10 @@ import {
   SetAlwaysOnTopFn,
   GetAppPreferencesFn,
   UpdateAppPreferencesFn,
+  GetAiAssistantSettingsFn,
+  UpdateAiAssistantSettingsFn,
+  SendAiAssistantMessageFn,
+  ApplyAiAssistantActionFn,
   WindowControlFn,
   CreateServerFn,
   GetServersFn,
@@ -78,6 +82,10 @@ declare global {
       setAlwaysOnTop: SetAlwaysOnTopFn;
       getAppPreferences: GetAppPreferencesFn;
       updateAppPreferences: UpdateAppPreferencesFn;
+      getAiAssistantSettings: GetAiAssistantSettingsFn;
+      updateAiAssistantSettings: UpdateAiAssistantSettingsFn;
+      sendAiAssistantMessage: SendAiAssistantMessageFn;
+      applyAiAssistantAction: ApplyAiAssistantActionFn;
       onWindowStateChanged: OnWindowStateChangedFn;
       onResizeStep: OnResizeStepFn;
       createServer: CreateServerFn;

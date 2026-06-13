@@ -28,6 +28,10 @@ import {
   NgrokTunnelInfo,
   AnalyticsData,
   AppPreferences,
+  AiAssistantAction,
+  AiAssistantChatRequest,
+  AiAssistantSettingsUpdate,
+  PublicAiAssistantSettings,
 } from "@shared/types";
 
 // The preload process plays a middleware role in bridging
@@ -53,6 +57,14 @@ try {
       ipcRenderer.invoke("getAppPreferences"),
     updateAppPreferences: (updates: Partial<AppPreferences>): Promise<AppPreferences> =>
       ipcRenderer.invoke("updateAppPreferences", updates),
+    getAiAssistantSettings: (): Promise<PublicAiAssistantSettings> =>
+      ipcRenderer.invoke("getAiAssistantSettings"),
+    updateAiAssistantSettings: (updates: AiAssistantSettingsUpdate): Promise<PublicAiAssistantSettings> =>
+      ipcRenderer.invoke("updateAiAssistantSettings", updates),
+    sendAiAssistantMessage: (request: AiAssistantChatRequest) =>
+      ipcRenderer.invoke("sendAiAssistantMessage", request),
+    applyAiAssistantAction: (action: AiAssistantAction) =>
+      ipcRenderer.invoke("applyAiAssistantAction", action),
     onWindowStateChanged: (handler: Parameters<OnWindowStateChangedFn>[0]) => {
       const listener = (_event: unknown, state: Awaited<ReturnType<GetWindowStateFn>>) =>
         handler(state);
