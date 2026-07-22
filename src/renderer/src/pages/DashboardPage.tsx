@@ -307,29 +307,42 @@ export function DashboardPage() {
 
     if (servers.length === 0) {
         return (
-            <div className="flex min-h-[calc(100vh-60px)] flex-1 items-center justify-center px-8 pb-10">
-                <div className="flex max-w-md flex-col items-center text-center">
-                    <div className="grid h-20 w-20 place-items-center rounded-2xl border border-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                        <img src={catalystIcon} alt="Catalyst" className="h-11 w-11 object-contain" />
+            <motion.div
+                className="mx-auto grid min-h-[calc(100vh-60px)] w-full max-w-[980px] items-center gap-8 px-8 pb-12 lg:grid-cols-[1.05fr_0.95fr]"
+                variants={dashboardSequence}
+                initial="hidden"
+                animate="show"
+            >
+                <motion.div variants={dashboardItem}>
+                    <div className="grid h-16 w-16 place-items-center rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/15 to-card shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                        <img src={catalystIcon} alt="Catalyst" className="h-10 w-10 object-contain" />
                     </div>
-                    <h1 className="mt-6 text-[28px] font-medium leading-tight tracking-normal text-foreground">
-                        Welcome to Catalyst
-                    </h1>
-                    <p className="mt-3 max-w-sm text-[14px] leading-7 text-muted-foreground">
-                        Create a Minecraft server, import an existing world, or connect your current setup.
-                    </p>
-                    <div className="mt-7 flex flex-wrap justify-center gap-3">
-                        <Button onClick={() => navigate("/servers?create=true")}>
-                            <Plus className="h-4 w-4" />
-                            Create server
-                        </Button>
-                        <Button variant="outline" onClick={() => navigate("/servers")}>
-                            <Server className="h-4 w-4" />
-                            Open servers
-                        </Button>
+                    <p className="mt-7 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Your server workspace</p>
+                    <h1 className="mt-2 max-w-md text-[34px] font-semibold leading-[1.08] tracking-[-0.035em] text-foreground">Launch your first world with a clear setup.</h1>
+                    <p className="mt-4 max-w-md text-[14px] leading-7 text-muted-foreground">Catalyst prepares the runtime, memory and analytics. You stay in control of every setting.</p>
+                    <div className="mt-7 flex flex-wrap gap-3">
+                        <Button onClick={() => navigate("/servers?create=true")}><Plus className="h-4 w-4" />Create server</Button>
+                        <Button variant="outline" onClick={() => navigate("/servers")}><Server className="h-4 w-4" />Import existing</Button>
                     </div>
-                </div>
-            </div>
+                </motion.div>
+                <motion.div variants={dashboardItem} className="rounded-3xl border border-border bg-card p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_18px_50px_rgba(0,0,0,0.10)]">
+                    <div className="px-3 pb-3 pt-2">
+                        <p className="text-[12px] font-semibold text-foreground">Getting started</p>
+                        <p className="mt-1 text-[11.5px] text-muted-foreground">Three steps from empty workspace to online server.</p>
+                    </div>
+                    {[
+                        { icon: Server, step: "01", title: "Choose your runtime", detail: "Paper, Purpur, Fabric or Vanilla" },
+                        { icon: Square, step: "02", title: "Review resources", detail: "Set memory and optional analytics" },
+                        { icon: Play, step: "03", title: "Start and monitor", detail: "Console, players and health in one place" },
+                    ].map((item, index) => (
+                        <motion.div key={item.step} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.12 + index * 0.06 }} className="flex items-center gap-3 border-t border-border px-3 py-4">
+                            <div className="grid h-9 w-9 place-items-center rounded-xl border border-primary/15 bg-primary/10 text-primary"><item.icon className="h-4 w-4" /></div>
+                            <div className="min-w-0 flex-1"><p className="text-[12.5px] font-medium text-foreground">{item.title}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{item.detail}</p></div>
+                            <span className="font-data text-[10.5px] text-muted-foreground">{item.step}</span>
+                        </motion.div>
+                    ))}
+                </motion.div>
+            </motion.div>
         )
     }
 

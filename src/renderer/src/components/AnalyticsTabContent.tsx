@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react"
+// Kept as a compatibility fallback; the active workspace uses DitherAnalyticsTab.
 import {
     Card,
     CardContent,
@@ -55,9 +56,7 @@ interface AnalyticsTabProps {
 const POLL_INTERVAL = 30000
 
 const PIE_COLORS = [
-    "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
-    "#f43f5e", "#ef4444", "#f97316", "#eab308", "#84cc16",
-    "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#2563eb",
+    "#4D75E6", "#6689EB", "#7D9BEF", "#94ADF2", "#AEBFF5", "#3D63D1", "#3155BA",
 ]
 
 /**
@@ -101,9 +100,12 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     const [showSettings, setShowSettings] = useState(false)
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const lastDataRef = useRef<AnalyticsData | null>(null)
+    const requestInFlightRef = useRef(false)
 
     const loadData = useCallback(async () => {
         try {
+        if (requestInFlightRef.current) return
+        requestInFlightRef.current = true
             const result = await window.context.getAnalyticsData(serverId)
             if (result.success && result.data) {
                 setData(result.data)
@@ -124,15 +126,19 @@ export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
             }
         } finally {
             setLoading(false)
+            requestInFlightRef.current = false
         }
     }, [serverId])
 
     useEffect(() => {
         loadData()
 
-        pollRef.current = setInterval(loadData, POLL_INTERVAL)
+        const refreshWhenVisible = () => !document.hidden && void loadData()
+        document.addEventListener("visibilitychange", refreshWhenVisible)
+        pollRef.current = setInterval(refreshWhenVisible, POLL_INTERVAL)
         return () => {
             if (pollRef.current) clearInterval(pollRef.current)
+            document.removeEventListener("visibilitychange", refreshWhenVisible)
         }
     }, [serverId, loadData])
 
@@ -302,6 +308,19 @@ function AnalyticsContent({
                         <Settings className="h-4 w-4 text-muted-foreground" />
                     </button>
                 </div>
+            </div>
+
+            <div className="grid overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-r from-primary/[0.10] via-primary/[0.045] to-transparent sm:grid-cols-3">
+                {[
+                    { label: "Tick health", value: overview.currentTps ? `${overview.currentTps.toFixed(1)} TPS` : "Waiting" },
+                    { label: "Memory load", value: overview.memoryUsedMB && overview.memoryMaxMB ? `${Math.round((overview.memoryUsedMB / overview.memoryMaxMB) * 100)}%` : "Waiting" },
+                    { label: "Players now", value: `${overview.currentOnline} / ${overview.peakOnline || "-"} peak` },
+                ].map((item, index) => (
+                    <div key={item.label} className={`px-4 py-3 ${index > 0 ? "border-t border-primary/10 sm:border-l sm:border-t-0" : ""}`}>
+                        <p className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{item.label}</p>
+                        <p className="mt-1 font-data text-[15px] font-medium text-foreground">{item.value}</p>
+                    </div>
+                ))}
             </div>
 
             {/* Settings Panel */}
@@ -605,7 +624,6 @@ function StatCard({
     icon: Icon,
     label,
     value,
-    accent,
 }: {
     icon: React.ComponentType<{ className?: string }>
     label: string
@@ -613,19 +631,22 @@ function StatCard({
     accent?: string
 }) {
     return (
-        <Card className="relative overflow-hidden rounded-xl">
-            <CardContent className="p-3.5">
-                <div className="flex min-h-[54px] items-center gap-3">
-                    <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-selected ${accent || ""}`}>
-                        <Icon className="h-4 w-4" />
+        <div>
+            <Card className="group relative overflow-hidden rounded-2xl border-primary/10 bg-gradient-to-br from-card to-primary/[0.035] transition-colors hover:border-primary/25">
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/55 to-transparent opacity-70" />
+                <CardContent className="p-4">
+                    <div className="flex min-h-[58px] items-center gap-3">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/15 bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-105">
+                            <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[11.5px] text-muted-foreground">{label}</p>
+                            <p className="mt-1 truncate font-data text-[19px] font-semibold leading-none tracking-[-0.02em] text-foreground">{value}</p>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-[12px] text-muted-foreground">{label}</p>
-                        <p className="mt-0.5 truncate font-data text-[18px] font-medium leading-none text-foreground">{value}</p>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
+        </div>
     )
 }
 

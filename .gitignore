@@ -7,6 +7,7 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 RELEASE_NOTES.md
+_backups/
 plans/
 .codex-backups/
 

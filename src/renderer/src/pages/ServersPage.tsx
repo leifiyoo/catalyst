@@ -46,7 +46,10 @@ import { useServerStore } from "@/stores/serverStore"
 const ITEMS_PER_PAGE = 20
 const EASE = [0.22, 1, 0.36, 1] as const
 
-const MC_VERSIONS = [
+const CALENDAR_MC_VERSIONS = ["26.2", "26.1.1", "26.1"]
+
+// Paper, Purpur, and Vanilla publish the new calendar releases. Fabric stays on its supported legacy list.
+const LEGACY_MC_VERSIONS = [
     "1.21.11", "1.21.10", "1.21.9", "1.21.8", "1.21.7",
     "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
     "1.20.6", "1.20.5", "1.20.4", "1.20.2", "1.20.1", "1.20",
@@ -60,8 +63,8 @@ const MC_VERSIONS = [
     "1.12.2", "1.12.1", "1.12",
     "1.11.2", "1.10.2", "1.9.4", "1.8.8", "1.7.10",
 ]
-const DEFAULT_MC_VERSION = MC_VERSIONS[0]
 
+const DEFAULT_MC_VERSION = LEGACY_MC_VERSIONS[0]
 const STATUS_LABEL: Record<ServerRecord["status"], string> = {
     Starting: "Starting",
     Online: "Online",
@@ -164,6 +167,12 @@ export function ServersPage() {
     const [customRamMB, setCustomRamMB] = useState("")
     const [maxRamMB, setMaxRamMB] = useState(16384)
 
+    const availableVersions =
+        framework === "Fabric" ? LEGACY_MC_VERSIONS : [...CALENDAR_MC_VERSIONS, ...LEGACY_MC_VERSIONS]
+    const handleFrameworkChange = (nextFramework: string) => {
+        setFramework(nextFramework)
+        setVersion(nextFramework === "Fabric" ? DEFAULT_MC_VERSION : CALENDAR_MC_VERSIONS[0])
+    }
     const effectiveRamMB = ramOption === "custom"
         ? parseInt(customRamMB, 10) || 0
         : parseInt(ramOption, 10)
@@ -388,13 +397,25 @@ export function ServersPage() {
                         transition={{ duration: 0.35, ease: EASE }}
                         className="overflow-hidden"
                     >
-                        <div className="rounded-2xl border border-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] p-6">
+                        <div className="rounded-2xl border border-border bg-card p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_40px_rgba(0,0,0,0.08)]">
                             <h2 className="text-[15px] font-semibold text-foreground">Create a new server</h2>
                             <p className="mt-1 text-[13px] text-muted-foreground">
                                 Pick a platform and version — Catalyst downloads and configures everything.
                             </p>
 
-                            <div className="mt-5 flex flex-col gap-4">
+                            <div className="mt-6 grid gap-6 lg:grid-cols-[190px_1fr]">
+                                <aside className="rounded-2xl border border-border bg-background/50 p-4">
+                                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Setup guide</p>
+                                    <div className="mt-4 space-y-4">
+                                        {[["1", "Identity", "Name your workspace"], ["2", "Runtime", "Choose platform and version"], ["3", "Resources", "Set memory and analytics"]].map(([step, title, detail], index) => (
+                                            <motion.div key={step} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.06 }} className="flex gap-2.5">
+                                                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-primary/20 bg-primary/10 text-[10.5px] font-semibold text-primary">{step}</span>
+                                                <div><p className="text-[12px] font-medium text-foreground">{title}</p><p className="mt-0.5 text-[10.5px] leading-snug text-muted-foreground">{detail}</p></div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </aside>
+                                <div className="flex min-w-0 flex-col gap-4">
                                 <div className="grid gap-2">
                                     <FieldLabel>Server name</FieldLabel>
                                     <Input
@@ -414,7 +435,7 @@ export function ServersPage() {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent className="max-h-60">
-                                                {MC_VERSIONS.map((v) => (
+                                                {availableVersions.map((v) => (
                                                     <SelectItem key={v} value={v}>{v}</SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -422,7 +443,7 @@ export function ServersPage() {
                                     </div>
                                     <div className="grid gap-2">
                                         <FieldLabel>Platform</FieldLabel>
-                                        <Select value={framework} onValueChange={setFramework} disabled={isCreating}>
+                                        <Select value={framework} onValueChange={handleFrameworkChange} disabled={isCreating}>
                                             <SelectTrigger>
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -521,7 +542,7 @@ export function ServersPage() {
                                         onClick={handleCreateServer}
                                         disabled={isCreating || !newServerName.trim() || effectiveRamMB < 512}
                                     >
-                                        {isCreating && <Spinner className="mr-1" />}
+                                        {isCreating ? <Spinner className="mr-1" /> : <Plus className="h-4 w-4" />}
                                         {isCreating ? "Creating server..." : "Create server"}
                                     </Button>
                                     <Button
@@ -532,6 +553,7 @@ export function ServersPage() {
                                         Cancel
                                     </Button>
                                 </div>
+                            </div>
                             </div>
                         </div>
                     </motion.div>

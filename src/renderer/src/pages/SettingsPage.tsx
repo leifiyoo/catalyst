@@ -25,6 +25,14 @@ import { Spinner } from "@/components/ui/spinner"
 import { Bot, CheckCircle2, ExternalLink, KeyRound, Trash2, Palette, Globe, Info, ShieldAlert } from "lucide-react"
 import type { AiAssistantProvider, PublicAiAssistantSettings } from "@shared/types"
 import { getStoredTheme, setStoredTheme, type ThemeMode } from "@/utils/theme"
+type SettingsCategory = "application" | "connectivity" | "assistant" | "about"
+
+const SETTINGS_CATEGORIES = [
+    { id: "application" as const, label: "Application", detail: "Look & behavior", icon: Palette },
+    { id: "connectivity" as const, label: "Connectivity", detail: "Tunnels & access", icon: Globe },
+    { id: "assistant" as const, label: "Assistant", detail: "AI provider", icon: Bot },
+    { id: "about" as const, label: "About", detail: "Version & details", icon: Info },
+]
 import { AI_PROVIDER_OPTIONS, getAiProviderOption } from "@/utils/ai-assistant"
 
 function SettingsSection({
@@ -83,6 +91,7 @@ export function SettingsPage() {
     const [tokenValidating, setTokenValidating] = useState(false)
     const [tokenError, setTokenError] = useState<string | null>(null)
     const [tokenSuccess, setTokenSuccess] = useState(false)
+    const [activeCategory, setActiveCategory] = useState<SettingsCategory>("application")
 
     useEffect(() => {
         setTheme(getStoredTheme())
@@ -223,12 +232,12 @@ export function SettingsPage() {
     return (
         <motion.section
             initial={false}
-            className="mx-auto flex w-full max-w-[760px] flex-col gap-5 px-8 pb-10 pt-7"
+            className="mx-auto flex w-full max-w-[1040px] flex-col gap-5 px-8 pb-10 pt-7"
         >
             <header>
                 <h1 className="text-[22px] font-semibold tracking-tight text-foreground">Settings</h1>
                 <p className="mt-1 text-[13.5px] text-muted-foreground">
-                    Appearance, tunneling and application info
+                    Organized controls for Catalyst, connections and assistant services
                 </p>
             </header>
 
@@ -246,7 +255,31 @@ export function SettingsPage() {
                     <Spinner className="h-6 w-6 text-muted-foreground" />
                 </div>
             ) : (
-                <div className="grid gap-4">
+                <div className="grid items-start gap-5 lg:grid-cols-[210px_1fr]">
+                    <nav className="sticky top-5 rounded-2xl border border-border bg-card p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]" aria-label="Settings categories">
+                        {SETTINGS_CATEGORIES.map((category) => {
+                            const CategoryIcon = category.icon
+                            const active = activeCategory === category.id
+                            return (
+                                <button
+                                    key={category.id}
+                                    type="button"
+                                    onClick={() => setActiveCategory(category.id)}
+                                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-[background-color,color,transform] duration-200 hover:translate-x-0.5 ${active ? "bg-selected text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
+                                >
+                                    <span className={`grid h-8 w-8 place-items-center rounded-lg border ${active ? "border-primary/20 bg-primary/10 text-primary" : "border-border bg-background"}`}>
+                                        <CategoryIcon className="h-4 w-4" />
+                                    </span>
+                                    <span>
+                                        <span className="block text-[12.5px] font-medium">{category.label}</span>
+                                        <span className="mt-0.5 block text-[10.5px] text-muted-foreground">{category.detail}</span>
+                                    </span>
+                                </button>
+                            )
+                        })}
+                    </nav>
+                    <motion.div key={activeCategory} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }} className="grid gap-4">
+                    {activeCategory === "application" && (
                     <SettingsSection
                         icon={Palette}
                         title="Appearance"
@@ -270,7 +303,9 @@ export function SettingsPage() {
                             </Select>
                         </div>
                     </SettingsSection>
+                    )}
 
+                    {activeCategory === "connectivity" && (
                     <SettingsSection
                         icon={Globe}
                         title="Ngrok"
@@ -328,7 +363,9 @@ export function SettingsPage() {
                             </div>
                         </div>
                     </SettingsSection>
+                    )}
 
+                    {activeCategory === "assistant" && (
                     <SettingsSection
                         icon={Bot}
                         title="AI Assistant"
@@ -406,7 +443,9 @@ export function SettingsPage() {
                             </div>
                         </div>
                     </SettingsSection>
+                    )}
 
+                    {activeCategory === "application" && (
                     <SettingsSection
                         icon={ShieldAlert}
                         title="Shutdown"
@@ -422,7 +461,9 @@ export function SettingsPage() {
                             <Switch checked={askBeforeClose} onCheckedChange={handleToggleCloseWarning} />
                         </div>
                     </SettingsSection>
+                    )}
 
+                    {activeCategory === "about" && (
                     <SettingsSection icon={Info} title="About" description="Application information">
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between">
@@ -441,6 +482,8 @@ export function SettingsPage() {
                             </p>
                         </div>
                     </SettingsSection>
+                    )}
+                    </motion.div>
                 </div>
             )}
 

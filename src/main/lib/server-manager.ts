@@ -191,7 +191,8 @@ async function tryLoadNumberedBackups(): Promise<ServerRecord[] | null> {
 
 // ---- Framework Download Resolvers ----
 
-const PAPER_API_BASE = "https://api.papermc.io/v2/projects/paper";
+const PAPER_API_BASE = "https://fill.papermc.io/v3/projects/paper";
+const PAPER_USER_AGENT = "Catalyst/1.2.0 (Minecraft server manager; https://github.com)";
 const PURPUR_API_BASE = "https://api.purpurmc.org/v2/purpur";
 const VANILLA_MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 const FABRIC_META_URL = "https://meta.fabricmc.net/v2";
@@ -211,34 +212,47 @@ type FrameworkDownloadResult = {
 
 async function getPaperDownloadUrl(version: string): Promise<FrameworkDownloadResult> {
   const buildsUrl = `${PAPER_API_BASE}/versions/${version}/builds`;
-  const res = await fetch(buildsUrl);
+  const res = await fetch(buildsUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": PAPER_USER_AGENT,
+    },
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch Paper builds for ${version}: ${res.status}`);
   }
-  const data = (await res.json()) as {
-    builds: Array<{
-      build: number;
-      channel: string;
-      downloads: { application: { name: string; sha256: string } };
-    }>;
-  };
 
-  const stableBuilds = data.builds.filter((b) => b.channel === "default");
-  const latestBuild = stableBuilds.length > 0
-    ? stableBuilds[stableBuilds.length - 1]
-    : data.builds[data.builds.length - 1];
+  const data = (await res.json()) as Array<{
+    id: number;
+    channel: string;
+    downloads: {
+      "server:default"?: {
+        name: string;
+        url: string;
+        checksums?: { sha256?: string };
+      };
+    };
+  }>;
+
+  const availableBuilds = data.filter((build) => build.downloads["server:default"]);
+  const stableBuilds = availableBuilds.filter((build) => build.channel === "STABLE");
+  const latestBuild = (stableBuilds.length > 0 ? stableBuilds : availableBuilds)
+    .sort((a, b) => b.id - a.id)[0];
 
   if (!latestBuild) {
     throw new Error(`No builds found for Paper ${version}`);
   }
 
-  const filename = latestBuild.downloads.application.name;
-  const url = `${PAPER_API_BASE}/versions/${version}/builds/${latestBuild.build}/downloads/${filename}`;
+  const download = latestBuild.downloads["server:default"];
+  if (!download) {
+    throw new Error(`No server download found for Paper ${version}`);
+  }
+
   return {
-    url,
-    filename,
+    url: download.url,
+    filename: download.name,
     jarFile: "server.jar",
-    hashes: { sha256: latestBuild.downloads.application.sha256 },
+    hashes: download.checksums?.sha256 ? { sha256: download.checksums.sha256 } : undefined,
   };
 }
 

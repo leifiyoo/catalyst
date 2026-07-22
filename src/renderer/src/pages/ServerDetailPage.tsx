@@ -39,7 +39,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Spinner } from "@/components/ui/spinner"
-import { RadialGauge } from "@/components/ui/radial-gauge"
+import { DitherMetricTile } from "@/components/DitherMetricTile"
 import {
     Tooltip,
     TooltipContent,
@@ -60,11 +60,10 @@ import {
     Plus,
     X,
     Info,
+    ShieldCheck,
     CheckCircle2,
     Check,
-    Users,
     Gauge,
-    MemoryStick,
     File,
     Folder,
     ChevronRight,
@@ -143,6 +142,17 @@ const MODRINTH_LOADER_CATEGORIES = new Set([
     "sponge",
     "purpur",
 ])
+type PropertyCategory = "World" | "Players" | "Network" | "Gameplay" | "Advanced"
+
+const PROPERTY_CATEGORY_ORDER: PropertyCategory[] = ["World", "Players", "Network", "Gameplay", "Advanced"]
+
+function getPropertyCategory(key: string): PropertyCategory {
+    if (/^(level-|generator-|generate-|seed|difficulty|gamemode|hardcore|allow-nether)/.test(key)) return "World"
+    if (/(player|whitelist|spawn-protection|pvp|operator|op-permission)/.test(key)) return "Players"
+    if (/(server-ip|server-port|online-mode|view-distance|simulation-distance|network|status|prevent-proxy)/.test(key)) return "Network"
+    if (/(spawn-|animal|monster|npc|command-block|flight|force-gamemode|function-permission)/.test(key)) return "Gameplay"
+    return "Advanced"
+}
 
 function isMarkdownBoundary(line: string) {
     const trimmed = line.trim()
@@ -949,6 +959,7 @@ export function ServerDetailPage() {
     const [backupStage, setBackupStage] = useState<'idle' | 'calculating' | 'archiving' | 'complete'>('idle')
     const [backupFileCount, setBackupFileCount] = useState({ processed: 0, total: 0 })
 
+    const [backupActionTarget, setBackupActionTarget] = useState<{ kind: "restore" | "delete"; backup: BackupEntry } | null>(null)
     // Modrinth library state
     const [modrinthQuery, setModrinthQuery] = useState("")
     const [modrinthResults, setModrinthResults] = useState<ModrinthSearchHit[]>([])
@@ -992,6 +1003,12 @@ export function ServerDetailPage() {
     // Disk usage state
     const [diskUsage, setDiskUsage] = useState<number | null>(null)
     const [diskUsageLoading, setDiskUsageLoading] = useState(false)
+    const [overviewHistory, setOverviewHistory] = useState<Array<{
+        players: number
+        memory: number
+        tps: number
+        storage: number
+    }>>([])
 
     // Track all auto-clearing timeouts so they can be cleaned up on unmount
     const timersRef = useLazyRef(() => new Set<ReturnType<typeof setTimeout>>())
@@ -1659,7 +1676,7 @@ export function ServerDetailPage() {
     }
 
     const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return "—"
+        if (bytes === 0) return "-"
         if (bytes < 1024) return `${bytes} B`
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -2036,6 +2053,16 @@ export function ServerDetailPage() {
         })
         return visible
     }, [properties, propsFilter])
+    const groupedProperties = useMemo(() => {
+        const groups = new Map<PropertyCategory, Array<{ prop: ServerProperty; index: number }>>()
+        for (const item of filteredProperties) {
+            const category = getPropertyCategory(item.prop.key)
+            groups.set(category, [...(groups.get(category) ?? []), item])
+        }
+        return PROPERTY_CATEGORY_ORDER
+            .map((category) => ({ category, items: groups.get(category) ?? [] }))
+            .filter((group) => group.items.length > 0)
+    }, [filteredProperties])
 
     const liveStats = storeStats ?? stats ?? null
     const memoryMax = liveStats?.memoryMaxMB ?? server?.ramMB ?? null
@@ -2044,6 +2071,23 @@ export function ServerDetailPage() {
         memoryUsed != null && memoryMax
             ? Math.min(100, Math.max(0, Math.round((memoryUsed / memoryMax) * 100)))
             : null
+    useEffect(() => {
+        setOverviewHistory([])
+    }, [id])
+
+    useEffect(() => {
+        if (!isOnline || !liveStats) return
+        const point = {
+            players: liveStats.playerCount,
+            memory: memoryPercent ?? 0,
+            tps: liveStats.tps ?? 0,
+            storage: diskUsage ?? 0,
+        }
+        setOverviewHistory((current) => (
+            [...current, point].slice(-36)
+        ))
+    }, [diskUsage, isOnline, liveStats, memoryPercent])
+
     const recommendedModrinthVersion = useMemo(
         () => (server ? pickRecommendedModrinthVersion(modrinthVersions, server.version) : undefined),
         [modrinthVersions, server]
@@ -2228,75 +2272,50 @@ export function ServerDetailPage() {
 
                 {/* Overview Tab */}
                 <TabsContent value="overview" className="mt-0 px-8 pt-6">
-                    {/* Stats cards */}
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                        {/* Players card */}
-                        <Card className="overflow-hidden">
-                            <CardContent className="p-6">
-                                <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                                    <Users className="h-3.5 w-3.5" />
-                                    Players online
-                                </p>
-                                <div className="mt-2.5 flex items-baseline gap-1.5">
-                                    <span className={`font-data text-[32px] font-medium leading-none tracking-tight ${isOnline && liveStats && liveStats.playerCount > 0 ? "text-primary" : "text-foreground"}`}>
-                                        {isOnline ? (liveStats ? liveStats.playerCount : 0) : "—"}
-                                    </span>
-                                    <span className="font-data text-sm text-muted-foreground">
-                                        / {isOnline && liveStats ? liveStats.maxPlayers : "20"}
-                                    </span>
-                                </div>
-                                <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <div
-                                        className="h-full rounded-full bg-primary transition-all duration-500"
-                                        style={{ width: isOnline && liveStats ? `${Math.min(100, (liveStats.playerCount / liveStats.maxPlayers) * 100)}%` : "0%" }}
-                                    />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Memory card — segmented gauge */}
-                        <Card className="overflow-hidden">
-                            <CardContent className="flex items-center justify-between gap-3 p-6">
-                                <div className="min-w-0">
-                                    <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                                        <MemoryStick className="h-3.5 w-3.5" />
-                                        Memory usage
-                                    </p>
-                                    <div className={`mt-2.5 font-data text-[32px] font-medium leading-none tracking-tight ${isOnline && memoryPercent != null && memoryPercent > 85 ? "text-destructive" : isOnline && memoryPercent != null ? "text-primary" : "text-foreground"}`}>
-                                        {isOnline && memoryPercent != null ? `${memoryPercent}%` : "—"}
-                                    </div>
-                                    <p className="mt-2.5 truncate font-data text-[12px] text-muted-foreground">
-                                        {isOnline && memoryUsed != null
-                                            ? `${memoryUsed} MB process / ${memoryMax ?? "?"} MB heap`
-                                            : `${formatRam(server.ramMB)} heap limit`}
-                                    </p>
-                                </div>
-                                <RadialGauge
-                                    value={isOnline && memoryPercent != null ? memoryPercent : 0}
-                                    display=""
-                                    size={86}
-                                    segments={20}
-                                    className="shrink-0"
-                                />
-                            </CardContent>
-                        </Card>
-
-                        {/* Storage card */}
-                        <Card className="overflow-hidden">
-                            <CardContent className="p-6">
-                                <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                                    <Archive className="h-3.5 w-3.5" />
-                                    Storage usage
-                                </p>
-                                <div className="mt-2.5 font-data text-[32px] font-medium leading-none tracking-tight text-foreground">
-                                    {diskUsage !== null ? formatBytes(diskUsage) : diskUsageLoading ? "..." : "—"}
-                                </div>
-                                <p className="mt-2.5 font-data text-[12px] text-muted-foreground">on disk</p>
-                            </CardContent>
-                        </Card>
+                    {/* Live metrics */}
+                    <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <DitherMetricTile
+                            label="Players now"
+                            value={isOnline ? (liveStats?.playerCount ?? 0) : "-"}
+                            suffix={isOnline ? "/ " + (liveStats?.maxPlayers ?? 20) : undefined}
+                            detail={isOnline ? "Live player count" : "Server offline"}
+                            data={overviewHistory.map((point) => point.players)}
+                            color="blue"
+                            trendIntent="higher"
+                        />
+                        <DitherMetricTile
+                            label="Memory usage"
+                            value={isOnline && memoryPercent != null ? memoryPercent : "-"}
+                            suffix={isOnline && memoryPercent != null ? "%" : undefined}
+                            detail={
+                                isOnline && memoryUsed != null
+                                    ? memoryUsed + " MB / " + (memoryMax ?? "?") + " MB"
+                                    : formatRam(server.ramMB) + " heap limit"
+                            }
+                            data={overviewHistory.map((point) => point.memory)}
+                            color="purple"
+                            trendIntent="lower"
+                        />
+                        <DitherMetricTile
+                            label="Tick rate"
+                            value={isOnline && liveStats?.tps != null ? liveStats.tps.toFixed(1) : "-"}
+                            suffix="TPS"
+                            detail="20.0 is ideal"
+                            data={overviewHistory.map((point) => point.tps).filter((value) => value > 0)}
+                            color="green"
+                            precision={1}
+                            trendIntent="higher"
+                        />
+                        <DitherMetricTile
+                            label="Storage"
+                            value={diskUsage !== null ? formatBytes(diskUsage) : diskUsageLoading ? "..." : "-"}
+                            detail="Server files on disk"
+                            data={overviewHistory.map((point) => point.storage)}
+                            showChart={false}
+                            trendIntent="neutral"
+                        />
                     </div>
-
-                    {/* Console — isolated component with its own state */}
+                    {/* Console - isolated component with its own state */}
                     <ConsoleTab serverId={id || ""} isOnline={isOnline} />
                 </TabsContent>
 
@@ -2359,30 +2378,32 @@ export function ServerDetailPage() {
                                         <span>Value</span>
                                     </div>
                                     <div className="mt-3 flex flex-col gap-2 max-h-[400px] overflow-auto">
-                                        {filteredProperties.map(({ prop, index }) => (
-                                            <div
-                                                key={`${prop.key}-${index}`}
-                                                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 items-center rounded-xl border border-border bg-muted/50 px-3 py-2"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <FileText className="h-3 w-3 text-primary" />
-                                                    <span className="text-xs text-muted-foreground font-mono truncate">
-                                                        {prop.key}
-                                                    </span>
+                                        {groupedProperties.map(({ category, items }) => (
+                                            <section key={category} className="rounded-2xl border border-border bg-background/35 p-3">
+                                                <div className="mb-2.5 flex items-center justify-between">
+                                                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground">{category}</h3>
+                                                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{items.length}</span>
                                                 </div>
-                                                <Input
-                                                    value={prop.value}
-                                                    onChange={(e) => {
-                                                        const updated = [...properties]
-                                                        updated[index] = {
-                                                            ...updated[index],
-                                                            value: e.target.value,
-                                                        }
-                                                        setProperties(updated)
-                                                    }}
-                                                    className="text-xs font-mono h-8"
-                                                />
-                                            </div>
+                                                <div className="grid gap-2">
+                                                    {items.map(({ prop, index }) => (
+                                                        <div key={`${prop.key}-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:border-primary/20">
+                                                            <div className="flex min-w-0 items-center gap-2">
+                                                                <FileText className="h-3 w-3 shrink-0 text-primary" />
+                                                                <span className="truncate font-mono text-xs text-muted-foreground">{prop.key}</span>
+                                                            </div>
+                                                            <Input
+                                                                value={prop.value}
+                                                                onChange={(e) => {
+                                                                    const updated = [...properties]
+                                                                    updated[index] = { ...updated[index], value: e.target.value }
+                                                                    setProperties(updated)
+                                                                }}
+                                                                className="h-8 font-mono text-xs"
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </section>
                                         ))}
                                         {filteredProperties.length === 0 && (
                                             <p className="text-xs text-muted-foreground">No properties match that search.</p>
@@ -2649,7 +2670,7 @@ export function ServerDetailPage() {
                                         </Button>
                                     </div>
                                 </CardHeader>
-                                <CardContent className="flex flex-col gap-3">
+                                <CardContent className="flex flex-col gap-3 pt-4">
                                     {modrinthError && (
                                         <Alert variant="destructive">
                                             <AlertTitle>Error</AlertTitle>
@@ -2927,7 +2948,7 @@ export function ServerDetailPage() {
                                         <RefreshCw className="h-4 w-4" />
                                     </Button>
                                 </CardHeader>
-                                <CardContent className="flex flex-col gap-2">
+                                <CardContent className="flex flex-col gap-2 pt-4">
                                     {modrinthInstallsLoading ? (
                                         <div className="flex items-center justify-center py-10">
                                             <Spinner className="text-primary" />
@@ -3384,7 +3405,7 @@ export function ServerDetailPage() {
                                                 ) : diskUsage !== null ? (
                                                     formatBytes(diskUsage)
                                                 ) : (
-                                                    <span className="text-muted-foreground">—</span>
+                                                    <span className="text-muted-foreground">-</span>
                                                 )}
                                             </span>
                                         </div>
@@ -3579,14 +3600,12 @@ export function ServerDetailPage() {
                                     <CardDescription>Create a snapshot now</CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex flex-col justify-center gap-4">
-                                    {/* Work in Progress Warning */}
-                                    <div className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-3">
+                                    <div className="mb-2 rounded-xl border border-primary/15 bg-primary/[0.06] p-3">
                                         <div className="flex items-start gap-2">
-                                            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-                                            <div className="text-sm">
-                                                <span className="font-semibold text-amber-700 dark:text-amber-300">Work in progress:</span>
-                                                <span className="ml-1 text-amber-700/80 dark:text-amber-300/70">Backup functionality is currently under development and may not work correctly.</span>
-                                            </div>
+                                            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                            <p className="text-[12px] leading-relaxed text-muted-foreground">
+                                                Restores are validated first and Catalyst creates a safety snapshot before replacing server files.
+                                            </p>
                                         </div>
                                     </div>
                                     {creatingBackup ? (
@@ -3686,7 +3705,7 @@ export function ServerDetailPage() {
                                                     <TooltipProvider>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRestoreBackup(backup.filename)}>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setBackupActionTarget({ kind: "restore", backup })}>
                                                                     <RefreshCw className="h-3.5 w-3.5" />
                                                                 </Button>
                                                             </TooltipTrigger>
@@ -3696,7 +3715,7 @@ export function ServerDetailPage() {
                                                     <TooltipProvider>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteBackup(backup.filename)}>
+                                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/70 hover:text-destructive hover:bg-destructive/10" onClick={() => setBackupActionTarget({ kind: "delete", backup })}>
                                                                     <Trash2 className="h-3.5 w-3.5" />
                                                                 </Button>
                                                             </TooltipTrigger>
@@ -4101,8 +4120,47 @@ export function ServerDetailPage() {
                 </DialogContent>
             </Dialog>
 
+            <AlertDialog open={!!backupActionTarget} onOpenChange={(open) => !open && setBackupActionTarget(null)}>
+                <AlertDialogContent className="border-border bg-card">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {backupActionTarget?.kind === "restore" ? "Restore this snapshot?" : "Delete this snapshot?"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-muted-foreground">
+                            {backupActionTarget?.kind === "restore"
+                                ? `Catalyst will validate "${backupActionTarget.backup.name}", create a safety backup, then replace the current server files. The server must be stopped.`
+                                : `"${backupActionTarget?.backup.name}" will be permanently removed. This action cannot be undone.`}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {backupActionTarget?.kind === "restore" && server.status !== "Offline" && server.status !== "Idle" && (
+                        <Alert variant="destructive">
+                            <AlertTitle>Stop the server first</AlertTitle>
+                            <AlertDescription>A restore cannot run while server files are in use.</AlertDescription>
+                        </Alert>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={backupActionTarget?.kind === "restore" && server.status !== "Offline" && server.status !== "Idle"}
+                            className={backupActionTarget?.kind === "delete" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+                            onClick={async () => {
+                                const target = backupActionTarget
+                                setBackupActionTarget(null)
+                                if (!target) return
+                                if (target.kind === "restore") await handleRestoreBackup(target.backup.filename)
+                                else await handleDeleteBackup(target.backup.filename)
+                            }}
+                        >
+                            {backupActionTarget?.kind === "restore" ? "Create safety backup & restore" : "Delete backup"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             {/* EULA Dialog */}
             <AlertDialog open={eulaDialogOpen} onOpenChange={setEulaDialogOpen}>
+
+
                 <AlertDialogContent className="border-border bg-card">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Minecraft EULA</AlertDialogTitle>

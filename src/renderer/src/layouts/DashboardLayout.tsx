@@ -68,8 +68,8 @@ export function DashboardLayout() {
                     <div className="flex items-center gap-1" style={noDragRegion}>
                         <button
                             type="button"
-                            className={`mr-2 inline-flex h-8 items-center gap-2 rounded-full border border-border px-3 text-[12.5px] font-medium transition-colors duration-150 hover:bg-muted hover:text-foreground ${
-                                assistantOpen ? "bg-muted text-foreground" : "bg-card text-muted-foreground"
+                            className={`mr-2 inline-flex h-8 items-center gap-2 rounded-full border border-x-transparent border-b-transparent border-t-white/[0.075] bg-[#17191C] px-3 text-[12.5px] font-medium [font-synthesis:none] shadow-[0_1px_2px_rgba(0,0,0,0.16)] transition-[color,background-color,transform] duration-150 hover:bg-[#202329] hover:text-white active:scale-[0.97] ${
+                                assistantOpen ? "text-white ring-1 ring-primary/35" : "text-[#BABABA]"
                             }`}
                             aria-label={assistantOpen ? "Close AI Assistant" : "Open AI Assistant"}
                             title={assistantOpen ? "Close AI Assistant" : "Open AI Assistant"}

@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react"
 import { Spinner } from "@/components/ui/spinner"
 
 const AnalyticsTabContent = lazy(() =>
-    import("@/components/AnalyticsTabContent").then((mod) => ({
+    import("@/components/DitherAnalyticsTab").then((mod) => ({
         default: mod.AnalyticsTab,
     }))
 )
@@ -13,7 +13,7 @@ interface AnalyticsTabProps {
 
 /**
  * Lazy-loaded wrapper for the Analytics tab.
- * recharts (~300KB) is only loaded when the user actually opens this tab.
+ * The canvas-heavy Dither Kit workspace is loaded only when analytics is opened.
  */
 export function AnalyticsTab({ serverId }: AnalyticsTabProps) {
     return (

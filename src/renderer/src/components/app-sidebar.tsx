@@ -24,6 +24,16 @@ export function AppSidebar() {
     const loaded = useServerStore((state) => state.loaded)
     const runningCount = servers.filter((server) => server.status === "Online").length
 
+    const statusLabel = !loaded
+        ? "Syncing workspace"
+        : runningCount > 0
+          ? `${runningCount} active now`
+          : "Catalyst ready"
+    const statusDetail = !loaded
+        ? "Loading servers..."
+        : servers.length === 0
+          ? "Create your first server"
+          : `${servers.length} server${servers.length === 1 ? "" : "s"} configured`
     const isItemActive = (path: string) =>
         path === "/" ? location.pathname === "/" : location.pathname.startsWith(path)
 
@@ -67,17 +77,13 @@ export function AppSidebar() {
 
             <div className="mt-auto px-3 pb-4">
                 <div className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                    <span className={`status-dot ${runningCount > 0 ? "status-dot-online" : "status-dot-offline"}`} />
+                    <span className={`status-dot ${runningCount > 0 ? "status-dot-online" : "bg-primary"}`} />
                     <div className="leading-none">
                         <div className="text-[12.5px] font-medium text-foreground">
-                            {!loaded
-                                ? "Syncing servers"
-                                : runningCount > 0
-                                ? `${runningCount} server${runningCount === 1 ? "" : "s"} running`
-                                : "All servers stopped"}
+                            {statusLabel}
                         </div>
                         <div className="mt-1 text-[11px] text-muted-foreground">
-                            {loaded ? `${servers.length} configured` : "Loading..."}
+                            {statusDetail}
                         </div>
                     </div>
                 </div>

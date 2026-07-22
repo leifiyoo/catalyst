@@ -5,19 +5,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium ring-offset-background transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-transparent text-sm font-medium [font-synthesis:none] ring-offset-background transition-[background-color,border-color,color,transform,opacity] duration-150 ease-out active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:scale-100 disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.18)] hover:bg-primary/90",
+        default: "border-t-2 border-x-transparent border-b-transparent border-t-white/25 bg-[#4D75E6] text-white shadow-[0_1px_2px_rgba(0,0,0,0.18)] hover:bg-[#426CDE] focus-visible:ring-primary/35",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/40",
         outline:
-          "border border-border bg-transparent hover:bg-secondary hover:border-input",
+          "border border-border bg-transparent hover:bg-secondary hover:border-input focus-visible:ring-foreground/20",
         secondary:
-          "bg-muted text-foreground hover:bg-muted/80",
-        ghost: "hover:bg-muted",
-        link: "text-foreground/80 underline-offset-4 hover:text-foreground hover:underline",
+          "bg-muted text-foreground hover:bg-muted/80 focus-visible:ring-foreground/20",
+        ghost: "hover:bg-muted focus-visible:ring-foreground/20",
+        link: "text-foreground/80 underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-foreground/20",
       },
       size: {
         default: "h-10 px-5 py-2",

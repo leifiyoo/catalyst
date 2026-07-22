@@ -1,14 +1,6 @@
 @import "./theme.css";
 
 @font-face {
-  font-family: "Outfit";
-  src: url("./Outfit-VariableFont_wght.ttf") format("truetype");
-  font-weight: 300 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
   font-family: "Google Sans Code";
   src: url("./GoogleSansCode-VariableFont_wght.ttf") format("truetype");
   font-weight: 200 900;
@@ -21,6 +13,17 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    font-family: Inter, sans-serif;
+    font-feature-settings: "liga" 1, "calt" 1;
+  }
+
+  @supports (font-variation-settings: normal) {
+    :root {
+      font-family: InterVariable, sans-serif;
+    }
+  }
+
   * {
     @apply border-border;
     user-select: none;
@@ -82,13 +85,19 @@
 }
 
 body {
-  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-family: Inter, sans-serif;
   font-optical-sizing: auto;
   font-weight: 400;
   font-size: 13px;
   font-style: normal;
   margin: 0;
   padding: 0;
+}
+
+@supports (font-variation-settings: normal) {
+  body {
+    font-family: InterVariable, sans-serif;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -109,9 +118,15 @@ body {
 
 /* Data values — Outfit with aligned digits (console stays monospace) */
 .font-data {
-  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-family: Inter, sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+}
+
+@supports (font-variation-settings: normal) {
+  .font-data {
+    font-family: InterVariable, sans-serif;
+  }
 }
 
 #root {
@@ -195,7 +210,7 @@ body {
   color: hsl(220 12% 88%);
 }
 
-/* ---- Status dot with soft emerald glow ---- */
+/* ---- Compact semantic status dots ---- */
 
 .status-dot {
   width: 8px;
@@ -206,17 +221,17 @@ body {
 
 .status-dot-online {
   background: hsl(var(--online));
-  box-shadow: 0 0 10px hsl(var(--online) / 0.55);
+  box-shadow: none;
 }
 
 .status-dot-starting {
   background: hsl(var(--chart-3));
-  box-shadow: 0 0 10px hsl(var(--chart-3) / 0.5);
+  box-shadow: none;
 }
 
 .status-dot-stopping {
   background: hsl(var(--chart-5));
-  box-shadow: 0 0 10px hsl(var(--chart-5) / 0.45);
+  box-shadow: none;
 }
 
 .status-dot-offline {
@@ -225,7 +240,7 @@ body {
 
 .status-dot-idle {
   background: hsl(var(--chart-3));
-  box-shadow: 0 0 10px hsl(var(--chart-3) / 0.45);
+  box-shadow: none;
 }
 
 .disable-text-selection {

@@ -1,5 +1,4 @@
-import { contextBridge } from "electron";
-import { ipcRenderer } from "electron/renderer";
+import { contextBridge, ipcRenderer } from "electron";
 import {
   GetVersionsFn,
   GetWindowStateFn,

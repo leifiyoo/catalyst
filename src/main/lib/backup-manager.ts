@@ -69,7 +69,8 @@ function sendProgress(webContents: WebContents | undefined, serverId: string, da
 export async function createBackup(
   serverId: string, 
   name?: string, 
-  webContents?: WebContents
+  webContents?: WebContents,
+  type: 'manual' | 'auto' = 'manual'
 ): Promise<{ success: boolean; error?: string; backup?: BackupEntry; started?: boolean }> {
   if (activeBackups.has(serverId)) {
     return { 
@@ -95,7 +96,8 @@ export async function createBackup(
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const safeName = name ? name.replace(/[^a-zA-Z0-9-_]/g, '_') : 'auto';
+    const displayName = name?.trim() || (type === 'auto' ? 'Automatic Backup' : 'Manual Backup');
+    const safeName = name?.trim() ? name.replace(/[^a-zA-Z0-9-_]/g, '_') : type;
     const filename = `backup-${timestamp}-${safeName}.zip`;
     const zipPath = path.join(backupsDir, filename);
 
@@ -116,8 +118,8 @@ export async function createBackup(
           backupsDir,
           zipPath,
           filename,
-          name: name || 'Automatic Backup',
-          type: name ? 'manual' : 'auto',
+          name: displayName,
+          type,
           excludeDir: backupsDir
         }
       });
@@ -162,12 +164,12 @@ export async function createBackup(
 
         if (message.type === 'complete') {
           const backup: BackupEntry = {
-            name: name || 'Automatic Backup',
+            name: displayName,
             filename,
             path: zipPath,
             size: message.data.size,
             createdAt: new Date().toISOString(),
-            type: name ? 'manual' : 'auto'
+            type
           };
 
           if (webContents && !webContents.isDestroyed()) {
@@ -365,10 +367,13 @@ export async function restoreBackup(serverId: string, filename: string): Promise
 
   if (!fs.existsSync(zipPath)) return { success: false, error: 'Backup file not found' };
 
+  const stagingPath = path.join(
+    path.dirname(serverPath),
+    `.${path.basename(serverPath)}-restore-${Date.now()}`
+  );
+
   try {
     const zip = new AdmZip(zipPath);
-    
-    // Validate zip entries for path traversal (zip slip protection)
     const resolvedServerPath = path.resolve(serverPath);
     for (const entry of zip.getEntries()) {
       const entryPath = path.resolve(serverPath, entry.entryName);
@@ -377,18 +382,34 @@ export async function restoreBackup(serverId: string, filename: string): Promise
       }
     }
 
-    // Careful deletion
-    const currentFiles = fs.readdirSync(serverPath);
+    const safetyBackup = await createBackup(
+      serverId,
+      `Before restore ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`
+    );
+    if (!safetyBackup.success) {
+      return { success: false, error: `Could not create the pre-restore safety backup: ${safetyBackup.error ?? 'Unknown error'}` };
+    }
+
+    await fs.promises.mkdir(stagingPath, { recursive: true });
+    zip.extractAllTo(stagingPath, true);
+
+    const currentFiles = await fs.promises.readdir(serverPath);
     for (const file of currentFiles) {
       const fullPath = path.join(serverPath, file);
       if (path.resolve(fullPath) === path.resolve(backupsDir)) continue;
       await fs.promises.rm(fullPath, { recursive: true, force: true });
     }
 
-    zip.extractAllTo(serverPath, true);
+    const stagedFiles = await fs.promises.readdir(stagingPath);
+    for (const file of stagedFiles) {
+      await fs.promises.rename(path.join(stagingPath, file), path.join(serverPath, file));
+    }
+
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
+  } finally {
+    await fs.promises.rm(stagingPath, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -404,7 +425,7 @@ export async function checkAndRunAutoBackups() {
         if (now - lastBackup > intervalMs) {
           if (!isBackupInProgress(server.id)) {
             console.log(`[AUTO_BACKUP] Running auto backup for server ${server.name}`);
-            const result = await createBackup(server.id);
+            const result = await createBackup(server.id, undefined, undefined, 'auto');
             if (result.success) {
               await updateServerSettings(server.id, {
                 backupConfig: {
