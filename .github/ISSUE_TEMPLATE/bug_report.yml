@@ -1,0 +1,122 @@
+name: Bug Report
+description: Report a reproducible problem with Catalyst
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please provide as much detail as possible so the issue can be reproduced and fixed.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched for existing issues and could not find a duplicate.
+          required: true
+        - label: I am using the latest available version of Catalyst.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clearly explain what is broken.
+      placeholder: Describe the problem and when it occurs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the exact steps needed to reproduce the problem.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Start ...
+        4. See the error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Explain what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Explain what happened instead.
+    validations:
+      required: true
+
+  - type: input
+    id: catalyst-version
+    attributes:
+      label: Catalyst version
+      placeholder: e.g. v1.4.0 or commit hash
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      placeholder: e.g. Windows 11 24H2
+    validations:
+      required: true
+
+  - type: input
+    id: minecraft-version
+    attributes:
+      label: Minecraft version
+      placeholder: e.g. 1.21.8
+    validations:
+      required: false
+
+  - type: dropdown
+    id: server-software
+    attributes:
+      label: Server software
+      options:
+        - Not applicable
+        - Vanilla
+        - Paper
+        - Fabric
+        - Forge
+        - NeoForge
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant Catalyst or server logs. Remove passwords, tokens, and other private data.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings
+      description: Drag and drop screenshots or recordings here if they help explain the problem.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add anything else that may help investigate the issue.
+    validations:
+      required: false
