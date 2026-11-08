@@ -21,6 +21,7 @@ import {
   StopServerFn,
   RestartServerFn,
   ExportServerFn,
+  OnExportProgressFn,
   ImportServerFn,
   SendCommandFn,
   OnConsoleOutputFn,
@@ -109,6 +110,7 @@ declare global {
       updateServerSettings: UpdateServerSettingsFn;
       openServerFolder: OpenServerFolderFn;
       exportServer: ExportServerFn;
+      onExportProgress: OnExportProgressFn;
       importServer: ImportServerFn;
       openImportDialog: () => Promise<{ success: boolean; error?: string; filePath?: string }>;
       getServerDiskUsage: (serverId: string) => Promise<{ success: boolean; bytes?: number; error?: string }>;

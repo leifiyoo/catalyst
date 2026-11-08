@@ -328,6 +328,7 @@ export type StartServerFn = (id: string) => Promise<{ success: boolean; error?: 
 export type StopServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
 export type RestartServerFn = (id: string) => Promise<{ success: boolean; error?: string }>;
 export type ExportServerFn = (id: string) => Promise<{ success: boolean; error?: string; path?: string }>;
+export type OnExportProgressFn = (handler: (progress: number) => void) => () => void;
 export type ImportServerFn = (zipPath: string, customName: string) => Promise<{ success: boolean; error?: string; server?: ServerRecord }>;
 export type SendCommandFn = (id: string, command: string) => Promise<{ success: boolean; error?: string }>;
 export type OnConsoleOutputFn = (handler: (serverId: string, line: ConsoleLine) => void) => () => void;

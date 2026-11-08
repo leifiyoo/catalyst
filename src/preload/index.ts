@@ -124,6 +124,11 @@ try {
       ipcRenderer.invoke("openServerFolder", id),
     exportServer: (id: string) =>
       ipcRenderer.invoke("exportServer", id),
+    onExportProgress: (handler: (progress: number) => void) => {
+      const listener = (_event: unknown, progress: number) => handler(progress);
+      ipcRenderer.on("exportProgress", listener);
+      return () => ipcRenderer.removeListener("exportProgress", listener);
+    },
     importServer: (zipPath: string, customName: string) =>
       ipcRenderer.invoke("importServer", zipPath, customName),
     openImportDialog: () =>

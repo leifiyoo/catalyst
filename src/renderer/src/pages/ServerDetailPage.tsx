@@ -997,6 +997,8 @@ export function ServerDetailPage() {
     const [stopping, setStopping] = useState(false)
     const [restarting, setRestarting] = useState(false)
     const [exporting, setExporting] = useState(false)
+    const [exportProgress, setExportProgress] = useState(0)
+    const [exportSuccess, setExportSuccess] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState("overview")
     
@@ -1503,9 +1505,16 @@ export function ServerDetailPage() {
     const handleExport = async () => {
         if (!id) return
         setExporting(true)
+        setExportSuccess(false)
         setError(null)
+        setExportProgress(0)
+        const removeProgressListener = window.context.onExportProgress(setExportProgress)
         const result = await window.context.exportServer(id)
-        if (!result.success && result.error !== "Export cancelled") {
+        removeProgressListener()
+        if (result.success) {
+            setExportSuccess(true)
+            safeTimeout(() => setExportSuccess(false), 3000)
+        } else if (result.error !== "Export cancelled") {
             setError(result.error || "Failed to export server")
         }
         setExporting(false)
@@ -2178,7 +2187,7 @@ export function ServerDetailPage() {
                                     disabled={exporting}
                                 >
                                     {exporting ? <Spinner className="h-4 w-4 mr-1" /> : <Download className="h-4 w-4 mr-1" />}
-                                    {exporting ? "Exporting..." : "Export"}
+                                    {exporting ? `Exporting... ${exportProgress}%` : "Export"}
                                 </Button>
                                 {isOnline ? (
                                     <>

@@ -1419,6 +1419,11 @@ export async function exportServer(
     archive.on("error", (err) => {
       resolve({ success: false, error: err.message });
     });
+    archive.on("progress", (progress) => {
+      if (progress.entries.total > 0) {
+        mainWindow.webContents.send("exportProgress", Math.floor((progress.entries.processed / progress.entries.total) * 100));
+      }
+    });
 
     archive.pipe(output);
 
