@@ -1,0 +1,31 @@
+- name: Bach Installer
+  # You may pin to the exact commit or the version.
+  # uses: usebach/bach@d034dea9a3fd49d715685e251427b6fc0001d2cc
+  uses: usebach/bach@v0.2.1
+  with:
+    # The Bach version to build with: 0.2.1 for exactly that one, 0.2 or 0 for the newest of that line, latest for the newest release, local to use a bach that is already on the PATH. Default: the version in the tag you pinned the action with (usebach/bach@v0.2 builds with the newest 0.2.x; a full commit SHA builds with the version in that commit's Cargo.toml), or the latest release for a branch like main.
+    version: # optional, default is 
+    # A bach.toml to build. Leave empty to only install bach.
+    config: # optional, default is 
+    # More arguments for bach build, like --fast.
+    args: # optional, default is 
+    # The app's version, replacing app.version in bach.toml. "auto" (the default) takes it from the tag a workflow runs for (v1.4.0 gives 1.4.0) and keeps bach.toml's version on other runs; give a version to set it yourself, or an empty string to always keep bach.toml's.
+    app-version: # optional, default is auto
+    # A PowerShell command that signs the setup file, which is in $env:BACH_SETUP_FILE (for example: signtool sign /fd sha256 /f cert.pfx /p $env:CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 $env:BACH_SETUP_FILE). It runs before the update feed is written, so the feed carries the signed file's SHA-256. Windows runners only.
+    sign-command: # optional, default is 
+    # What's new in this version, shown by apps that offer the update. Markdown is fine.
+    notes: # optional, default is 
+    # A file with what's new, instead of `notes`.
+    notes-file: # optional, default is 
+    # true publishes the setup file and latest.json as a GitHub release (the tag is created when it doesn't exist). The job needs contents: write.
+    release: # optional, default is false
+    # The release's tag. Default v followed by the app's version.
+    tag: # optional, default is 
+    # true marks the release as a pre-release, which GitHub doesn't serve as "latest", so installed apps don't update to it.
+    prerelease: # optional, default is false
+    # true saves the release as a draft instead of publishing it.
+    draft: # optional, default is false
+    # false keeps this release from becoming GitHub's "latest" (for a fix to an older line), so installed apps keep following the newest one.
+    latest: # optional, default is true
+    # The token that publishes the release and looks Bach's releases up.
+    github-token: # optional, default is ${{ github.token }}
