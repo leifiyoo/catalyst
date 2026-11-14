@@ -1,25 +1,55 @@
-# Release Catalyst: on every pushed tag like v1.2.1, build the app, make the
-# Bach setup file and publish it as a GitHub release. Installed apps update
-# themselves from that release (see [updates] in bach.toml).
-#
-# To release: bump the version in package.json (and bach.toml), commit, then
-#   git tag v1.2.1
-#   git push origin v1.2.1
+# Release Catalyst from the Actions tab: Actions → Release → Run workflow,
+# type a version like 1.2.1. The workflow sets the version in package.json
+# and bach.toml, commits it, tags v1.2.1, builds the app, makes the Bach
+# setup file and publishes it as a GitHub release with the changelog as
+# its notes. Installed copies then update themselves (see [updates] in
+# bach.toml).
 
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, like 1.2.1'
+        required: true
+        type: string
 
 permissions:
-  contents: write   # the Bach action publishes the GitHub release
+  contents: write   # commit the version bump, push the tag, publish the release
 
 jobs:
   release:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check the version
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The version must look like 1.2.1, not '$VERSION'."
+            exit 1
+          fi
+          if [ -n "$(git ls-remote --tags origin "refs/tags/v$VERSION")" ]; then
+            echo "The tag v$VERSION already exists. Pick a new version."
+            exit 1
+          fi
+
+      - name: Set the version, commit and tag it
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" bach.toml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release $VERSION"
+          git tag "v$VERSION"
+          git push origin HEAD:main "v$VERSION"
 
       - uses: actions/setup-node@v4
         with:
@@ -32,9 +62,18 @@ jobs:
       - name: Build the app into dist/win-unpacked
         run: npm run build:unpack
 
+      - name: Write the release notes from the changelog
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          node -e "const v=process.env.VERSION; const c=require('./CHANGELOG.json').versions.find(x=>x.version===v); require('fs').writeFileSync('release-notes.md', c ? c.changes.map(x=>'- '+x).join('\n') : 'Catalyst '+v)"
+
       - name: Build and publish the Bach setup file
         uses: usebach/bach@v0
         with:
           config: bach.toml
           release: true
-          # app-version defaults to "auto": the tag v1.2.1 gives app version 1.2.1.
+          app-version: ${{ inputs.version }}
+          tag: v${{ inputs.version }}
+          notes-file: release-notes.md
