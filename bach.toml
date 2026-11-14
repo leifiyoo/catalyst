@@ -1,0 +1,32 @@
+#:schema https://raw.githubusercontent.com/usebach/bach/main/schema/bach.schema.json
+# bach.toml: how Bach builds the Catalyst installer.
+# Build with `bach build` after `npm run build` and the unpacked app in dist/win-unpacked.
+# Every setting: https://github.com/usebach/bach/blob/main/docs/config.md
+
+[app]
+name = "Catalyst"
+version = "1.2.0"
+publisher = "leifiyoo"
+description = "A desktop manager for Minecraft servers."
+website = "https://github.com/leifiyoo/catalyst"
+# The program to start, inside the files folder below.
+executable = "catalyst.exe"
+# The setup file's icon (the same icon as the app).
+icon = "build/icon.ico"
+
+[files]
+# Everything in this folder is installed. Built with `npx electron-builder --win --dir`.
+source = "dist/win-unpacked"
+
+[installer]
+# The Catalyst logo on the install page.
+logo = "resources/logoonly.png"
+accent = "#4b9b68"
+desktop_shortcut = true
+start_menu_shortcut = "always"
+open_button = true
+
+[uninstall]
+# Offered as "Also delete my data" when uninstalling. Same folder the NSIS uninstaller removed.
+data = ['%APPDATA%\Catalyst']
+data_description = "Your servers, backups and settings."
