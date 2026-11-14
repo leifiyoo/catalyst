@@ -5,7 +5,7 @@
 
 [app]
 name = "Catalyst"
-version = "1.2.1"
+version = "1.2.2"
 publisher = "leifiyoo"
 description = "A desktop manager for Minecraft servers."
 website = "https://github.com/leifiyoo/catalyst"
