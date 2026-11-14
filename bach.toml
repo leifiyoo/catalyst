@@ -15,8 +15,12 @@ executable = "catalyst.exe"
 icon = "build/icon.ico"
 
 [files]
-# Everything in this folder is installed. Built with `npx electron-builder --win --dir`.
+# Everything in this folder is installed. Built with `npm run build:unpack`.
 source = "dist/win-unpacked"
+
+[updates]
+# Installed copies check this repo's GitHub releases and update themselves.
+github = "leifiyoo/catalyst"
 
 [installer]
 # The Catalyst logo on the install page.
