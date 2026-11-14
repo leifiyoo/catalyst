@@ -1,0 +1,17 @@
+name: CatalystAnalytics
+version: '${version}'
+main: dev.catalyst.analytics.CatalystAnalyticsPlugin
+api-version: '1.13'
+description: Lightweight analytics and statistics plugin for Catalyst server manager
+author: Catalyst
+website: https://github.com/leifiyoo/catalyst
+softdepend: []
+commands:
+  analytics:
+    description: CatalystAnalytics admin command
+    usage: /analytics [reload|status]
+    permission: catalystanalytics.admin
+permissions:
+  catalystanalytics.admin:
+    description: Access to CatalystAnalytics admin commands
+    default: op

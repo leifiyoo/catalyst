@@ -1,0 +1,60 @@
+# CatalystAnalytics Configuration
+# ================================
+# This plugin writes analytics data to a JSON file that the
+# Catalyst Electron app reads directly. No API or network needed.
+
+# Data settings
+data:
+  # How many days to keep detailed data
+  retention-days: 30
+  # How often to write analytics.json (in seconds)
+  # The Catalyst app polls this file every 5-10 seconds
+  save-interval-seconds: 30
+
+# Collection intervals (in seconds)
+collection:
+  # TPS sampling interval
+  tps-interval: 60
+  # Memory sampling interval
+  memory-interval: 60
+  # Player count snapshot interval
+  player-count-interval: 300
+
+# Enable/disable individual tracking categories
+# These can be toggled to reduce resource usage or for privacy
+tracking:
+  track-player-joins: true
+  track-player-versions: true
+  track-player-clients: true
+  track-geolocation: false
+  track-os: true
+  track-tps: true
+  track-ram: true
+  track-playtime: true
+  track-fps: true
+
+# Legacy stats toggles (still supported for backwards compatibility)
+stats:
+  player-join-leave: true
+  geolocation: false
+  play-time: true
+  client-os: true
+  client-version: true
+  tps-history: true
+  memory-history: true
+  player-count-timeline: true
+  new-vs-returning: true
+  active-hours: true
+  chat-messages: true
+  deaths-kills: true
+  blocks: true
+  commands: true
+
+# Geolocation settings
+geolocation:
+  # HTTPS endpoint for IP geolocation. Disabled by default via tracking.track-geolocation.
+  api-url: "https://ipapi.co/{ip}/json/"
+  # Rate limit: max requests per minute
+  rate-limit: 30
+  # Cache duration in minutes
+  cache-minutes: 1440

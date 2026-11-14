@@ -1,0 +1,23 @@
+name: React Doctor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  react-doctor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run React Doctor
+        uses: millionco/react-doctor@0.0.1
+        with:
+          directory: .
+          verbose: true
+          node-version: "20"

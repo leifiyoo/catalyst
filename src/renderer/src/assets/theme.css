@@ -1,0 +1,93 @@
+@layer base {
+  :root {
+    /* Light — warm paper shell, olive-lime accent */
+    --background: 45 18% 96%;
+    --foreground: 230 10% 12%;
+    --strong: 230 10% 8%;
+    --selected: 45 12% 90%;
+    --card: 0 0% 100%;
+    --card-foreground: 230 10% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 10% 12%;
+    --primary: 224.6 61.7% 52.9%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 12% 91%;
+    --secondary-foreground: 230 10% 14%;
+    --muted: 45 12% 91%;
+    --muted-foreground: 230 6% 44%;
+    --accent: 45 12% 90%;
+    --accent-foreground: 230 10% 12%;
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 45 10% 87%;
+    --input: 45 10% 83%;
+    --ring: 224.3 75.4% 60.2%;
+    --radius: 1rem;
+    --chart-1: 224.3 75.4% 60.2%;
+    --chart-2: 245 55% 58%;
+    --chart-3: 38 82% 50%;
+    --chart-4: 192 60% 42%;
+    --chart-5: 0 60% 54%;
+    --sidebar-background: 45 18% 96%;
+    --sidebar-foreground: 230 8% 36%;
+    --sidebar-primary: 224.6 61.7% 52.9%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 45 12% 90%;
+    --sidebar-accent-foreground: 230 10% 12%;
+    --sidebar-border: 45 10% 87%;
+    --sidebar-ring: 224.3 75.4% 60.2%;
+
+    /* Custom signals */
+    --online: 224.3 75.4% 60.2%;
+    --online-soft: 224.3 75.4% 60.2% / 0.12;
+    --surface-overlay: 230 10% 12% / 0.04;
+    --scrollbar: 45 8% 78%;
+    --scrollbar-hover: 45 8% 66%;
+  }
+
+  .dark {
+    /* Dark — deep charcoal, lime-chartreuse signal */
+    --background: 220 9% 7%;
+    --foreground: 0 0% 93%;
+    --strong: 0 0% 100%;
+    --selected: 220 7% 15%;
+    --card: 220 8% 10%;
+    --card-foreground: 0 0% 93%;
+    --popover: 220 8% 12%;
+    --popover-foreground: 0 0% 93%;
+    --primary: 224.3 75.4% 60.2%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 7% 14%;
+    --secondary-foreground: 0 0% 93%;
+    --muted: 220 6% 16%;
+    --muted-foreground: 0 0% 73%;
+    --accent: 220 7% 15%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 58% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 12% 100% / 0.075;
+    --input: 220 12% 100% / 0.11;
+    --ring: 224.3 75.4% 60.2%;
+    --radius: 0.5rem;
+    --chart-1: 224.3 75.4% 60.2%;
+    --chart-2: 245 60% 66%;
+    --chart-3: 38 85% 58%;
+    --chart-4: 192 65% 56%;
+    --chart-5: 0 62% 58%;
+    --sidebar-background: 220 9% 7%;
+    --sidebar-foreground: 0 0% 73%;
+    --sidebar-primary: 224.3 75.4% 60.2%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 7% 15%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 12% 100% / 0.075;
+    --sidebar-ring: 224.3 75.4% 60.2%;
+
+    /* Custom signals */
+    --online: 224.3 75.4% 60.2%;
+    --online-soft: 224.3 75.4% 60.2% / 0.13;
+    --surface-overlay: 0 0% 100% / 0.045;
+    --scrollbar: 0 0% 100% / 0.13;
+    --scrollbar-hover: 0 0% 100% / 0.22;
+  }
+}

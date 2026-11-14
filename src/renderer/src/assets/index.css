@@ -1,0 +1,251 @@
+@import "./theme.css";
+
+@font-face {
+  font-family: "Google Sans Code";
+  src: url("./GoogleSansCode-VariableFont_wght.ttf") format("truetype");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: Inter, sans-serif;
+    font-feature-settings: "liga" 1, "calt" 1;
+  }
+
+  @supports (font-variation-settings: normal) {
+    :root {
+      font-family: InterVariable, sans-serif;
+    }
+  }
+
+  * {
+    @apply border-border;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.25);
+  }
+
+  /* Scrollbar — quiet, theme-aware */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--scrollbar));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--scrollbar-hover));
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .select-text,
+  .select-text * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
+  }
+
+  html {
+    border-radius: 12px;
+  }
+
+  body {
+    @apply min-h-dvh text-foreground bg-background;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    border-radius: 12px;
+  }
+
+  :where(.font-semibold, .font-bold, b, strong) {
+    letter-spacing: 0 !important;
+  }
+}
+
+body {
+  font-family: Inter, sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-size: 13px;
+  font-style: normal;
+  margin: 0;
+  padding: 0;
+}
+
+@supports (font-variation-settings: normal) {
+  body {
+    font-family: InterVariable, sans-serif;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.font-mono {
+  font-family: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Data values — Outfit with aligned digits (console stays monospace) */
+.font-data {
+  font-family: Inter, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+@supports (font-variation-settings: normal) {
+  .font-data {
+    font-family: InterVariable, sans-serif;
+  }
+}
+
+#root {
+  border-radius: 12px;
+  overflow: hidden;
+  width: 100%;
+  min-height: 100vh;
+  height: 100vh;
+}
+
+.app-main-scroll {
+  scrollbar-gutter: stable;
+}
+
+/* ---- Splash screen titlebar ---- */
+
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  z-index: 10000;
+  background: hsl(var(--background) / 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.titlebar-title {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.titlebar-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.titlebar-button {
+  width: 30px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.titlebar-button:hover {
+  background: hsl(var(--accent));
+  transform: translateY(-1px);
+}
+
+.titlebar-button:active {
+  transform: translateY(0);
+  opacity: 0.85;
+}
+
+.titlebar-button-close:hover {
+  background: hsl(var(--destructive));
+}
+
+.titlebar-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.65;
+}
+
+/* ---- Console / terminal surface (always dark, both themes) ---- */
+
+.console-surface {
+  background: hsl(228 10% 7%);
+  color: hsl(220 12% 88%);
+}
+
+/* ---- Compact semantic status dots ---- */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.status-dot-online {
+  background: hsl(var(--online));
+  box-shadow: none;
+}
+
+.status-dot-starting {
+  background: hsl(var(--chart-3));
+  box-shadow: none;
+}
+
+.status-dot-stopping {
+  background: hsl(var(--chart-5));
+  box-shadow: none;
+}
+
+.status-dot-offline {
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
+.status-dot-idle {
+  background: hsl(var(--chart-3));
+  box-shadow: none;
+}
+
+.disable-text-selection {
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
